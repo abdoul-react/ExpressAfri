@@ -18,6 +18,10 @@ export class OutboxWorker implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.timer = setInterval(() => this.tick(), POLL_INTERVAL_MS)
+    // Prevent the interval from keeping the Node process alive (useful for tests)
+    if (this.timer && typeof (this.timer as unknown as { unref?: () => void }).unref === 'function') {
+      (this.timer as unknown as { unref?: () => void }).unref()
+    }
     this.tick()
   }
 
