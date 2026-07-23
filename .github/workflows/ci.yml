@@ -1,24 +1,79 @@
 name: CI
 on: [push, pull_request]
+
 jobs:
   api:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: testdb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: cd apps/api && npm ci && npm run build
+        with:
+          node-version: '20'
+      - name: Install API dependencies
+        run: |
+          cd apps/api
+          npm ci
+      - name: Wait for Postgres
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y postgresql-client
+          for i in {1..30}; do pg_isready -h localhost && break || sleep 1; done
+      - name: Run DB migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
+        run: |
+          cd apps/api
+          npm run migrate
+      - name: Lint
+        run: |
+          cd apps/api
+          npm run lint
+      - name: Unit tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
+          NODE_ENV: test
+        run: |
+          cd apps/api
+          npm test -- --runInBand --ci
+      - name: E2E tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
+          NODE_ENV: test
+        run: |
+          cd apps/api
+          npm run test:e2e -- --ci
+
   mobile:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: npm ci --legacy-peer-deps && npx tsc --noEmit
+        with:
+          node-version: '20'
+      - name: Install mobile deps and typecheck
+        run: |
+          npm ci --legacy-peer-deps
+          npx tsc --noEmit
+
   admin:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: cd apps/admin && npm ci && npm run build
+        with:
+          node-version: '20'
+      - name: Install admin deps and build
+        run: |
+          cd apps/admin
+          npm ci
+          npm run build
