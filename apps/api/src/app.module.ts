@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { ThrottlerGuard } from '@nestjs/throttler'
 import { APP_GUARD } from '@nestjs/core'
+import { LoggerModule } from 'nestjs-pino'
 import { DatabaseModule } from './database/database.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { StoresModule } from './modules/stores/stores.module'
@@ -31,10 +32,16 @@ import { WishlistModule } from './modules/wishlist/wishlist.module'
 import { ChatModule } from './modules/chat/chat.module'
 import { MobileModule } from './modules/mobile/mobile.module'
 import { AdminMessagesModule } from './modules/admin-messages/admin-messages.module'
-import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
-
+import { HealthModule } from './health/health.module'
 @Module({
   imports: [
+    LoggerModule.forRoot({
+      pinoHttp: {
+        transport: process.env.NODE_ENV !== 'production'
+          ? { target: 'pino-pretty' }
+          : undefined,
+      },
+    }),
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     DatabaseModule,
@@ -65,9 +72,9 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard'
     WishlistModule,
     ChatModule,
     AdminMessagesModule,
+    HealthModule,
   ],
   providers: [
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

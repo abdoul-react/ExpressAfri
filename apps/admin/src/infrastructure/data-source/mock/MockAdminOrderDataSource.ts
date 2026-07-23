@@ -89,4 +89,43 @@ export class MockAdminOrderDataSource implements AdminOrderDataSource {
     }
     return this.orders[index]
   }
+
+  private shipments: Record<string, any[]> = {}
+
+  async createShipment(orderId: string, data: import('../AdminOrderDataSource').ShipmentInput): Promise<any> {
+    await this.delay()
+    const order = this.orders.find((o) => o.id === orderId)
+    if (!order) throw new Error('Commande introuvable')
+    const shipment = {
+      id: `ship_${Date.now()}`,
+      orderId,
+      status: 'preparing',
+      items: data.items,
+      trackingNumber: data.trackingNumber ?? null,
+      notes: data.notes ?? null,
+      createdAt: new Date().toISOString(),
+    }
+    this.shipments[orderId] = [...(this.shipments[orderId] ?? []), shipment]
+    for (const item of data.items) {
+      const idx = this.orders.findIndex((o) => o.id === orderId)
+      if (idx > -1) {
+        const items = (this.orders[idx] as any).items ?? []
+        const itemIdx = items.findIndex((i: any) => i.id === item.orderItemId || i.productId === item.orderItemId)
+        if (itemIdx > -1) items[itemIdx].status = 'ready'
+      }
+    }
+    return shipment
+  }
+
+  async updateItemStatus(orderId: string, itemId: string, status: string, issueReason?: string): Promise<any> {
+    await this.delay()
+    const order = this.orders.find((o) => o.id === orderId)
+    if (!order) throw new Error('Commande introuvable')
+    return { success: true }
+  }
+
+  async listShipments(orderId: string): Promise<any[]> {
+    await this.delay()
+    return this.shipments[orderId] ?? []
+  }
 }

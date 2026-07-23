@@ -18,6 +18,7 @@ export const orders = pgTable('orders', {
   currency: text('currency').notNull().default('XOF'),
   couponId: uuid('coupon_id'),
   couponCode: text('coupon_code'),
+  idempotencyKey: text('idempotency_key'),
   shippingAddress: jsonb('shipping_address'),
   billingAddress: jsonb('billing_address'),
   trackingNumber: text('tracking_number'),
@@ -41,6 +42,10 @@ export const orderItems = pgTable('order_items', {
   quantity: integer('quantity').notNull(),
   unitPrice: decimal('unit_price', { precision: 10, scale: 2 }).notNull(),
   totalPrice: decimal('total_price', { precision: 12, scale: 2 }).notNull(),
+  status: text('status').default('pending'),
+  issueReason: text('issue_reason'),
+  shippedAt: timestamp('shipped_at', { withTimezone: true }),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 })
 

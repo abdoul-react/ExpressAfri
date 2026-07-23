@@ -16,6 +16,25 @@ export function statusMeta(map: StatusMap, key: string | undefined | null): Stat
   return map[key] ?? { label: key, variant: 'neutral' }
 }
 
+// ─── Items de commande (fulfillment) ─────────────────────────────────────────
+export const ITEM_STATUS: StatusMap = {
+  pending: { label: 'En attente', variant: 'warning' },
+  ready: { label: 'Prêt', variant: 'info' },
+  shipped: { label: 'Expédié', variant: 'purple' },
+  delivered: { label: 'Livré', variant: 'success' },
+  cancelled: { label: 'Annulé', variant: 'neutral' },
+  issue: { label: 'Problème', variant: 'danger' },
+}
+
+// ─── Expéditions ──────────────────────────────────────────────────────────────
+export const SHIPMENT_STATUS: StatusMap = {
+  preparing: { label: 'Préparation', variant: 'warning' },
+  shipped: { label: 'Expédié', variant: 'purple' },
+  in_transit: { label: 'En transit', variant: 'info' },
+  delivered: { label: 'Livré', variant: 'success' },
+  failed: { label: 'Échoué', variant: 'danger' },
+}
+
 // ─── Commandes ────────────────────────────────────────────────────────────────
 export const ORDER_STATUS: StatusMap = {
   pending: { label: 'En attente', variant: 'warning' },

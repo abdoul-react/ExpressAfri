@@ -2,12 +2,14 @@ import { Injectable, Inject, NotFoundException, BadRequestException } from '@nes
 import { eq, and, sql, like, or, desc, inArray, gte } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { orders, orderItems, orderStatusLog } from '../../database/schema/orders'
+import { shipments, shipmentItems } from '../../database/schema/shipments'
 import { receipts, receiptSettings } from '../../database/schema/receipts'
 import { products, productVariants } from '../../database/schema/products'
 import { deliveryAssignments, deliveryPersons } from '../../database/schema/delivery'
 import { customers } from '../../database/schema/customers'
 import { ChatService } from '../chat/chat.service'
 import { ReceiptsService } from '../receipts/receipts.service'
+import { OrderEventsListener } from '../notifications/order-events.listener'
 import { orderStatusMessage } from '../../common/system-messages'
 
 @Injectable()
@@ -16,6 +18,7 @@ export class OrdersService {
     @Inject(DRIZZLE) private db: DrizzleDB,
     private chat: ChatService,
     private receipts: ReceiptsService,
+    private orderEvents: OrderEventsListener,
   ) {}
 
   async list(params: { page?: number; limit?: number; storeId?: string; status?: string; search?: string }) {
@@ -112,15 +115,22 @@ export class OrdersService {
       throw new Error(`storeId invalide : "${storeId}"`)
     }
 
+    // Idempotency : si une clé est fournie et qu'une commande existe déjà, la retourner
+    if (data.idempotencyKey) {
+      const [existing] = await this.db.select().from(orders)
+        .where(eq(orders.idempotencyKey, data.idempotencyKey)).limit(1)
+      if (existing) return this.getById(existing.id)
+    }
+
     // N'insérer les articles que si leur productId est un UUID valide (évite FK violation avec IDs mock)
     const validItems = (data.items ?? []).filter((item: any) => isValidUuid(item.productId))
 
     // Tout est transactionnel : résolution de variante + décrément de stock +
-    // insertion. Une rupture de stock annule TOUTE la commande (pas de ligne
-    // orpheline, pas de stock décrémenté à moitié).
+    // insertion. Une rupture de stock annule TOUTE la commande
     const orderId = await this.db.transaction(async (tx) => {
       const [order] = await tx.insert(orders).values({
         storeId,
+        idempotencyKey: data.idempotencyKey ?? null,
         customerId: isValidUuid(customerId) ? customerId : undefined,
         orderNumber,
         status: 'pending',
@@ -400,5 +410,112 @@ export class OrdersService {
       refunded: 'returns',
     }
     return map[dbStatus] ?? dbStatus
+  }
+
+  async createShipment(orderId: string, data: {
+    items: { orderItemId: string; quantity: number }[]
+    trackingNumber?: string
+    deliveryPersonId?: string
+    notes?: string
+  }) {
+    const [order] = await this.db.select().from(orders)
+      .where(eq(orders.id, orderId)).limit(1)
+    if (!order) throw new NotFoundException('Commande introuvable')
+
+    const [shipment] = await this.db.insert(shipments).values({
+      orderId,
+      storeId: order.storeId,
+      trackingNumber: data.trackingNumber ?? null,
+      deliveryPersonId: data.deliveryPersonId ?? null,
+      status: 'preparing',
+      notes: data.notes ?? null,
+    }).returning()
+
+    await this.db.insert(shipmentItems).values(
+      data.items.map((i) => ({
+        shipmentId: shipment.id,
+        orderItemId: i.orderItemId,
+        quantity: i.quantity,
+      }))
+    )
+
+    for (const item of data.items) {
+      await this.db.update(orderItems)
+        .set({ status: 'ready' })
+        .where(eq(orderItems.id, item.orderItemId))
+    }
+
+    await this.recalculateOrderStatus(orderId)
+
+    if (order) {
+      await this.orderEvents.onShipmentCreated(orderId, data.trackingNumber)
+    }
+
+    return shipment
+  }
+
+  async updateItemStatus(orderId: string, itemId: string, data: { status: string; issueReason?: string }) {
+    const patch: Record<string, unknown> = { status: data.status }
+    if (data.status === 'issue') patch.issueReason = data.issueReason
+    if (data.status === 'shipped') patch.shippedAt = new Date()
+    if (data.status === 'delivered') patch.deliveredAt = new Date()
+
+    await this.db.update(orderItems).set(patch)
+      .where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, orderId)))
+
+    await this.recalculateOrderStatus(orderId)
+
+    if (data.status === 'issue') {
+      const [item] = await this.db.select().from(orderItems).where(eq(orderItems.id, itemId)).limit(1)
+      if (item) {
+        await this.orderEvents.onItemIssue(orderId, item.label, data.issueReason ?? '')
+      }
+    }
+
+    return { success: true }
+  }
+
+  async listShipments(orderId: string) {
+    return this.db.select().from(shipments)
+      .where(eq(shipments.orderId, orderId))
+      .orderBy(shipments.createdAt)
+  }
+
+  private async recalculateOrderStatus(orderId: string) {
+    const items = await this.db.select().from(orderItems)
+      .where(eq(orderItems.orderId, orderId))
+
+    const statuses = items.map((i) => i.status)
+    let newStatus: string
+
+    if (statuses.every((s) => s === 'delivered')) {
+      newStatus = 'delivered'
+    } else if (statuses.every((s) => s === 'cancelled' || s === 'issue')) {
+      newStatus = 'cancelled'
+    } else if (statuses.some((s) => s === 'shipped' || s === 'delivered')) {
+      newStatus = 'shipped'
+    } else if (statuses.some((s) => s === 'ready')) {
+      newStatus = 'processing'
+    } else {
+      newStatus = 'confirmed'
+    }
+
+    const [order] = await this.db.select().from(orders).where(eq(orders.id, orderId)).limit(1)
+    if (order && order.status !== newStatus) {
+      await this.db.update(orders).set({
+        status: newStatus,
+        updatedAt: new Date(),
+        ...(newStatus === 'shipped' ? { shippedAt: new Date() } : {}),
+        ...(newStatus === 'delivered' ? { deliveredAt: new Date() } : {}),
+      }).where(eq(orders.id, orderId))
+
+      await this.db.insert(orderStatusLog).values({
+        orderId,
+        storeId: order.storeId,
+        fromStatus: order.status,
+        toStatus: newStatus,
+        reason: 'Recalcul automatique depuis statuts items',
+      })
+    }
   }
 }

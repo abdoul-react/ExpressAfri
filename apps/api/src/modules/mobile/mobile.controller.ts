@@ -10,6 +10,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { Public } from '../../common/decorators/public.decorator'
 import { CustomerRoute } from '../../common/decorators/customer-route.decorator'
 import { PushService } from '../push/push.service'
+import { CreateOrderDto } from './dto/create-order.dto'
 
 @ApiTags('Mobile')
 @Controller('mobile')
@@ -125,6 +126,17 @@ export class MobileController {
     const url = `/uploads/avatars/${file.filename}`
     await this.service.updateProfile(user.id, { avatar: url })
     return { url }
+  }
+
+  // ====== ORDERS ======
+
+  @Post('orders')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Créer une commande depuis le panier' })
+  async createOrder(@CurrentUser() user: any, @Body() body: CreateOrderDto) {
+    if (!user?.id) throw new UnauthorizedException('Connexion requise')
+    return this.service.createOrder(user.id, body)
   }
 
   // ====== PRODUCTS & CATALOG (format mobile) ======

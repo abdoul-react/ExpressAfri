@@ -16,9 +16,7 @@ import {
 } from "@/design-system";
 import { usePaymentMethods } from "@/features/payment";
 import { createOrder } from "@/features/checkout/checkoutApiService";
-import checkoutService from "@/features/checkout/checkoutService";
-import { useShippingQuote } from "@/features/checkout/useShippingQuote";
-import { useAddressStore, getDefaultAddress } from "@/store/addressStore";
+import { useAddressStore } from "@/store/addressStore";
 import { Icon } from "@/icons";
 import { useCartStore } from "@/store/cartStore";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -89,15 +87,8 @@ export default function PaymentScreen() {
       .filter((i) => i.selected)
       .reduce((sum, i) => sum + i.priceUsd * i.quantity, 0),
   );
-  const address = useAddressStore(getDefaultAddress);
-  // Frais de livraison résolus côté serveur (zone du pays livré, sinon repli
-  // global) — cohérents avec le récapitulatif checkout. Repli local tant que le
-  // devis n'est pas chargé pour éviter d'afficher/facturer 0 par erreur.
-  const { data: quote } = useShippingQuote(address?.countryCode, subtotal);
-  const shipping = quote
-    ? quote.shippingCost
-    : checkoutService.calculateShipping(subtotal);
-  const total = checkoutService.calculateTotal(subtotal, shipping, 0);
+  const defaultAddressId = useAddressStore((s) => s.defaultId);
+  const total = subtotal; // Le calcul final est fait côté serveur
 
   const formatCardNumber = (text: string) => {
     const digits = text.replace(/\D/g, "").slice(0, 16);
@@ -132,26 +123,10 @@ export default function PaymentScreen() {
       const order = await createOrder({
         items: cartItems.map((item) => ({
           productId: item.productId,
-          title: item.title,
-          image: item.image,
           quantity: item.quantity,
-          unitPrice: String(item.priceUsd),
-          variantLabel: item.variantLabel,
-          variantAttributes: item.variantAttributes,
         })),
-        subtotal: String(subtotal),
-        shippingCost: String(shipping),
-        discountAmount: '0',
-        total: String(total),
-        currency: 'USD',
+        shippingAddressId: defaultAddressId ?? '',
         paymentMethod: effectiveMethod,
-        shippingAddress: address ? {
-          name: address.contactName,
-          street: address.street,
-          city: address.city,
-          country: address.countryCode,
-          phone: address.phone,
-        } : undefined,
       });
 
       // Ne retirer que les articles achetés (les non sélectionnés restent au panier)

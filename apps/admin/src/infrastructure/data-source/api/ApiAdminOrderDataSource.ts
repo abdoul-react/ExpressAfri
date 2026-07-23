@@ -60,4 +60,19 @@ export class ApiAdminOrderDataSource implements AdminOrderDataSource {
     const { data } = await api.put(`/orders/${id}/status`, { status: 'refunded' })
     return toOrder(data as Record<string, unknown>)
   }
+
+  async createShipment(orderId: string, input: import('../AdminOrderDataSource').ShipmentInput): Promise<any> {
+    const { data } = await api.post(`/orders/${orderId}/shipments`, input)
+    return data
+  }
+
+  async updateItemStatus(orderId: string, itemId: string, status: string, issueReason?: string): Promise<any> {
+    const { data } = await api.put(`/orders/${orderId}/items/${itemId}/status`, { status, issueReason })
+    return data
+  }
+
+  async listShipments(orderId: string): Promise<any[]> {
+    const { data } = await api.get(`/orders/${orderId}/shipments`)
+    return data ?? []
+  }
 }

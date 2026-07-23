@@ -120,6 +120,13 @@
       "when": 1784857481009,
       "tag": "0017_receipt_settings_branding",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784782585297,
+      "tag": "0018_unique_bishop",
+      "breakpoints": true
     }
   ]
 }

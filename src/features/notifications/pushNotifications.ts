@@ -14,7 +14,7 @@ function initNotifications() {
   notificationsReady = true;
   try {
     Notifications = require("expo-notifications");
-    Notifications.setNotificationHandler({
+    Notifications!.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowBanner: true,
         shouldShowList: true,

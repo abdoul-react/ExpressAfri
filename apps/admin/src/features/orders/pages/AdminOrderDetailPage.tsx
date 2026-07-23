@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { ImageIcon, RefreshCw, XCircle } from 'lucide-react'
+import { ImageIcon, RefreshCw, XCircle, Truck, Send } from 'lucide-react'
 import { useAdminOrder } from '../hooks/useAdminOrders'
 import { useUpdateOrderStatus } from '../hooks/useUpdateOrderStatus'
 import { useCancelOrder } from '../hooks/useCancelOrder'
 import { useRefundOrder } from '../hooks/useRefundOrder'
+import { useCreateShipment, useUpdateItemStatus, useListShipments } from '../hooks/useFulfillment'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import {
   Button,
@@ -20,9 +21,11 @@ import {
   Modal,
   PageHeader,
   StatusBadge,
+  Badge,
+  Textarea,
   type Column,
 } from '@/components/ui'
-import { ORDER_STATUS, PAYMENT_STATUS, statusMeta } from '@/lib/status'
+import { ORDER_STATUS, PAYMENT_STATUS, ITEM_STATUS, SHIPMENT_STATUS, statusMeta } from '@/lib/status'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/cn'
 import { resolveAdminMediaUrl } from '@/lib/resolveAdminMediaUrl'
@@ -43,6 +46,15 @@ const TIMELINE_DOT: Record<string, string> = {
   cancelled: 'bg-red-500',
 }
 
+const ITEM_FLOW: Record<string, string[]> = {
+  pending: ['ready', 'issue'],
+  ready: ['shipped', 'issue'],
+  shipped: ['delivered', 'issue'],
+  delivered: [],
+  cancelled: [],
+  issue: ['pending'],
+}
+
 type ConfirmState = {
   title: string
   description?: string
@@ -59,6 +71,15 @@ export function AdminOrderDetailPage() {
   const [cancelReason, setCancelReason] = useState('')
   const [showCancelInput, setShowCancelInput] = useState(false)
   const [confirm, setConfirm] = useState<ConfirmState | null>(null)
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set())
+  const [issueItemId, setIssueItemId] = useState<string | null>(null)
+  const [issueReasonText, setIssueReasonText] = useState('')
+  const [showShipmentModal, setShowShipmentModal] = useState(false)
+  const [trackingNumber, setTrackingNumber] = useState('')
+  const [shipmentNotes, setShipmentNotes] = useState('')
+  const createShipment = useCreateShipment()
+  const updateItemStatus = useUpdateItemStatus()
+  const { data: shipments = [], refetch: refetchShipments } = useListShipments(id!)
 
   if (isLoading) {
     return <LoadingBlock label="Chargement de la commande…" />
@@ -214,24 +235,227 @@ export function AdminOrderDetailPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card padding="none" className="overflow-hidden">
-            <div className="px-6 py-4">
+            <div className="flex items-center justify-between px-6 py-4">
               <CardTitle>Articles</CardTitle>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {selectedItemIds.size} sélectionné{selectedItemIds.size > 1 ? 's' : ''}
+                </span>
+                <PermissionGuard permission="orders.update">
+                  <Button
+                    size="sm"
+                    leftIcon={Truck}
+                    disabled={selectedItemIds.size === 0}
+                    onClick={() => setShowShipmentModal(true)}
+                  >
+                    Créer une expédition
+                  </Button>
+                </PermissionGuard>
+              </div>
             </div>
-            <DataTable
-              bare
-              data={items}
-              columns={itemColumns}
-              rowKey={(item) => item._key}
-              empty={{ title: 'Aucun article' }}
-              footer={
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Total</span>
-                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                    {formatPrice(order.total)}
-                  </span>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {items.length === 0 ? (
+                <div className="px-6 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+                  Aucun article
                 </div>
-              }
-            />
+              ) : (
+                items.map((item: any) => {
+                  const itemStatus = item.status ?? 'pending'
+                  const nextItemStatuses = ITEM_FLOW[itemStatus] ?? []
+                  const isSelected = selectedItemIds.has(item._key)
+
+                  function toggleItem() {
+                    setSelectedItemIds((prev) => {
+                      const next = new Set(prev)
+                      if (next.has(item._key)) next.delete(item._key)
+                      else next.add(item._key)
+                      return next
+                    })
+                  }
+
+                  return (
+                    <div key={item._key} className="px-6 py-4">
+                      <div className="flex items-start gap-4">
+                        {/* Checkbox */}
+                        <div className="flex h-10 items-center pt-1">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={toggleItem}
+                            className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600"
+                            disabled={itemStatus === 'delivered' || itemStatus === 'cancelled'}
+                          />
+                        </div>
+
+                        {/* Image */}
+                        <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+                          {item.imageUrl ? (
+                            <img
+                              src={resolveAdminMediaUrl(item.imageUrl)}
+                              alt={item.label ?? 'Article'}
+                              className="h-full w-full object-cover"
+                              onError={(event) => { event.currentTarget.style.display = 'none' }}
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center text-gray-400 dark:text-gray-500">
+                              <ImageIcon className="h-5 w-5" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Détails */}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {item.label ?? item.productId}
+                              </p>
+                              {item.sku && (
+                                <p className="truncate text-xs text-gray-500 dark:text-gray-400">{item.sku}</p>
+                              )}
+                              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                                Qté: {item.quantity ?? 0}
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {formatPrice(Number(item.totalPrice ?? Number(item.unitPrice ?? 0) * (item.quantity ?? 0)))}
+                              </span>
+                              <StatusBadge map={ITEM_STATUS} value={itemStatus} size="sm" dot />
+                            </div>
+                          </div>
+
+                          {/* Actions par item */}
+                          <div className="mt-2 flex items-center gap-2">
+                            {nextItemStatuses
+                              .filter((s) => s !== 'issue')
+                              .map((s) => (
+                                <Button
+                                  key={s}
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={async () => {
+                                    try {
+                                      await updateItemStatus.mutateAsync({ orderId: id!, itemId: item.id ?? item.productId, status: s })
+                                      toast.success(`Article marqué comme "${statusMeta(ITEM_STATUS, s).label}"`)
+                                      refetch()
+                                      refetchShipments()
+                                    } catch (err) {
+                                      toast.error(err instanceof Error ? err.message : 'Erreur de mise à jour')
+                                    }
+                                  }}
+                                >
+                                  {statusMeta(ITEM_STATUS, s).label}
+                                </Button>
+                              ))}
+                            {itemStatus !== 'issue' && itemStatus !== 'delivered' && itemStatus !== 'cancelled' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                                onClick={() => { setIssueItemId(item._key); setIssueReasonText('') }}
+                              >
+                                Signaler un problème
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Champ raison du problème */}
+                          {issueItemId === item._key && (
+                            <div className="mt-3 flex items-start gap-2">
+                              <Input
+                                value={issueReasonText}
+                                onChange={(e) => setIssueReasonText(e.target.value)}
+                                placeholder="Description du problème…"
+                                className="flex-1"
+                                size="sm"
+                              />
+                              <Button
+                                size="sm"
+                                variant="danger"
+                                leftIcon={Send}
+                                loading={updateItemStatus.isPending}
+                                onClick={async () => {
+                                  try {
+                                    await updateItemStatus.mutateAsync({
+                                      orderId: id!,
+                                      itemId: item.id ?? item.productId,
+                                      status: 'issue',
+                                      issueReason: issueReasonText,
+                                    })
+                                    toast.success('Problème signalé')
+                                    setIssueItemId(null)
+                                    setIssueReasonText('')
+                                    refetch()
+                                    refetchShipments()
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : 'Erreur')
+                                  }
+                                }}
+                              >
+                                Envoyer
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+              <div className="flex items-center justify-between border-t border-gray-100 px-6 py-3 dark:border-gray-800">
+                <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Total</span>
+                <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                  {formatPrice(order.total)}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Expéditions */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Expéditions</CardTitle>
+            </CardHeader>
+            {shipments.length === 0 ? (
+              <div className="px-6 pb-6 text-sm text-gray-400 dark:text-gray-500">
+                Aucune expédition créée pour cette commande.
+              </div>
+            ) : (
+              <div className="space-y-4 px-6 pb-6">
+                {shipments.map((shipment: any) => (
+                  <div key={shipment.id} className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Truck className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          Expédition #{shipment.id.slice(-6)}
+                        </span>
+                      </div>
+                      <StatusBadge map={SHIPMENT_STATUS} value={shipment.status} size="sm" dot />
+                    </div>
+                    {shipment.trackingNumber && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Suivi : {shipment.trackingNumber}
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                      Créée le {formatDate(shipment.createdAt)}
+                    </p>
+                    {shipment.notes && (
+                      <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400">
+                        {shipment.notes}
+                      </p>
+                    )}
+                    {shipment.items && shipment.items.length > 0 && (
+                      <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        {shipment.items.length} article{shipment.items.length > 1 ? 's' : ''}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
 
           <Card>
@@ -357,6 +581,71 @@ export function AdminOrderDetailPage() {
           </Card>
         </div>
       </div>
+
+      <Modal
+        open={showShipmentModal}
+        onOpenChange={(open) => { if (!open) { setShowShipmentModal(false); setTrackingNumber(''); setShipmentNotes('') } }}
+        title="Créer une expédition"
+        description={`${selectedItemIds.size} article${selectedItemIds.size > 1 ? 's' : ''} sélectionné${selectedItemIds.size > 1 ? 's' : ''}`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => { setShowShipmentModal(false); setTrackingNumber(''); setShipmentNotes('') }}>
+              Annuler
+            </Button>
+            <Button
+              leftIcon={Truck}
+              loading={createShipment.isPending}
+              onClick={async () => {
+                try {
+                  const selectedItems = items
+                    .filter((item: any) => selectedItemIds.has(item._key))
+                    .map((item: any) => ({
+                      orderItemId: item.id ?? item.productId,
+                      quantity: item.quantity ?? 1,
+                    }))
+                  await createShipment.mutateAsync({
+                    orderId: id!,
+                    data: { items: selectedItems, trackingNumber: trackingNumber || undefined, notes: shipmentNotes || undefined },
+                  })
+                  toast.success('Expédition créée')
+                  setShowShipmentModal(false)
+                  setTrackingNumber('')
+                  setShipmentNotes('')
+                  setSelectedItemIds(new Set())
+                  refetch()
+                  refetchShipments()
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Erreur lors de la création de l\'expédition')
+                }
+              }}
+            >
+              Confirmer l'expédition
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <FormField label="Numéro de suivi" htmlFor="shipment-tracking" hint="Optionnel">
+            <Input
+              id="shipment-tracking"
+              value={trackingNumber}
+              onChange={(e) => setTrackingNumber(e.target.value)}
+              placeholder="Ex : EXPR-2026-0001"
+            />
+          </FormField>
+          <FormField label="Notes" htmlFor="shipment-notes" hint="Optionnel">
+            <Textarea
+              id="shipment-notes"
+              value={shipmentNotes}
+              onChange={(e) => setShipmentNotes(e.target.value)}
+              rows={3}
+              placeholder="Instructions pour le livreur…"
+              className="resize-none"
+            />
+          </FormField>
+        </div>
+      </Modal>
 
       <Modal
         open={showCancelInput}

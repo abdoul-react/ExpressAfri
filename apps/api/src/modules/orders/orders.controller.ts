@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Param, Query, Body, UseGuards, UnauthorizedException } from '@nestjs/common'
+import { Controller, Get, Post, Put, Param, Query, Body, UseGuards, UnauthorizedException, HttpCode, HttpStatus } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger'
 import { OrdersService } from './orders.service'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
@@ -67,10 +67,9 @@ export class OrdersController {
   }
 
   @Get(':id')
-  @CustomerRoute()
-  @UseGuards(CustomerAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Détail commande' })
+  @ApiOperation({ summary: 'Détail commande (admin)' })
   async getById(@Param('id') id: string) { return this.service.getById(id) }
 
   @Put(':id/status')
@@ -78,7 +77,6 @@ export class OrdersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Changer le statut d\'une commande' })
   async updateStatus(@Param('id') id: string, @Body() body: { status: string; reason?: string }, @CurrentUser() user: any) {
-    // Gérant de boutique : ne peut changer que le statut des commandes de SA boutique
     if (user?.storeId) {
       const order = await this.service.getById(id)
       if (!order || order.storeId !== user.storeId) {
@@ -86,5 +84,36 @@ export class OrdersController {
       }
     }
     return this.service.updateStatus(id, body.status, user?.id, body.reason)
+  }
+
+  @Post(':id/shipments')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Créer une expédition partielle' })
+  async createShipment(
+    @Param('id') orderId: string,
+    @Body() body: { items: { orderItemId: string; quantity: number }[]; trackingNumber?: string; deliveryPersonId?: string; notes?: string },
+  ) {
+    return this.service.createShipment(orderId, body)
+  }
+
+  @Put(':id/items/:itemId/status')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Changer le statut d\'un item individuellement' })
+  async updateItemStatus(
+    @Param('id') orderId: string,
+    @Param('itemId') itemId: string,
+    @Body() body: { status: string; issueReason?: string },
+  ) {
+    return this.service.updateItemStatus(orderId, itemId, body)
+  }
+
+  @Get(':id/shipments')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lister les expéditions d\'une commande' })
+  async listShipments(@Param('id') orderId: string) {
+    return this.service.listShipments(orderId)
   }
 }

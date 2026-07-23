@@ -1,5 +1,5 @@
 import { adminOrderDataSource } from '@/infrastructure/data-source'
-import type { OrderQueryParams } from '@/infrastructure/data-source/AdminOrderDataSource'
+import type { OrderQueryParams, ShipmentInput } from '@/infrastructure/data-source/AdminOrderDataSource'
 import { updateOrderStatusSchema, cancelOrderSchema, refundOrderSchema } from '@/lib/validation'
 import { validateOrThrow } from '@/lib/validate'
 import { toServiceError } from '@/lib/service-error'
@@ -45,6 +45,30 @@ class AdminOrderService {
       return await adminOrderDataSource.refund(id, amount)
     } catch (err) {
       throw toServiceError(err, 'Remboursement de la commande')
+    }
+  }
+
+  async createShipment(orderId: string, data: ShipmentInput) {
+    try {
+      return await adminOrderDataSource.createShipment(orderId, data)
+    } catch (err) {
+      throw toServiceError(err, 'Création de l\'expédition')
+    }
+  }
+
+  async updateItemStatus(orderId: string, itemId: string, status: string, issueReason?: string) {
+    try {
+      return await adminOrderDataSource.updateItemStatus(orderId, itemId, status, issueReason)
+    } catch (err) {
+      throw toServiceError(err, 'Mise à jour du statut de l\'article')
+    }
+  }
+
+  async listShipments(orderId: string) {
+    try {
+      return await adminOrderDataSource.listShipments(orderId)
+    } catch (err) {
+      throw toServiceError(err, 'Liste des expéditions')
     }
   }
 }

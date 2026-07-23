@@ -1,9 +1,10 @@
-import { Injectable, Inject, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common'
+import { Injectable, Inject, UnauthorizedException, ConflictException, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { eq, and, sql, desc, inArray, like } from 'drizzle-orm'
 import * as bcrypt from 'bcryptjs'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
-import { customers, storeFollows } from '../../database/schema/customers'
+import { customers, addresses, storeFollows } from '../../database/schema/customers'
+import { CreateOrderDto } from './dto/create-order.dto'
 import { products, categories, productImages, productVariants } from '../../database/schema/products'
 import { stores } from '../../database/schema/stores'
 import { coupons, couponUsage } from '../../database/schema/coupons'
@@ -13,7 +14,7 @@ import { banners, logos, socialLinks, seoMetadata, paymentMethods, feedSections,
 import { appSettings, featureFlags } from '../../database/schema/settings'
 import { conversations, messages } from '../../database/schema/chat'
 import { productReviews } from '../../database/schema/reviews'
-import { orders, orderItems } from '../../database/schema/orders'
+import { orders, orderItems, orderStatusLog } from '../../database/schema/orders'
 import { shippingZones, shippingMethods } from '../../database/schema/shipping'
 import { loyaltyPoints } from '../../database/schema/loyalty'
 
@@ -117,15 +118,26 @@ export class MobileService {
   }
 
   async requestOtp(contact: string, mode: 'phone' | 'email' = 'email') {
+    const recentCount = await this.db.select({ count: sql<number>`count(*)` })
+      .from(otpCodes)
+      .where(and(
+        eq(otpCodes.contact, contact),
+        sql`${otpCodes.createdAt} > now() - interval '1 hour'`
+      ))
+
+    if (Number(recentCount[0].count) >= 3) {
+      throw new BadRequestException('Trop de tentatives. Réessayez dans 1 heure.')
+    }
+
     const code = Math.floor(100000 + Math.random() * 900000).toString()
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
 
     await this.db
       .insert(otpCodes)
-      .values({ contact, code, expiresAt })
+      .values({ contact, code, expiresAt, attempts: 0 })
       .onConflictDoUpdate({
         target: otpCodes.contact,
-        set: { code, expiresAt, createdAt: new Date() },
+        set: { code, expiresAt, attempts: 0, usedAt: null, createdAt: new Date() },
       })
 
     // In production: send SMS/email here
@@ -145,12 +157,31 @@ export class MobileService {
       .where(eq(otpCodes.contact, contact))
       .limit(1)
 
-    if (!stored || stored.code !== code || stored.expiresAt < new Date()) {
-      await this.db.delete(otpCodes).where(eq(otpCodes.contact, contact))
-      throw new UnauthorizedException('Code invalide ou expiré')
+    if (!stored) throw new UnauthorizedException('Code invalide')
+
+    if (stored.usedAt) {
+      throw new UnauthorizedException('Code déjà utilisé')
     }
 
-    await this.db.delete(otpCodes).where(eq(otpCodes.contact, contact))
+    if (stored.expiresAt < new Date()) {
+      await this.db.delete(otpCodes).where(eq(otpCodes.contact, contact))
+      throw new UnauthorizedException('Code expiré')
+    }
+
+    if ((stored.attempts ?? 0) >= (stored.maxAttempts ?? 5)) {
+      throw new ForbiddenException('Trop de tentatives. Demandez un nouveau code.')
+    }
+
+    if (stored.code !== code) {
+      await this.db.update(otpCodes)
+        .set({ attempts: sql`${otpCodes.attempts} + 1` })
+        .where(eq(otpCodes.contact, contact))
+      throw new UnauthorizedException('Code incorrect')
+    }
+
+    await this.db.update(otpCodes)
+      .set({ usedAt: new Date() })
+      .where(eq(otpCodes.contact, contact))
 
     let customer = await this.db.select().from(customers).where(
       contact.includes('@') ? eq(customers.email, contact) : eq(customers.phone, contact),
@@ -212,6 +243,165 @@ export class MobileService {
     // In production: send reset link/email
     console.log(`[PASSWORD RESET] Email: ${email}`)
     return { ok: true }
+  }
+
+  async createOrder(customerId: string, dto: CreateOrderDto) {
+    const [customer] = await this.db.select().from(customers)
+      .where(eq(customers.id, customerId)).limit(1)
+    if (!customer) throw new NotFoundException('Client introuvable')
+
+    const orderItemsData: any[] = []
+    let subtotal = 0
+
+    for (const item of dto.items) {
+      const [product] = await this.db.select().from(products)
+        .where(and(eq(products.id, item.productId), eq(products.status, 'active')))
+        .limit(1)
+      if (!product) throw new BadRequestException(`Produit ${item.productId} introuvable ou inactif`)
+
+      let unitPrice = Number(product.price)
+      let sku = product.slug
+      let label = product.name
+      let imageUrl: string | null = null
+
+      if (item.variantId) {
+        const [variant] = await this.db.select().from(productVariants)
+          .where(and(eq(productVariants.id, item.variantId), eq(productVariants.productId, item.productId)))
+          .limit(1)
+        if (!variant) throw new BadRequestException(`Variante ${item.variantId} introuvable`)
+        if (variant.stock < item.quantity) {
+          throw new BadRequestException(`Stock insuffisant pour ${variant.label} (dispo: ${variant.stock})`)
+        }
+        unitPrice = variant.price ? Number(variant.price) : unitPrice
+        sku = variant.sku
+        label = `${product.name} - ${variant.label}`
+        imageUrl = variant.imageUrl
+      }
+
+      if (!imageUrl) {
+        const [img] = await this.db.select().from(productImages)
+          .where(eq(productImages.productId, item.productId))
+          .orderBy(productImages.sortOrder)
+          .limit(1)
+        imageUrl = img?.url ?? null
+      }
+
+      const totalPrice = unitPrice * item.quantity
+      subtotal += totalPrice
+
+      orderItemsData.push({
+        productId: item.productId,
+        variantId: item.variantId ?? null,
+        storeId: product.storeId,
+        sku,
+        label,
+        imageUrl,
+        quantity: item.quantity,
+        unitPrice: unitPrice.toFixed(2),
+        totalPrice: totalPrice.toFixed(2),
+      })
+    }
+
+    const shippingCost = subtotal >= 10000 ? 0 : 1500
+    const taxAmount = 0
+    let discountAmount = 0
+    let couponId: string | null = null
+
+    if (dto.couponCode) {
+      const [coupon] = await this.db.select().from(coupons)
+        .where(and(eq(coupons.code, dto.couponCode), eq(coupons.isActive, true)))
+        .limit(1)
+      if (coupon && new Date(coupon.endDate) > new Date()) {
+        couponId = coupon.id
+        if (coupon.type === 'percentage') {
+          discountAmount = subtotal * Number(coupon.value) / 100
+          if (coupon.maxDiscount) discountAmount = Math.min(discountAmount, Number(coupon.maxDiscount))
+        } else if (coupon.type === 'fixed') {
+          discountAmount = Number(coupon.value)
+        } else if (coupon.type === 'free_shipping') {
+          discountAmount = shippingCost
+        }
+      }
+    }
+
+    const total = subtotal + shippingCost + taxAmount - discountAmount
+
+    const [address] = await this.db.select().from(addresses)
+      .where(and(eq(addresses.id, dto.shippingAddressId), eq(addresses.customerId, customerId)))
+      .limit(1)
+    if (!address) throw new BadRequestException('Adresse de livraison introuvable')
+
+    if (dto.idempotencyKey) {
+      const [existing] = await this.db.select().from(orders)
+        .where(eq(orders.idempotencyKey, dto.idempotencyKey)).limit(1)
+      if (existing) {
+        return {
+          id: existing.id,
+          orderNumber: existing.orderNumber,
+          status: existing.status,
+          total: existing.total,
+          currency: existing.currency,
+          message: 'Commande déjà créée',
+        }
+      }
+    }
+
+    const orderNumber = `EA-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+    const storeId = orderItemsData[0].storeId
+
+    const [order] = await this.db.insert(orders).values({
+      storeId,
+      customerId,
+      orderNumber,
+      status: dto.paymentMethod === 'cod' ? 'confirmed' : 'pending',
+      subtotal: subtotal.toFixed(2),
+      shippingCost: shippingCost.toFixed(2),
+      taxAmount: taxAmount.toFixed(2),
+      discountAmount: discountAmount.toFixed(2),
+      total: total.toFixed(2),
+      currency: 'XOF',
+      couponId,
+      couponCode: dto.couponCode ?? null,
+      shippingAddress: JSON.stringify(address),
+      notes: dto.notes ?? null,
+      idempotencyKey: dto.idempotencyKey ?? null,
+    }).returning()
+
+    await this.db.insert(orderItems).values(
+      orderItemsData.map((oi) => ({ ...oi, orderId: order.id }))
+    )
+
+    for (const item of dto.items) {
+      if (item.variantId) {
+        await this.db.update(productVariants)
+          .set({ stock: sql`stock - ${item.quantity}` })
+          .where(eq(productVariants.id, item.variantId))
+      }
+    }
+
+    await this.db.insert(orderStatusLog).values({
+      orderId: order.id,
+      storeId,
+      fromStatus: null,
+      toStatus: order.status,
+      reason: 'Commande créée',
+    })
+
+    await this.db.update(customers).set({
+      totalOrders: sql`total_orders + 1`,
+      totalSpent: sql`total_spent + ${total}`,
+    }).where(eq(customers.id, customerId))
+
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      total: order.total,
+      currency: order.currency,
+      message: dto.paymentMethod === 'cod'
+        ? 'Commande confirmée. Paiement à la livraison.'
+        : 'Commande créée. Veuillez procéder au paiement.',
+    }
   }
 
   // ====== PROFILE ======
