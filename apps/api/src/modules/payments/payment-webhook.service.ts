@@ -36,12 +36,20 @@ export class PaymentWebhookService {
 
     const event = provider.parseWebhook(rawBody)
 
+    this.logger.debug(`Received webhook event for provider=${providerName} parsed=${JSON.stringify(event)}`)
+    // debug: also print to stdout to ensure visibility in tests
+    // eslint-disable-next-line no-console
+    console.log('[payment-webhook] parsed event=', JSON.stringify(event))
+
     return this.db.transaction(async (tx) => {
       // Verrouiller la ligne paiement
+      this.logger.debug(`Searching payment with providerPaymentId=${event.providerPaymentId}`)
       const [payment] = await tx.select().from(payments)
         .where(eq(payments.providerPaymentId, event.providerPaymentId))
         .limit(1)
         .for('update')
+
+      this.logger.debug(`Payment lookup result: ${payment ? 'found id=' + (payment as any).id : 'not found'}`)
 
       if (!payment) {
         return { status: 'error', message: 'Paiement introuvable' }
@@ -79,7 +87,12 @@ export class PaymentWebhookService {
         patch.status = 'authorized'
       }
 
+      this.logger.debug(`Applying payment patch: ${JSON.stringify(patch)}`)
       await tx.update(payments).set(patch).where(eq(payments.id, payment.id))
+
+      // re-fetch payment inside tx to verify update
+      const [updatedPayment] = await tx.select().from(payments).where(eq(payments.id, payment.id)).limit(1)
+      this.logger.debug(`Updated payment in tx: ${JSON.stringify(updatedPayment)}`)
 
       // Pour un paiement capturé, mettre à jour la commande associée
       if (event.status === 'captured') {
