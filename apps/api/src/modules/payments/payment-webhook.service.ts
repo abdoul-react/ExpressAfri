@@ -37,9 +37,6 @@ export class PaymentWebhookService {
     const event = provider.parseWebhook(rawBody)
 
     this.logger.debug(`Received webhook event for provider=${providerName} parsed=${JSON.stringify(event)}`)
-    // debug: also print to stdout to ensure visibility in tests
-    // eslint-disable-next-line no-console
-    console.log('[payment-webhook] parsed event=', JSON.stringify(event))
 
     return this.db.transaction(async (tx) => {
       // Verrouiller la ligne paiement
