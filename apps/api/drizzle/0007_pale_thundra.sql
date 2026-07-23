@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS "banners" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "feed_sections" (
+CREATE TABLE IF NOT EXISTS "feed_sections" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"title" text NOT NULL,
 	"type" text NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE "feed_sections" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "logos" (
+CREATE TABLE IF NOT EXISTS "logos" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"context" text NOT NULL,
 	"url" text NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE "logos" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "payment_methods" (
+CREATE TABLE IF NOT EXISTS "payment_methods" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"code" text NOT NULL,
 	"name" text NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE "payment_methods" (
 	CONSTRAINT "payment_methods_code_unique" UNIQUE("code")
 );
 --> statement-breakpoint
-CREATE TABLE "seo_metadata" (
+CREATE TABLE IF NOT EXISTS "seo_metadata" (
 	"page" text PRIMARY KEY NOT NULL,
 	"title" text NOT NULL,
 	"description" text NOT NULL,
@@ -70,7 +70,7 @@ CREATE TABLE "seo_metadata" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "social_links" (
+CREATE TABLE IF NOT EXISTS "social_links" (
 	"platform" text PRIMARY KEY NOT NULL,
 	"url" text NOT NULL,
 	"label" text NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE "social_links" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "static_pages" (
+CREATE TABLE IF NOT EXISTS "static_pages" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"slug" text NOT NULL,
 	"title" text NOT NULL,
@@ -91,7 +91,7 @@ CREATE TABLE "static_pages" (
 	CONSTRAINT "static_pages_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
-CREATE TABLE "admin_tickets" (
+CREATE TABLE IF NOT EXISTS "admin_tickets" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"customer_id" text,
 	"customer_name" text NOT NULL,
@@ -107,7 +107,7 @@ CREATE TABLE "admin_tickets" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "internal_messages" (
+CREATE TABLE IF NOT EXISTS "internal_messages" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"from_admin_id" uuid NOT NULL,
 	"from_admin_name" text NOT NULL,
@@ -120,7 +120,7 @@ CREATE TABLE "internal_messages" (
 	"created_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "ticket_messages" (
+CREATE TABLE IF NOT EXISTS "ticket_messages" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"ticket_id" uuid NOT NULL,
 	"sender_id" text NOT NULL,
@@ -131,7 +131,7 @@ CREATE TABLE "ticket_messages" (
 	"created_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "otp_codes" (
+CREATE TABLE IF NOT EXISTS "otp_codes" (
 	"contact" text PRIMARY KEY NOT NULL,
 	"code" text NOT NULL,
 	"expires_at" timestamp with time zone NOT NULL,
