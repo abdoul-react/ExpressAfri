@@ -81,7 +81,7 @@ jobs:
           PGPASSWORD=postgres psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS testdb;"
           PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE testdb;"
       - name: Run migrations
-        run: cd apps/api && npm run migrate
+        run: cd apps/api && npm run migrate:ci
       - name: Unit tests
         run: cd apps/api && npm test -- --runInBand --ci
       - name: E2E tests
