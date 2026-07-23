@@ -38,7 +38,10 @@ export class PaymentWebhookService {
 
     this.logger.debug(`Received webhook event for provider=${providerName} parsed=${JSON.stringify(event)}`)
 
-    return this.db.transaction(async (tx) => {
+    // Prepare a holder to send a system message after the DB transaction commits
+    let postMessage: { orderId: string; msg: string } | null = null
+
+    const result = await this.db.transaction(async (tx) => {
       // Verrouiller la ligne paiement
       this.logger.debug(`Searching payment with providerPaymentId=${event.providerPaymentId}`)
       const [payment] = await tx.select().from(payments)
@@ -101,17 +104,24 @@ export class PaymentWebhookService {
             updatedAt: new Date(),
           }).where(eq(orders.id, order.id))
         }
-      }
 
-      // Créer un message système une seule fois (après commit, pas dans la tx)
-      if (event.status === 'captured') {
-        const msg = `✅ Paiement de ${Number(payment.amount).toLocaleString('fr-FR')} ${payment.currency} confirmé. Merci pour votre achat !`
-        await this.chat.postOrderSystemMessage(payment.orderId, msg).catch((err: unknown) => {
-          this.logger.error(`Échec envoi message système order=${payment.orderId}: ${err instanceof Error ? err.message : String(err)}`)
-        })
+        // Prepare post-commit system message (do not call chat inside tx)
+        postMessage = {
+          orderId: payment.orderId,
+          msg: `✅ Paiement de ${Number(payment.amount).toLocaleString('fr-FR')} ${payment.currency} confirmé. Merci pour votre achat !`,
+        }
       }
 
       return { status: 'processed', message: `Événement ${event.status} traité` }
     })
+
+    // Send system message outside the DB transaction (best-effort)
+    if (postMessage) {
+      this.chat.postOrderSystemMessage(postMessage.orderId, postMessage.msg).catch((err: unknown) => {
+        this.logger.error(`Échec envoi message système order=${postMessage?.orderId}: ${err instanceof Error ? err.message : String(err)}`)
+      })
+    }
+
+    return result
   }
 }
