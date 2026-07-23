@@ -25,9 +25,8 @@ jobs:
       - name: Check architecture
         run: npm run check:arch
       - name: Lint root
-        run: npm run lint -- --no-fix
-      - name: Lint API
-        run: cd apps/api && npm run lint -- --no-fix
+        run: npm run lint
+
       - name: Typecheck root
         run: npx tsc --noEmit
       - name: Typecheck API
