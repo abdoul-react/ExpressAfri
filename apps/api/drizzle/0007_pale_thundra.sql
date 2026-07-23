@@ -138,5 +138,15 @@ CREATE TABLE IF NOT EXISTS "otp_codes" (
 	"created_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-DO $\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'admin_tickets_assigned_to_admins_id_fk') THEN\n    -- removed duplicate constraint admin_tickets_assigned_to_admins_id_fk (kept in 0006_admin_messages.sql)\n  END IF;\nEND $;--> statement-breakpoint
-DO $\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ticket_messages_ticket_id_admin_tickets_id_fk') THEN\n    -- removed duplicate constraint ticket_messages_ticket_id_admin_tickets_id_fk (kept in 0006_admin_messages.sql)\n  END IF;\nEND $;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'admin_tickets_assigned_to_admins_id_fk') THEN
+    -- removed duplicate constraint admin_tickets_assigned_to_admins_id_fk (kept in 0006_admin_messages.sql)
+  END IF;
+END $$;--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ticket_messages_ticket_id_admin_tickets_id_fk') THEN
+    -- removed duplicate constraint ticket_messages_ticket_id_admin_tickets_id_fk (kept in 0006_admin_messages.sql)
+  END IF;
+END $$;

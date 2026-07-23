@@ -5,6 +5,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import { NestExpressApplication } from '@nestjs/platform-express'
 import { join } from 'path'
 import { AppModule } from './app.module'
+import { RequestIdInterceptor } from './common/interceptors/request-id.interceptor'
+import { AppLoggerService } from './common/logger/logger.service'
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
@@ -45,6 +47,8 @@ async function bootstrap() {
     transformOptions: { enableImplicitConversion: true },
   }))
 
+  app.useGlobalInterceptors(new RequestIdInterceptor())
+
   const config = new DocumentBuilder()
     .setTitle('ExpressAfri API')
     .setDescription('API backend pour la plateforme e-commerce ExpressAfri')
@@ -56,7 +60,9 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000
   await app.listen(port)
-  console.log(`API running on http://localhost:${port}`)
-  console.log(`Swagger docs on http://localhost:${port}/docs`)
+
+  const logger = app.get(AppLoggerService)
+  logger.log(`API running on http://localhost:${port}`)
+  logger.log(`Swagger docs on http://localhost:${port}/docs`)
 }
 bootstrap()

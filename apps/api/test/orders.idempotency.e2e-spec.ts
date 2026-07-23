@@ -47,14 +47,14 @@ describe('Orders idempotency (e2e)', () => {
     )
 
     let shippingAddressId = null
-    if (addrRow && addrRow.rows && addrRow.rows[0] && addrRow.rows[0].id) {
-      shippingAddressId = addrRow.rows[0].id
-    } else if (addrRow && addrRow[0] && addrRow[0].id) {
-      shippingAddressId = addrRow[0].id
+    if (addrRow && addrRow.rows && addrRow.rows[0] && (addrRow.rows[0] as any).id) {
+      shippingAddressId = (addrRow.rows[0] as any).id
+    } else if (addrRow && (addrRow as any)[0] && (addrRow as any)[0].id) {
+      shippingAddressId = (addrRow as any)[0].id
     } else {
       // fallback: query the addresses table
       const q = await db.execute(`SELECT id FROM addresses WHERE customer_id = '${userId}' LIMIT 1`)
-      if (q && q.rows && q.rows[0]) shippingAddressId = q.rows[0].id
+      if (q && q.rows && q.rows[0]) shippingAddressId = (q.rows[0] as any).id
     }
 
     // Create product and variant
@@ -94,7 +94,7 @@ describe('Orders idempotency (e2e)', () => {
       `SELECT count(*) as count FROM orders WHERE idempotency_key = '${idempotencyKey}' AND store_id = '${SYSTEM_STORE_ID}'`
     )
 
-    const count = rows.rows ? Number(rows.rows[0].count) : Number(rows[0].count)
+    const count = rows.rows ? Number((rows.rows[0] as any).count) : Number((rows as any)[0].count)
     expect(count).toBe(1)
   }, 30000)
 })

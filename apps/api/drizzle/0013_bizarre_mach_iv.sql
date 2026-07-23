@@ -1,4 +1,4 @@
-CREATE TABLE "feed_post_likes" (
+CREATE TABLE IF NOT EXISTS "feed_post_likes" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"post_id" uuid NOT NULL,
 	"customer_id" uuid NOT NULL,
@@ -6,7 +6,7 @@ CREATE TABLE "feed_post_likes" (
 	CONSTRAINT "feed_post_likes_post_id_customer_id_unique" UNIQUE("post_id","customer_id")
 );
 --> statement-breakpoint
-CREATE TABLE "feed_posts" (
+CREATE TABLE IF NOT EXISTS "feed_posts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"title" text NOT NULL,
 	"media_type" text DEFAULT 'image' NOT NULL,
@@ -24,11 +24,16 @@ CREATE TABLE "feed_posts" (
 );
 --> statement-breakpoint
 ALTER TABLE "messages" ALTER COLUMN "content" SET DEFAULT '';--> statement-breakpoint
-ALTER TABLE "customers" ADD COLUMN "chat_blocked_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "messages" ADD COLUMN "type" text DEFAULT 'text' NOT NULL;--> statement-breakpoint
-ALTER TABLE "messages" ADD COLUMN "attachment_url" text;--> statement-breakpoint
-ALTER TABLE "messages" ADD COLUMN "attachment_name" text;--> statement-breakpoint
-ALTER TABLE "messages" ADD COLUMN "reply_to_id" uuid;--> statement-breakpoint
-ALTER TABLE "messages" ADD COLUMN "deleted_at" timestamp with time zone;--> statement-breakpoint
-DO $\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'feed_post_likes_post_id_feed_posts_id_fk') THEN\n    -- removed duplicate constraint feed_post_likes_post_id_feed_posts_id_fk (kept in 0012_feed_posts.sql)\n  END IF;\nEND $;
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "chat_blocked_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "type" text DEFAULT 'text' NOT NULL;--> statement-breakpoint
+ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "attachment_url" text;--> statement-breakpoint
+ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "attachment_name" text;--> statement-breakpoint
+ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "reply_to_id" uuid;--> statement-breakpoint
+ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "deleted_at" timestamp with time zone;--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'feed_post_likes_post_id_feed_posts_id_fk') THEN
+    -- removed duplicate constraint feed_post_likes_post_id_feed_posts_id_fk (kept in 0012_feed_posts.sql)
+  END IF;
+END $$;
 

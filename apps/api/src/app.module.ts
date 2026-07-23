@@ -6,6 +6,8 @@ import { APP_GUARD } from '@nestjs/core'
 import { LoggerModule } from 'nestjs-pino'
 import { DatabaseModule } from './database/database.module'
 import { PermissionsGuard } from './common/guards/permissions.guard'
+import { AppLoggerModule } from './common/logger/logger.module'
+import { RedisModule } from './common/redis/redis.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { StoresModule } from './modules/stores/stores.module'
 import { ProductsModule } from './modules/products/products.module'
@@ -36,11 +38,29 @@ import { AdminMessagesModule } from './modules/admin-messages/admin-messages.mod
 import { HealthModule } from './health/health.module'
 @Module({
   imports: [
+    AppLoggerModule,
+    RedisModule,
     LoggerModule.forRoot({
       pinoHttp: {
         transport: process.env.NODE_ENV !== 'production'
           ? { target: 'pino-pretty' }
           : undefined,
+        customProps: (req) => ({
+          requestId: (req as any)['requestId'] || req.id,
+        }),
+        redact: {
+          paths: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'req.body.password',
+            'req.body.token',
+            'req.body.cardNumber',
+            'req.body.cvv',
+            'req.body.phone',
+            'req.body.email',
+          ],
+          censor: '[REDACTED]',
+        },
       },
     }),
     ConfigModule.forRoot({ isGlobal: true }),

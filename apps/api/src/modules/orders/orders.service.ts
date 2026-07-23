@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common'
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common'
 import { eq, and, sql, like, or, desc, inArray, gte } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { orders, orderItems, orderStatusLog } from '../../database/schema/orders'
@@ -15,16 +15,18 @@ import { OutboxService } from '../notifications/outbox.service'
 import { AuditService } from '../audit/audit.service'
 import { orderStatusMessage } from '../../common/system-messages'
 import { assertOrderItemTransition, assertOrderTransition, type OrderItemStatus, type OrderStatus } from './order-status'
+import { AppLoggerService } from '../../common/logger/logger.service'
+import { setLogContext } from '../../common/interceptors/request-id.interceptor'
 
 @Injectable()
 export class OrdersService {
-  private readonly logger = new Logger(OrdersService.name)
-
   constructor(
     @Inject(DRIZZLE) private db: DrizzleDB,
     private chat: ChatService,
     private receipts: ReceiptsService,
     private outbox: OutboxService,
+    private audit: AuditService,
+    private logger: AppLoggerService,
   ) {}
 
   async list(params: { page?: number; limit?: number; storeId?: string; status?: string; search?: string }) {
@@ -99,6 +101,15 @@ export class OrdersService {
       }
     })
 
+    await this.audit.create({
+      action: 'UPDATE_STATUS',
+      resource: 'orders',
+      resourceId: id,
+      actorId: changedBy,
+      details: { fromStatus: order.status, toStatus: status, reason },
+      status: 'success',
+    })
+
     // Commande livrée → créer un reçu automatiquement, et l'envoyer si
     // le store a activé l'option auto_send dans ses paramètres.
     // En cas d'échec, le reçu est marqué 'failed' pour retry admin.
@@ -115,7 +126,9 @@ export class OrdersService {
               await this.receipts.send(receipt.id)
             }
           } catch (sendErr) {
-            this.logger.error(`Échec envoi reçu ${receipt.id} pour commande ${id}`, sendErr instanceof Error ? sendErr.stack : undefined)
+            setLogContext('orderId', id)
+            setLogContext('receiptId', receipt.id)
+            this.logger.error(`Échec envoi reçu pour commande ${id}`, sendErr instanceof Error ? sendErr.stack : undefined)
             await this.db.update(receipts)
               .set({ status: 'failed', updatedAt: new Date() })
               .where(eq(receipts.id, receipt.id))
@@ -126,6 +139,7 @@ export class OrdersService {
           }
         }
       } catch (err) {
+        setLogContext('orderId', id)
         this.logger.error(`Échec création reçu pour commande ${id}`, err instanceof Error ? err.stack : undefined)
       }
     }
@@ -323,6 +337,14 @@ export class OrdersService {
       })
 
       return order.id
+    })
+
+    await this.audit.create({
+      action: 'CREATE',
+      resource: 'orders',
+      resourceId: orderId,
+      details: { orderNumber, paymentMethod: data.paymentMethod },
+      status: 'success',
     })
 
     return this.getById(orderId)
@@ -625,6 +647,15 @@ export class OrdersService {
       })
 
       return shipment
+    }).then(async (shipment) => {
+      await this.audit.create({
+        action: 'CREATE_SHIPMENT',
+        resource: 'shipments',
+        resourceId: shipment.id,
+        details: { orderId, itemsCount: data.items.length, trackingNumber: data.trackingNumber },
+        status: 'success',
+      })
+      return shipment
     })
   }
 
@@ -665,7 +696,16 @@ export class OrdersService {
       await tx.update(orderItems).set(patch).where(eq(orderItems.id, itemId))
 
       await this.recalculateOrderStatusInTx(tx, orderId, item.storeId)
-    }).then(() => ({ success: true }))
+    }).then(async () => {
+      await this.audit.create({
+        action: 'UPDATE_ITEM_STATUS',
+        resource: 'order_items',
+        resourceId: itemId,
+        details: { orderId, newStatus: data.status, issueReason: data.issueReason },
+        status: 'success',
+      })
+      return { success: true }
+    })
   }
 
   async listShipments(orderId: string) {

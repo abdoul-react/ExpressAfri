@@ -3,10 +3,14 @@ import { eq, sql, and, like, or, inArray, notInArray, asc, desc } from 'drizzle-
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { deliveryPersons, deliveryAssignments } from '../../database/schema/delivery'
 import { orders } from '../../database/schema/orders'
+import { AuditService } from '../audit/audit.service'
 
 @Injectable()
 export class DeliveryService {
-  constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private db: DrizzleDB,
+    private audit: AuditService,
+  ) {}
 
   async listPersons(params: {
     page?: number
@@ -88,6 +92,14 @@ export class DeliveryService {
       .values(data)
       .returning()
 
+    await this.audit.create({
+      action: 'CREATE',
+      resource: 'delivery_persons',
+      resourceId: person.id,
+      details: { name: person.name, phone: person.phone },
+      status: 'success',
+    })
+
     return person
   }
 
@@ -116,6 +128,15 @@ export class DeliveryService {
       .returning()
 
     if (!person) throw new NotFoundException('Livreur introuvable')
+
+    await this.audit.create({
+      action: 'UPDATE',
+      resource: 'delivery_persons',
+      resourceId: id,
+      details: { name: person.name, updatedFields: Object.keys(data) },
+      status: 'success',
+    })
+
     return person
   }
 
@@ -126,6 +147,15 @@ export class DeliveryService {
       .returning()
 
     if (!person) throw new NotFoundException('Livreur introuvable')
+
+    await this.audit.create({
+      action: 'DELETE',
+      resource: 'delivery_persons',
+      resourceId: id,
+      details: { name: person.name, phone: person.phone },
+      status: 'success',
+    })
+
     return person
   }
 
@@ -191,6 +221,14 @@ export class DeliveryService {
       })
       .returning()
 
+    await this.audit.create({
+      action: 'ASSIGN',
+      resource: 'delivery_assignments',
+      resourceId: assignment.id,
+      details: { deliveryPersonId: data.deliveryPersonId, orderId: data.orderId },
+      status: 'success',
+    })
+
     return assignment
   }
 
@@ -233,6 +271,14 @@ export class DeliveryService {
         })
         .where(eq(deliveryPersons.id, assignment.deliveryPersonId))
     }
+
+    await this.audit.create({
+      action: 'UPDATE_ASSIGNMENT_STATUS',
+      resource: 'delivery_assignments',
+      resourceId: id,
+      details: { status: data.status, notes: data.notes },
+      status: 'success',
+    })
 
     return assignment
   }

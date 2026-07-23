@@ -6,6 +6,7 @@ import { orders, orderItems } from '../../database/schema/orders'
 import { customers } from '../../database/schema/customers'
 import { payments } from '../../database/schema/payments'
 import { ChatService } from '../chat/chat.service'
+import { AuditService } from '../audit/audit.service'
 import { receiptMessage } from '../../common/system-messages'
 import PDFDocument from 'pdfkit'
 import type { StorageService } from '../storage/storage.service'
@@ -18,6 +19,7 @@ export class ReceiptsService {
     @Inject(DRIZZLE) private db: DrizzleDB,
     @Inject('STORAGE_SERVICE') private storage: StorageService,
     private chat: ChatService,
+    private audit: AuditService,
   ) {}
 
   /**
@@ -290,6 +292,14 @@ export class ReceiptsService {
         snapshot,
       }).returning()
 
+      await this.audit.create({
+        action: 'CREATE',
+        resource: 'receipts',
+        resourceId: receipt.id,
+        details: { orderId: order.id, orderNumber, storeId: data.storeId },
+        status: 'success',
+      })
+
       return receipt
     })
   }
@@ -320,6 +330,15 @@ export class ReceiptsService {
       receiptMessage(receipt, language),
       { attachmentUrl: downloadUrl, attachmentName: `Reçu-${receipt.orderNumber}.pdf`, type: 'pdf' },
     )
+
+    await this.audit.create({
+      action: 'SEND',
+      resource: 'receipts',
+      resourceId: id,
+      details: { orderId: receipt.orderId, orderNumber: receipt.orderNumber },
+      status: 'success',
+    })
+
     return receipt
   }
 
@@ -373,6 +392,15 @@ export class ReceiptsService {
     const [settings] = await this.db.insert(receiptSettings)
       .values({ ...data, storeId })
       .returning()
+
+    await this.audit.create({
+      action: existing ? 'UPDATE_SETTINGS' : 'CREATE_SETTINGS',
+      resource: 'receipt_settings',
+      resourceId: storeId,
+      details: { storeId, updatedFields: Object.keys(data) },
+      status: 'success',
+    })
+
     return settings
   }
 }
