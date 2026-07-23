@@ -20,7 +20,7 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           cd apps/api && npm ci
       - name: Check architecture
         run: npm run check:arch
