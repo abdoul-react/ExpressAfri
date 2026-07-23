@@ -4,12 +4,14 @@ import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { payments, refunds } from '../../database/schema/payments'
 import { orders } from '../../database/schema/orders'
 import { PaymentWebhookService } from './payment-webhook.service'
+import { AuditService } from '../audit/audit.service'
 
 @Injectable()
 export class PaymentsService {
   constructor(
     @Inject(DRIZZLE) private db: DrizzleDB,
     private webhookService: PaymentWebhookService,
+    private audit: AuditService,
   ) {}
 
   async list(params: { page?: number; limit?: number; search?: string; status?: string; method?: string; orderId?: string }) {
@@ -44,6 +46,15 @@ export class PaymentsService {
     status?: string
   }) {
     const [payment] = await this.db.insert(payments).values(data).returning()
+
+    await this.audit.create({
+      action: 'CREATE',
+      resource: 'payments',
+      resourceId: payment.id,
+      details: { orderId: data.orderId, amount: data.amount, method: data.method },
+      status: 'success',
+    })
+
     return payment
   }
 
@@ -52,6 +63,15 @@ export class PaymentsService {
     if (!payment) throw new NotFoundException('Paiement introuvable')
     const [refund] = await this.db.insert(refunds).values({ paymentId: id, orderId: payment.orderId, storeId: payment.storeId, amount: String(data.amount), reason: data.reason }).returning()
     await this.db.update(payments).set({ status: 'refunded', updatedAt: new Date() }).where(eq(payments.id, id))
+
+    await this.audit.create({
+      action: 'REFUND',
+      resource: 'payments',
+      resourceId: id,
+      details: { refundId: refund.id, amount: data.amount, reason: data.reason, orderId: payment.orderId },
+      status: 'success',
+    })
+
     return refund
   }
 
@@ -85,6 +105,14 @@ export class PaymentsService {
 
     const [updated] = await this.db.select().from(payments).where(eq(payments.id, payment.id)).limit(1)
 
+    await this.audit.create({
+      action: 'INITIALIZE',
+      resource: 'payments',
+      resourceId: payment.id,
+      details: { orderId, method, provider: provider.name, providerPaymentId: result.providerPaymentId },
+      status: 'success',
+    })
+
     return {
       payment: updated,
       checkoutUrl: result.checkoutUrl ?? null,
@@ -92,7 +120,16 @@ export class PaymentsService {
   }
 
   async handleWebhook(providerName: string, rawBody: Buffer, signature: string) {
-    return this.webhookService.processWebhook(providerName, rawBody, signature)
+    const result = await this.webhookService.processWebhook(providerName, rawBody, signature)
+
+    await this.audit.create({
+      action: 'WEBHOOK',
+      resource: 'payments',
+      details: { provider: providerName, status: result.status },
+      status: 'success',
+    })
+
+    return result
   }
 
   async getByOrderId(orderId: string) {

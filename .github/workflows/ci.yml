@@ -1,12 +1,59 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_OPTIONS: --max-old-space-size=4096
 
 jobs:
-  api:
-    runs-on: ubuntu-latest
+  lint-and-typecheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd apps/api && npm ci
+      - name: Check architecture
+        run: npm run check:arch
+      - name: Lint root
+        run: npm run lint -- --no-fix
+      - name: Lint API
+        run: cd apps/api && npm run lint -- --no-fix
+      - name: Typecheck root
+        run: npx tsc --noEmit
+      - name: Typecheck API
+        run: cd apps/api && npx tsc --noEmit
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+  mobile-typecheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install mobile dependencies
+        run: npm ci --legacy-peer-deps
+      - name: Typecheck mobile
+        run: npx tsc --noEmit
+
+  migration-and-test:
+    needs: lint-and-typecheck
+    runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           POSTGRES_DB: testdb
           POSTGRES_USER: postgres
@@ -14,90 +61,59 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-cmd "pg_isready -U postgres -d testdb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
+      NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
       - name: Install API dependencies
+        run: cd apps/api && npm ci
+      - name: Reset test database
         run: |
-          cd apps/api
-          npm ci
-      - name: Wait for Postgres
-        run: |
-          sudo apt-get update -y && sudo apt-get install -y postgresql-client
-          for i in {1..60}; do pg_isready -h localhost && break || sleep 1; done
-      - name: Pre-migration diagnostics
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
-        run: |
-          echo "DATABASE_URL=$DATABASE_URL"
-          echo "psql version:"; psql --version || true
-          echo "Listing DB tables (may fail if DB not ready):";
-          psql "$DATABASE_URL" -c '\dt' || true
-          echo "Drizzle journal (if exists):";
-          ls -la apps/api/drizzle || true
-      - name: Reset test DB (drop & recreate)
-        env:
-          PGPASSWORD: postgres
-        run: |
-          # ensure Postgres is ready
-          for i in {1..60}; do pg_isready -h localhost && break || sleep 1; done
-          echo "Dropping and recreating testdb to ensure a clean schema"
-          psql -h localhost -U postgres -d postgres -c "DROP DATABASE IF EXISTS testdb;" || true
-          psql -h localhost -U postgres -d postgres -c "CREATE DATABASE testdb;"
-
-          if [ -f apps/api/drizzle/meta/_journal.json ]; then echo '--- journal ---'; sed -n '1,200p' apps/api/drizzle/meta/_journal.json || true; echo '--- end journal ---'; fi
-      - name: Run DB migrations
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
-        run: |
-          cd apps/api
-          echo "Running drizzle migrate (showing config and listing pending files)"
-          node -e "console.log('drizzle cfg URL env:', process.env.DATABASE_URL || 'none')"
-          ls -la drizzle || true
-          npm run migrate
-      - name: Lint
-        run: |
-          cd apps/api
-          npm run lint
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS testdb;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE testdb;"
+      - name: Run migrations
+        run: cd apps/api && npm run migrate:ci
       - name: Unit tests
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
-          NODE_ENV: test
-        run: |
-          cd apps/api
-          npm test -- --runInBand --ci
+        run: cd apps/api && npm test -- --runInBand --ci
       - name: E2E tests
+        run: cd apps/api && npm run test:e2e -- --ci
+
+  build:
+    needs: migration-and-test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install API dependencies
+        run: cd apps/api && npm ci
+      - name: Build API
+        run: cd apps/api && npm run build
+      - name: Install admin dependencies
+        run: cd apps/admin && npm ci
+      - name: Build admin
+        run: cd apps/admin && npm run build
+      - name: Build Docker image
+        run: docker build -t expressafri/api apps/api
+
+  secrets-scan:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
-          NODE_ENV: test
-        run: |
-          cd apps/api
-          npm run test:e2e -- --ci
-
-  mobile:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install mobile deps and typecheck
-        run: |
-          npm ci --legacy-peer-deps
-          npx tsc --noEmit
-
-  admin:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install admin deps and build
-        run: |
-          cd apps/admin
-          npm ci
-          npm run build
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

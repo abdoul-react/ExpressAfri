@@ -4,9 +4,10 @@ import { PaymentsService } from './payments.service'
 import { PaymentWebhookService } from './payment-webhook.service'
 import { MockPaymentProvider } from './providers/mock-payment.provider'
 import { ChatModule } from '../chat/chat.module'
+import { AuditModule } from '../audit/audit.module'
 
 @Module({
-  imports: [ChatModule],
+  imports: [ChatModule, AuditModule],
   controllers: [PaymentsController],
   providers: [PaymentsService, PaymentWebhookService, MockPaymentProvider],
   exports: [PaymentsService, PaymentWebhookService],

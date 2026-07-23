@@ -38,6 +38,17 @@ CREATE TABLE "internal_messages" (
 	"created_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-ALTER TABLE "admin_tickets" ADD CONSTRAINT "admin_tickets_assigned_to_admins_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."admins"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "ticket_messages" ADD CONSTRAINT "ticket_messages_ticket_id_admin_tickets_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "public"."admin_tickets"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'admin_tickets_assigned_to_admins_id_fk') THEN
+    ALTER TABLE "admin_tickets" ADD CONSTRAINT "admin_tickets_assigned_to_admins_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."admins"("id") ON DELETE no action ON UPDATE no action;
+  END IF;
+END $$;--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ticket_messages_ticket_id_admin_tickets_id_fk') THEN
+    ALTER TABLE "ticket_messages" ADD CONSTRAINT "ticket_messages_ticket_id_admin_tickets_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "public"."admin_tickets"("id") ON DELETE no action ON UPDATE no action;
+  END IF;
+END $$;--> statement-breakpoint
 -- FK removed: internal_messages stores admin info as text
+

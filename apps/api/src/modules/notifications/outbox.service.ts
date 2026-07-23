@@ -1,7 +1,9 @@
-import { Injectable, Inject, Logger } from '@nestjs/common'
+import { Injectable, Inject } from '@nestjs/common'
 import { eq, and, or, lte, isNull, sql, inArray } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { outboxEvents } from '../../database/schema/outbox'
+import { AppLoggerService } from '../../common/logger/logger.service'
+import { setLogContext } from '../../common/interceptors/request-id.interceptor'
 
 const BATCH_SIZE = 10
 const MAX_RETRY_INTERVAL_S = 60
@@ -10,9 +12,10 @@ type OutboxRow = typeof outboxEvents.$inferSelect
 
 @Injectable()
 export class OutboxService {
-  private readonly logger = new Logger(OutboxService.name)
-
-  constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private db: DrizzleDB,
+    private logger: AppLoggerService,
+  ) {}
 
   async createEvent(params: {
     type: string
@@ -30,6 +33,8 @@ export class OutboxService {
         payload: params.payload,
       }).onConflictDoNothing()
     } catch (err) {
+      setLogContext('aggregateId', params.aggregateId)
+      setLogContext('aggregateType', params.aggregateType)
       this.logger.warn(`createEvent échoué pour ${params.idempotencyKey}: ${(err as Error)?.message}`)
     }
   }
@@ -53,6 +58,8 @@ export class OutboxService {
         payload: params.payload,
       }).onConflictDoNothing()
     } catch (err) {
+      setLogContext('aggregateId', params.aggregateId)
+      setLogContext('aggregateType', params.aggregateType)
       this.logger.warn(`createEventInTx échoué pour ${params.idempotencyKey}: ${(err as Error)?.message}`)
     }
   }
@@ -111,6 +118,8 @@ export class OutboxService {
         await this.markDone(event.id)
       } catch (err) {
         const msg = (err as Error)?.message ?? String(err)
+        setLogContext('aggregateId', event.aggregateId)
+        setLogContext('aggregateType', event.type)
         this.logger.error(`Échec traitement outbox ${event.id} (${event.type}): ${msg}`)
         await this.markFailed(event.id, msg)
       }

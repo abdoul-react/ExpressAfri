@@ -1,26 +1,29 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common'
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common'
 import { OutboxService } from './outbox.service'
 import { ChatService } from '../chat/chat.service'
 import { PushService } from '../push/push.service'
+import { AppLoggerService } from '../../common/logger/logger.service'
+import { setLogContext } from '../../common/interceptors/request-id.interceptor'
 
 const POLL_INTERVAL_MS = 5_000
 
 @Injectable()
 export class OutboxWorker implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(OutboxWorker.name)
   private timer: ReturnType<typeof setInterval> | null = null
 
   constructor(
     private outbox: OutboxService,
     private chat: ChatService,
     private push: PushService,
+    private logger: AppLoggerService,
   ) {}
 
   onModuleInit() {
     this.timer = setInterval(() => this.tick(), POLL_INTERVAL_MS)
     // Prevent the interval from keeping the Node process alive (useful for tests)
-    if (this.timer && typeof (this.timer as unknown as { unref?: () => void }).unref === 'function') {
-      (this.timer as unknown as { unref?: () => void }).unref()
+    const timer = this.timer
+    if (timer && typeof (timer as unknown as { unref?: () => void }).unref === 'function') {
+      ;(timer as unknown as { unref: () => void }).unref()
     }
     this.tick()
   }
@@ -65,11 +68,13 @@ export class OutboxWorker implements OnModuleInit, OnModuleDestroy {
               data: { type: 'order', orderId },
             })
           } catch (err) {
+            setLogContext('orderId', orderId)
             this.logger.warn(`Échec envoi push pour commande ${orderId}: ${err instanceof Error ? err.message : err}`)
           }
         }
         break
       default:
+        setLogContext('aggregateId', event.id)
         this.logger.warn(`Type d'événement outbox inconnu: ${event.type}`)
     }
   }

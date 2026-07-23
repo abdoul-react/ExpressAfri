@@ -1,19 +1,21 @@
-import { Injectable, Inject, Logger } from '@nestjs/common'
+import { Injectable, Inject } from '@nestjs/common'
 import { eq, and, sql } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { payments } from '../../database/schema/payments'
 import { orders } from '../../database/schema/orders'
 import { PaymentProvider } from './providers/payment-provider'
 import { ChatService } from '../chat/chat.service'
+import { AppLoggerService } from '../../common/logger/logger.service'
+import { setLogContext } from '../../common/interceptors/request-id.interceptor'
 
 @Injectable()
 export class PaymentWebhookService {
-  private readonly logger = new Logger(PaymentWebhookService.name)
   private providerMap = new Map<string, PaymentProvider>()
 
   constructor(
     @Inject(DRIZZLE) private db: DrizzleDB,
     private chat: ChatService,
+    private logger: AppLoggerService,
   ) {}
 
   registerProvider(provider: PaymentProvider) {
@@ -36,6 +38,7 @@ export class PaymentWebhookService {
 
     const event = provider.parseWebhook(rawBody)
 
+    setLogContext('paymentId', (event as any).paymentId || event.providerPaymentId)
     this.logger.debug(`Received webhook event for provider=${providerName} parsed=${JSON.stringify(event)}`)
 
     // Prepare a holder to send a system message after the DB transaction commits
@@ -115,10 +118,12 @@ export class PaymentWebhookService {
       return { status: 'processed', message: `Événement ${event.status} traité` }
     })
 
-    // Send system message outside the DB transaction (best-effort)
+      // Send system message outside the DB transaction (best-effort)
     if (postMessage) {
-      this.chat.postOrderSystemMessage(postMessage.orderId, postMessage.msg).catch((err: unknown) => {
-        this.logger.error(`Échec envoi message système order=${postMessage?.orderId}: ${err instanceof Error ? err.message : String(err)}`)
+      const pm: { orderId: string; msg: string } = postMessage
+      setLogContext('orderId', pm.orderId)
+      this.chat.postOrderSystemMessage(pm.orderId, pm.msg).catch((err: unknown) => {
+        this.logger.error(`Échec envoi message système order=${pm.orderId}: ${err instanceof Error ? err.message : String(err)}`)
       })
     }
 

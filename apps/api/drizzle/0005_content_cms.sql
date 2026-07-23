@@ -1,4 +1,4 @@
-CREATE TABLE "banners" (
+CREATE TABLE IF NOT EXISTS "banners" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"title" text NOT NULL,
 	"subtitle" text,
@@ -17,7 +17,7 @@ CREATE TABLE "banners" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "static_pages" (
+CREATE TABLE IF NOT EXISTS "static_pages" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"slug" text NOT NULL,
 	"title" text NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE "static_pages" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "logos" (
+CREATE TABLE IF NOT EXISTS "logos" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"context" text NOT NULL,
 	"url" text NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE "logos" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "feed_sections" (
+CREATE TABLE IF NOT EXISTS "feed_sections" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"title" text NOT NULL,
 	"type" text NOT NULL,

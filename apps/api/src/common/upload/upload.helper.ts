@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { extname } from 'path'
 import { BadRequestException } from '@nestjs/common'
 import * as fs from 'fs'
+import imageSize from 'image-size'
 
 const MAGIC_BYTES: { ext: string; mime: string; bytes: number[]; offset: number }[] = [
   { ext: 'jpg', mime: 'image/jpeg', bytes: [0xFF, 0xD8, 0xFF], offset: 0 },
@@ -45,5 +46,21 @@ export function validateFileContent(filePath: string, allowedMimePrefix: string)
   if (!ok) {
     fs.unlinkSync(filePath)
     throw new BadRequestException('Le contenu du fichier ne correspond pas au type attendu')
+  }
+
+  if (allowedMimePrefix.startsWith('image/')) {
+    try {
+      const dimensions = imageSize(filePath)
+      if (dimensions.width && dimensions.height) {
+        const MAX_DIM = 4096
+        if (dimensions.width > MAX_DIM || dimensions.height > MAX_DIM) {
+          fs.unlinkSync(filePath)
+          throw new BadRequestException(`Dimensions de l'image trop grandes (max ${MAX_DIM}x${MAX_DIM}px)`)
+        }
+      }
+    } catch {
+      fs.unlinkSync(filePath)
+      throw new BadRequestException('Impossible de lire les dimensions de l\'image')
+    }
   }
 }

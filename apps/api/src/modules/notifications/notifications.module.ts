@@ -6,7 +6,7 @@ import { OutboxWorker } from './outbox.worker'
 import { ChatModule } from '../chat/chat.module'
 import { PushModule } from '../push/push.module'
 
-const providers = [NotificationsService, OutboxService]
+const providers: any[] = [NotificationsService, OutboxService]
 if (process.env.NODE_ENV !== 'test') {
   providers.push(OutboxWorker)
 }

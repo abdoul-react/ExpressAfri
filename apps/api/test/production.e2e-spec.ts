@@ -48,13 +48,13 @@ describe('Production readiness e2e (Phase F) - skeleton', () => {
     )
 
     let shippingAddressId = null
-    if (addrRow && addrRow.rows && addrRow.rows[0] && addrRow.rows[0].id) {
-      shippingAddressId = addrRow.rows[0].id
-    } else if (addrRow && addrRow[0] && addrRow[0].id) {
-      shippingAddressId = addrRow[0].id
+    if (addrRow && addrRow.rows && addrRow.rows[0] && (addrRow.rows[0] as any).id) {
+      shippingAddressId = (addrRow.rows[0] as any).id
+    } else if (addrRow && (addrRow as any)[0] && (addrRow as any)[0].id) {
+      shippingAddressId = (addrRow as any)[0].id
     } else {
       const q = await db.execute(`SELECT id FROM addresses WHERE customer_id = '${userId}' LIMIT 1`)
-      if (q && q.rows && q.rows[0]) shippingAddressId = q.rows[0].id
+      if (q && q.rows && q.rows[0]) shippingAddressId = (q.rows[0] as any).id
     }
 
     // Create product and variant with known price
@@ -92,13 +92,13 @@ describe('Production readiness e2e (Phase F) - skeleton', () => {
     const orderRows = await db.execute(
       `SELECT id, subtotal, shipping_cost, discount_amount, total FROM orders WHERE idempotency_key = '${idempotencyKey}' AND store_id = '${SYSTEM_STORE_ID}' LIMIT 1`
     )
-    const orderRow = orderRows && orderRows.rows && orderRows.rows[0] ? orderRows.rows[0] : orderRows[0]
+    const orderRow = orderRows && orderRows.rows && orderRows.rows[0] ? (orderRows.rows[0] as any) : (orderRows as any)[0]
     expect(orderRow).toBeDefined()
 
     const itemsRows = await db.execute(
       `SELECT coalesce(sum(total_price), 0) as items_total FROM order_items WHERE order_id = '${orderRow.id}'`
     )
-    const itemsTotal = itemsRows && itemsRows.rows && itemsRows.rows[0] ? Number(itemsRows.rows[0].items_total) : Number(itemsRows[0].items_total)
+    const itemsTotal = itemsRows && itemsRows.rows && itemsRows.rows[0] ? Number((itemsRows.rows[0] as any).items_total) : Number((itemsRows as any)[0].items_total)
 
     // subtotal should equal sum of order_items.total_price
     expect(Number(orderRow.subtotal)).toBeCloseTo(itemsTotal, 2)
@@ -137,13 +137,13 @@ describe('Production readiness e2e (Phase F) - skeleton', () => {
        VALUES ('${userId}', '${SYSTEM_STORE_ID}', 'Idem Test', '0000000000', 'Street 2', 'Niamey', 'NE', now(), now()) RETURNING id`
     )
     let shippingAddressId = null
-    if (addrRow && addrRow.rows && addrRow.rows[0] && addrRow.rows[0].id) {
-      shippingAddressId = addrRow.rows[0].id
-    } else if (addrRow && addrRow[0] && addrRow[0].id) {
-      shippingAddressId = addrRow[0].id
+    if (addrRow && addrRow.rows && addrRow.rows[0] && (addrRow.rows[0] as any).id) {
+      shippingAddressId = (addrRow.rows[0] as any).id
+    } else if (addrRow && (addrRow as any)[0] && (addrRow as any)[0].id) {
+      shippingAddressId = (addrRow as any)[0].id
     } else {
       const q = await db.execute(`SELECT id FROM addresses WHERE customer_id = '${userId}' LIMIT 1`)
-      if (q && q.rows && q.rows[0]) shippingAddressId = q.rows[0].id
+      if (q && q.rows && q.rows[0]) shippingAddressId = (q.rows[0] as any).id
     }
 
     // Product
@@ -174,7 +174,7 @@ describe('Production readiness e2e (Phase F) - skeleton', () => {
     const rows = await db.execute(
       `SELECT count(*) as count FROM orders WHERE idempotency_key = '${idempotencyKey}' AND store_id = '${SYSTEM_STORE_ID}'`
     )
-    const count = rows && rows.rows && rows.rows[0] ? Number(rows.rows[0].count) : Number(rows[0].count)
+    const count = rows && rows.rows && rows.rows[0] ? Number((rows.rows[0] as any).count) : Number((rows as any)[0].count)
     expect(count).toBe(1)
   }, 30000)
 
@@ -217,12 +217,12 @@ describe('Production readiness e2e (Phase F) - skeleton', () => {
 
     // ensure only one order created for this variant
     const rows = await db.execute(`SELECT count(*) as count FROM order_items WHERE variant_id = '${variantId}'`)
-    const count = rows && rows.rows && rows.rows[0] ? Number(rows.rows[0].count) : Number(rows[0].count)
+    const count = rows && rows.rows && rows.rows[0] ? Number((rows.rows[0] as any).count) : Number((rows as any)[0].count)
     expect(count).toBe(1)
 
     // check remaining stock is 0
     const sv = await db.execute(`SELECT stock FROM product_variants WHERE id = '${variantId}'`)
-    const remaining = sv && sv.rows && sv.rows[0] ? Number(sv.rows[0].stock) : Number(sv[0].stock)
+    const remaining = sv && sv.rows && sv.rows[0] ? Number((sv.rows[0] as any).stock) : Number((sv as any)[0].stock)
     expect(remaining).toBe(0)
   }, 30000)
 
@@ -245,7 +245,7 @@ describe('Production readiness e2e (Phase F) - skeleton', () => {
     await db.execute(`INSERT INTO stores (id, name, email, country, status, created_at, updated_at) VALUES ('${SYSTEM_STORE_ID}', 'System store', 'system@example.com', 'Niger', 'active', now(), now()) ON CONFLICT (id) DO NOTHING`)
 
     const addrRow = await db.execute(`INSERT INTO addresses (customer_id, store_id, contact_name, phone, street, city, country_code, created_at, updated_at) VALUES ('${userId}', '${SYSTEM_STORE_ID}', 'Webhook', '000', 'Street W', 'Niamey', 'NE', now(), now()) RETURNING id`)
-    const shippingAddressId = addrRow && addrRow.rows && addrRow.rows[0] ? addrRow.rows[0].id : addrRow[0].id
+    const shippingAddressId = addrRow && addrRow.rows && addrRow.rows[0] ? (addrRow.rows[0] as any).id : (addrRow as any)[0].id
 
     const productId = randomUUID()
     const variantId = randomUUID()
@@ -285,7 +285,7 @@ describe('Production readiness e2e (Phase F) - skeleton', () => {
     const start = Date.now()
     while (Date.now() - start < maxWaitMs) {
       const pr = await db.execute(`SELECT status, webhook_event_id FROM payments WHERE id = '${payment.id}' LIMIT 1`)
-      prow = pr && pr.rows && pr.rows[0] ? pr.rows[0] : pr[0]
+      prow = pr && pr.rows && pr.rows[0] ? pr.rows[0] : (pr as any)[0]
       if (prow && prow.status === 'captured' && prow.webhook_event_id === payload.eventId) break
       await new Promise((r) => setTimeout(r, intervalMs))
     }
