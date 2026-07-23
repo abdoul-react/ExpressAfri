@@ -38,6 +38,16 @@ jobs:
           psql "$DATABASE_URL" -c '\dt' || true
           echo "Drizzle journal (if exists):";
           ls -la apps/api/drizzle || true
+      - name: Reset test DB (drop & recreate)
+        env:
+          PGPASSWORD: postgres
+        run: |
+          # ensure Postgres is ready
+          for i in {1..60}; do pg_isready -h localhost && break || sleep 1; done
+          echo "Dropping and recreating testdb to ensure a clean schema"
+          psql -h localhost -U postgres -d postgres -c "DROP DATABASE IF EXISTS testdb;" || true
+          psql -h localhost -U postgres -d postgres -c "CREATE DATABASE testdb;"
+
           if [ -f apps/api/drizzle/meta/_journal.json ]; then echo '--- journal ---'; sed -n '1,200p' apps/api/drizzle/meta/_journal.json || true; echo '--- end journal ---'; fi
       - name: Run DB migrations
         env:
