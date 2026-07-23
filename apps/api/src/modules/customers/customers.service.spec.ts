@@ -10,7 +10,12 @@ describe('CustomersService', () => {
   beforeEach(async () => {
     mockDb = { select: jest.fn(), insert: jest.fn(), update: jest.fn(), delete: jest.fn() }
     const module: TestingModule = await Test.createTestingModule({
-      providers: [CustomersService, { provide: DRIZZLE, useValue: mockDb }],
+      providers: [
+        CustomersService,
+        { provide: DRIZZLE, useValue: mockDb },
+        // AuditService est attendu par CustomersService
+        require('../../../test/test-mocks').mockAuditServiceProvider,
+      ],
     }).compile()
     service = module.get<CustomersService>(CustomersService)
   })

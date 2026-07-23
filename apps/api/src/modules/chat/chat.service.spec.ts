@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { NotFoundException } from '@nestjs/common'
 import { ChatService } from './chat.service'
 import { DRIZZLE } from '../../database/database.module'
+import { PushService } from '../push/push.service'
 
 describe('ChatService', () => {
   let service: ChatService
@@ -26,7 +27,11 @@ describe('ChatService', () => {
   beforeEach(async () => {
     mockResult = []
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ChatService, { provide: DRIZZLE, useValue: mockDb }],
+      providers: [
+        ChatService,
+        { provide: DRIZZLE, useValue: mockDb },
+        { provide: PushService, useValue: { sendToCustomer: jest.fn() } },
+      ],
     }).compile()
     service = module.get<ChatService>(ChatService)
   })
