@@ -27,12 +27,26 @@ jobs:
       - name: Wait for Postgres
         run: |
           sudo apt-get update -y && sudo apt-get install -y postgresql-client
-          for i in {1..30}; do pg_isready -h localhost && break || sleep 1; done
+          for i in {1..60}; do pg_isready -h localhost && break || sleep 1; done
+      - name: Pre-migration diagnostics
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
+        run: |
+          echo "DATABASE_URL=$DATABASE_URL"
+          echo "psql version:"; psql --version || true
+          echo "Listing DB tables (may fail if DB not ready):";
+          psql "$DATABASE_URL" -c '\dt' || true
+          echo "Drizzle journal (if exists):";
+          ls -la apps/api/drizzle || true
+          if [ -f apps/api/drizzle/meta/_journal.json ]; then echo '--- journal ---'; sed -n '1,200p' apps/api/drizzle/meta/_journal.json || true; echo '--- end journal ---'; fi
       - name: Run DB migrations
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
         run: |
           cd apps/api
+          echo "Running drizzle migrate (showing config and listing pending files)"
+          node -e "console.log('drizzle cfg URL env:', process.env.DATABASE_URL || 'none')"
+          ls -la drizzle || true
           npm run migrate
       - name: Lint
         run: |
