@@ -1,0 +1,1 @@
+ALTER TABLE "admin_tickets" ADD COLUMN "chat_conversation_id" uuid;

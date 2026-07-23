@@ -1,0 +1,30 @@
+import { ApiProductDataSource } from "./api/ApiProductDataSource";
+import { ApiCategoryDataSource } from "./api/ApiCategoryDataSource";
+import { ApiOrderDataSource } from "./api/ApiOrderDataSource";
+import { ApiPaymentDataSource } from "./api/ApiPaymentDataSource";
+import { ApiContentDataSource } from "./api/ApiContentDataSource";
+import { ApiAuthDataSource } from "./api/ApiAuthDataSource";
+import { ApiAddressDataSource } from "./api/ApiAddressDataSource";
+import { ApiWishlistDataSource } from "./api/ApiWishlistDataSource";
+import { ApiChatDataSource } from "./api/ApiChatDataSource";
+
+export type { DataSource } from "./DataSource";
+export type { ProductDataSource } from "./ProductDataSource";
+export type { CategoryDataSource } from "./CategoryDataSource";
+export type { OrderDataSource } from "./OrderDataSource";
+export type { PaymentDataSource, PaymentMethod } from "./PaymentDataSource";
+export type { ContentDataSource, Shortcut, SuggestedPerson, FeedSection } from "./ContentDataSource";
+export type { AuthDataSource, AuthResult, OtpResult } from "./AuthDataSource";
+export type { AddressDataSource, Address } from "./AddressDataSource";
+export type { WishlistDataSource } from "./WishlistDataSource";
+export type { ChatDataSource } from "./ChatDataSource";
+
+export const productDataSource = new ApiProductDataSource();
+export const categoryDataSource = new ApiCategoryDataSource();
+export const orderDataSource = new ApiOrderDataSource();
+export const paymentDataSource = new ApiPaymentDataSource();
+export const contentDataSource = new ApiContentDataSource();
+export const authDataSource = new ApiAuthDataSource();
+export const addressDataSource = new ApiAddressDataSource();
+export const wishlistDataSource = new ApiWishlistDataSource();
+export const chatDataSource = new ApiChatDataSource();

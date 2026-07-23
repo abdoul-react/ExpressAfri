@@ -1,0 +1,17 @@
+export const MOCK_FEATURE_FLAGS = [
+  { key: 'wallet', enabled: true, label: 'Portefeuille ExpressAfri', description: 'Activer le wallet pour les achats et remboursements', group: 'Paiement' },
+  { key: 'photo-search', enabled: true, label: 'Recherche par photo', description: 'Permettre aux utilisateurs de chercher par image', group: 'Recherche' },
+  { key: 'feed', enabled: true, label: 'Feed inspiration', description: 'Flux de contenu personnalisé sur la page d\'accueil', group: 'Navigation' },
+  { key: 'guest-checkout', enabled: true, label: 'Commande invité', description: 'Permettre de commander sans créer de compte', group: 'Checkout' },
+  { key: 'referral', enabled: true, label: 'Parrainage', description: 'Programme de parrainage avec bonus', group: 'Marketing' },
+  { key: 'dark-mode', enabled: true, label: 'Mode sombre', description: 'Option d\'affichage en mode sombre', group: 'Apparence' },
+  { key: 'multi-language', enabled: true, label: 'Multi-langue', description: 'Support de plusieurs langues dans l\'app', group: 'Apparence' },
+  { key: 'cash-on-delivery', enabled: true, label: 'Paiement à la livraison', description: 'Option de payer en espèces à la réception', group: 'Paiement' },
+  { key: 'live-tracking', enabled: true, label: 'Suivi en direct', description: 'Suivi GPS des colis en temps réel', group: 'Livraison' },
+  { key: 'bundle-deals', enabled: true, label: 'Offres groupées', description: 'Réductions sur les achats en lot', group: 'Marketing' },
+  { key: 'wishlist', enabled: true, label: 'Liste de souhaits', description: 'Permettre aux utilisateurs de sauvegarder des produits', group: 'Navigation' },
+  { key: 'store-follow', enabled: true, label: 'Suivre des boutiques', description: 'Permettre de suivre des vendeurs', group: 'Social' },
+  { key: 'product-reviews', enabled: true, label: 'Avis produits', description: 'Système d\'évaluation et commentaires', group: 'Produit' },
+  { key: 'chat', enabled: true, label: 'Chat en direct', description: 'Messagerie entre acheteurs et vendeurs', group: 'Social' },
+  { key: 'referral-bonus-5', enabled: true, label: 'Bonus parrainage $5', description: 'Récompense de $5 pour chaque filleul', group: 'Marketing' },
+]

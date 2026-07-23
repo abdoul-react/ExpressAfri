@@ -1,0 +1,91 @@
+import type { AdminStoreDataSource, AdminStore, StoreQueryParams, PaginatedResult, UpdateKycPayload, UpdateDocumentPayload, UpdateCommissionPayload, StoreManager, CreateManagerPayload, SetManagerActivePayload, ResetManagerPasswordPayload } from '../AdminStoreDataSource'
+import api from '@/lib/api'
+
+function toStore(raw: any): AdminStore {
+  return {
+    id: raw.id,
+    name: raw.name,
+    ownerName: raw.name,
+    ownerEmail: raw.email,
+    phone: raw.phone ?? '',
+    city: '',
+    country: raw.country,
+    description: '',
+    status: raw.status,
+    logoUrl: null,
+    productCount: 0,
+    totalOrders: 0,
+    revenue: 0,
+    commissionRate: Number(raw.commissionRate),
+    kyc: { status: 'not_submitted', documents: [], ownerFirstName: '', ownerLastName: '', ownerIdNumber: '' },
+    sanctions: [],
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  }
+}
+
+export class ApiAdminStoreDataSource implements AdminStoreDataSource {
+  async list(params?: StoreQueryParams): Promise<PaginatedResult<AdminStore>> {
+    const { data } = await api.get('/stores', { params })
+    return { ...data, data: data.data.map(toStore) }
+  }
+
+  async getById(id: string): Promise<AdminStore> {
+    const { data } = await api.get(`/stores/${id}`)
+    return toStore(data)
+  }
+
+  async approve(id: string): Promise<AdminStore> {
+    const { data } = await api.put(`/stores/${id}/kyc/approve`)
+    return toStore(data)
+  }
+
+  async reject(id: string, reason?: string): Promise<AdminStore> {
+    const { data } = await api.put(`/stores/${id}/kyc/reject`, { reason })
+    return toStore(data)
+  }
+
+  async suspend(id: string, reason?: string): Promise<AdminStore> {
+    const { data } = await api.put(`/stores/${id}`, { status: 'suspended' })
+    return toStore(data)
+  }
+
+  async reactivate(id: string): Promise<AdminStore> {
+    const { data } = await api.put(`/stores/${id}`, { status: 'active' })
+    return toStore(data)
+  }
+
+  async updateKyc(id: string, _payload: UpdateKycPayload): Promise<AdminStore> {
+    const { data } = await api.get(`/stores/${id}`)
+    return toStore(data)
+  }
+
+  async updateDocument(_storeId: string, _docId: string, _payload: UpdateDocumentPayload): Promise<AdminStore> {
+    throw new Error('Document management not yet available via API')
+  }
+
+  async updateCommission(id: string, payload: UpdateCommissionPayload): Promise<AdminStore> {
+    const { data } = await api.put(`/stores/${id}`, { commissionRate: String(payload.commissionRate) })
+    return toStore(data)
+  }
+
+  async listManagers(storeId: string): Promise<StoreManager[]> {
+    const { data } = await api.get(`/stores/${storeId}/managers`)
+    return data
+  }
+
+  async createManager(storeId: string, payload: CreateManagerPayload): Promise<StoreManager> {
+    const { data } = await api.post(`/stores/${storeId}/managers`, payload)
+    return data
+  }
+
+  async setManagerActive(storeId: string, managerId: string, payload: SetManagerActivePayload): Promise<StoreManager> {
+    const { data } = await api.put(`/stores/${storeId}/managers/${managerId}/active`, payload)
+    return data
+  }
+
+  async resetManagerPassword(storeId: string, managerId: string, payload: ResetManagerPasswordPayload): Promise<StoreManager> {
+    const { data } = await api.put(`/stores/${storeId}/managers/${managerId}/password`, payload)
+    return data
+  }
+}

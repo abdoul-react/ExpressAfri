@@ -1,0 +1,80 @@
+{
+  "expo": {
+    "name": "AfriExpress",
+    "slug": "afriexpress",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "afriexpress",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#E8590C"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.afriexpress.app"
+    },
+    "android": {
+      "package": "com.afriexpress.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E8590C",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#E8590C",
+          "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "AfriExpress utilise la caméra pour rechercher des articles par photo."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "AfriExpress accède à vos photos pour la photo de profil et la recherche visuelle."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "AfriExpress utilise le micro pour envoyer des messages vocaux."
+        }
+      ],
+      "expo-video",
+      "expo-image",
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "color": "#E8590C"
+        }
+      ]
+    ],
+    "extra": {
+      "USE_MOCK": true
+    },
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

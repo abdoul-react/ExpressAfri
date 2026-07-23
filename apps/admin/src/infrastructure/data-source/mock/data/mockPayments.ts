@@ -1,0 +1,17 @@
+export const MOCK_PAYMENTS = Array.from({ length: 30 }, (_, i) => ({
+  id: `pay_${String(i + 1).padStart(4, '0')}`,
+  orderId: `ord_${String(i + 1).padStart(4, '0')}`,
+  customerName: ['Abdou', 'Aminata', 'Ibrahim', 'Fatou', 'Moussa', 'Kadija'][i % 6],
+  customerEmail: `${['abdou', 'aminata', 'ibrahim', 'fatou', 'moussa', 'kadija'][i % 6]}@email.com`,
+  amount: [15000, 45000, 25000, 65000, 35000, 8500][i % 6],
+  method: ['Orange Money', 'Wave', 'Carte Visa', 'Mobile Money'][i % 4],
+  status: (['paid', 'paid', 'paid', 'pending', 'failed', 'refunded'] as const)[i % 6],
+  transactionId: `TXN-${String(100000 + i)}`,
+  fees: Math.floor([15000, 45000, 25000][i % 3] * 0.02),
+  refundedAmount: i % 6 === 5 ? [15000, 45000][i % 2] : null,
+  refundReason: i % 6 === 5 ? 'Demande client' : null,
+  refundedAt: null,
+  paidAt: i % 6 !== 2 ? new Date(2026, 6, 1 + i, 10 + (i % 8), (i * 7) % 60).toISOString() : null,
+  failedAt: i % 6 === 2 ? new Date(2026, 6, 1 + i, 14, 30).toISOString() : null,
+  createdAt: new Date(2026, 6, 1 + i, 8, 0).toISOString(),
+}))
