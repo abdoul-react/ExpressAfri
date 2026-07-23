@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common'
 import { eq, like, or, and, sql, inArray } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { customers, addresses } from '../../database/schema/customers'
+import { AuditService } from '../audit/audit.service'
 
 type CustomerRow = typeof customers.$inferSelect
 type AddressRow = typeof addresses.$inferSelect
@@ -24,7 +25,10 @@ function withAddressContact(customer: CustomerRow, address: AddressRow | undefin
 
 @Injectable()
 export class CustomersService {
-  constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private db: DrizzleDB,
+    private audit: AuditService,
+  ) {}
 
   private pickDefaultAddress(list: AddressRow[]): AddressRow | undefined {
     return list.find((a) => a.isDefault) ?? list[0]
@@ -71,12 +75,32 @@ export class CustomersService {
 
   async create(data: any) {
     const [customer] = await this.db.insert(customers).values(data).returning()
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'CREATE',
+      resource: 'customers',
+      resourceId: customer.id,
+      details: { firstName: customer.firstName, lastName: customer.lastName, email: customer.email },
+      status: 'success',
+    })
+    
     return customer
   }
 
   async update(id: string, data: any) {
     const [customer] = await this.db.update(customers).set({ ...data, updatedAt: new Date() }).where(eq(customers.id, id)).returning()
     if (!customer) throw new NotFoundException('Client introuvable')
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'UPDATE',
+      resource: 'customers',
+      resourceId: id,
+      details: { updatedFields: Object.keys(data) },
+      status: 'success',
+    })
+    
     return customer
   }
 
@@ -87,6 +111,16 @@ export class CustomersService {
       .where(eq(customers.id, id))
       .returning()
     if (!customer) throw new NotFoundException('Client introuvable')
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'DELETE',
+      resource: 'customers',
+      resourceId: id,
+      details: { email: customer.email, firstName: customer.firstName },
+      status: 'success',
+    })
+    
     return { deleted: true, id }
   }
 

@@ -127,6 +127,48 @@
       "when": 1784782585297,
       "tag": "0018_unique_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784784170086,
+      "tag": "0019_orders_idempotency_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784784353672,
+      "tag": "0020_payments_provider_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784786405688,
+      "tag": "0021_cultured_zodiak",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784787098089,
+      "tag": "0022_steady_lord_hawal",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784787754215,
+      "tag": "0023_tidy_stature",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784900000000,
+      "tag": "0024_otp_hash_and_ip",
+      "breakpoints": true
     }
   ]
 }

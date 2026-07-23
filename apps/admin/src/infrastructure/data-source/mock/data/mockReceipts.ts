@@ -11,6 +11,7 @@ export const MOCK_RECEIPTS: Receipt[] = Array.from({ length: 18 }, (_, i) => {
   return {
     id: `rec_${String(i + 1).padStart(4, '0')}`,
     orderId: `ord_${String(i + 1).padStart(4, '0')}`,
+    storeId: 'store_mock',
     orderNumber: `CMD-${String(1000 + i)}`,
     customerName: NAMES[i % NAMES.length],
     customerEmail: `${EMAILS[i % EMAILS.length]}@email.com`,

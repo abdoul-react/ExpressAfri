@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common'
-import { ReceiptsController } from './receipts.controller'
+import { ReceiptsController, MobileReceiptsController } from './receipts.controller'
 import { ReceiptsService } from './receipts.service'
 import { ChatModule } from '../chat/chat.module'
+import { StorageModule } from '../storage/storage.module'
 
 @Module({
-  imports: [ChatModule],
-  controllers: [ReceiptsController],
+  imports: [ChatModule, StorageModule],
+  controllers: [ReceiptsController, MobileReceiptsController],
   providers: [ReceiptsService],
   exports: [ReceiptsService],
 })

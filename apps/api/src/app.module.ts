@@ -5,6 +5,7 @@ import { ThrottlerGuard } from '@nestjs/throttler'
 import { APP_GUARD } from '@nestjs/core'
 import { LoggerModule } from 'nestjs-pino'
 import { DatabaseModule } from './database/database.module'
+import { PermissionsGuard } from './common/guards/permissions.guard'
 import { AuthModule } from './modules/auth/auth.module'
 import { StoresModule } from './modules/stores/stores.module'
 import { ProductsModule } from './modules/products/products.module'
@@ -76,6 +77,7 @@ import { HealthModule } from './health/health.module'
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
 })
 export class AppModule {}

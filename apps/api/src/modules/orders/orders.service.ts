@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common'
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common'
 import { eq, and, sql, like, or, desc, inArray, gte } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { orders, orderItems, orderStatusLog } from '../../database/schema/orders'
@@ -6,19 +6,25 @@ import { shipments, shipmentItems } from '../../database/schema/shipments'
 import { receipts, receiptSettings } from '../../database/schema/receipts'
 import { products, productVariants } from '../../database/schema/products'
 import { deliveryAssignments, deliveryPersons } from '../../database/schema/delivery'
-import { customers } from '../../database/schema/customers'
+import { customers, addresses } from '../../database/schema/customers'
+import { coupons } from '../../database/schema/coupons'
+import { payments } from '../../database/schema/payments'
 import { ChatService } from '../chat/chat.service'
 import { ReceiptsService } from '../receipts/receipts.service'
-import { OrderEventsListener } from '../notifications/order-events.listener'
+import { OutboxService } from '../notifications/outbox.service'
+import { AuditService } from '../audit/audit.service'
 import { orderStatusMessage } from '../../common/system-messages'
+import { assertOrderItemTransition, assertOrderTransition, type OrderItemStatus, type OrderStatus } from './order-status'
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name)
+
   constructor(
     @Inject(DRIZZLE) private db: DrizzleDB,
     private chat: ChatService,
     private receipts: ReceiptsService,
-    private orderEvents: OrderEventsListener,
+    private outbox: OutboxService,
   ) {}
 
   async list(params: { page?: number; limit?: number; storeId?: string; status?: string; search?: string }) {
@@ -51,21 +57,9 @@ export class OrdersService {
     const [order] = await this.db.select().from(orders).where(eq(orders.id, id)).limit(1)
     if (!order) return null
 
-    await this.db.update(orders).set({ status, updatedAt: new Date() }).where(eq(orders.id, id))
-    await this.db.insert(orderStatusLog).values({
-      orderId: id,
-      storeId: order.storeId,
-      fromStatus: order.status,
-      toStatus: status,
-      changedBy,
-      reason,
-    })
+    assertOrderTransition(order.status as OrderStatus, status as OrderStatus)
 
-    if (status === 'shipped') await this.db.update(orders).set({ shippedAt: new Date() }).where(eq(orders.id, id))
-    if (status === 'delivered') await this.db.update(orders).set({ deliveredAt: new Date() }).where(eq(orders.id, id))
-
-    // Notifier le client dans sa boîte de réception (best-effort — n'annule pas
-    // le changement de statut si l'envoi échoue). Message dans la langue du client.
+    // Générer le message de notification (besoin de la langue du client)
     let language: string | null = null
     if (order.customerId) {
       const [c] = await this.db.select({ language: customers.language }).from(customers)
@@ -73,47 +67,165 @@ export class OrdersService {
       language = c?.language ?? null
     }
     const notice = orderStatusMessage(status, order.orderNumber, language)
-    if (notice) await this.chat.postOrderSystemMessage(id, notice)
+
+    // Transaction métier : update statut + log + outbox event (atomique)
+    await this.db.transaction(async (tx) => {
+      await tx.update(orders).set({ status, updatedAt: new Date() }).where(eq(orders.id, id))
+      await tx.insert(orderStatusLog).values({
+        orderId: id,
+        storeId: order.storeId,
+        fromStatus: order.status,
+        toStatus: status,
+        changedBy,
+        reason,
+      })
+
+      if (status === 'shipped') await tx.update(orders).set({ shippedAt: new Date() }).where(eq(orders.id, id))
+      if (status === 'delivered') await tx.update(orders).set({ deliveredAt: new Date() }).where(eq(orders.id, id))
+
+      if (notice) {
+        await this.outbox.createEventInTx(tx, {
+          type: 'order.status_changed',
+          aggregateType: 'order',
+          aggregateId: id,
+          idempotencyKey: `order:${id}:status:${status}`,
+          payload: {
+            orderId: id,
+            content: notice,
+            customerId: order.customerId,
+            orderNumber: order.orderNumber,
+          },
+        })
+      }
+    })
 
     // Commande livrée → créer un reçu automatiquement, et l'envoyer si
     // le store a activé l'option auto_send dans ses paramètres.
+    // En cas d'échec, le reçu est marqué 'failed' pour retry admin.
     if (status === 'delivered') {
       try {
         const [existing] = await this.db.select({ id: receipts.id }).from(receipts)
           .where(eq(receipts.orderId, id)).limit(1)
         if (!existing) {
           const receipt = await this.receipts.create({ orderId: id, storeId: order.storeId })
-          const [settings] = await this.db.select().from(receiptSettings)
-            .where(eq(receiptSettings.storeId, order.storeId)).limit(1)
-          if (settings?.autoSend) {
-            await this.receipts.send(receipt.id)
+          try {
+            const [settings] = await this.db.select().from(receiptSettings)
+              .where(eq(receiptSettings.storeId, order.storeId)).limit(1)
+            if (settings?.autoSend) {
+              await this.receipts.send(receipt.id)
+            }
+          } catch (sendErr) {
+            this.logger.error(`Échec envoi reçu ${receipt.id} pour commande ${id}`, sendErr instanceof Error ? sendErr.stack : undefined)
+            await this.db.update(receipts)
+              .set({ status: 'failed', updatedAt: new Date() })
+              .where(eq(receipts.id, receipt.id))
+            await this.chat.postOrderSystemMessage(
+              id,
+              'Votre reçu sera bientôt disponible dans la section Reçus.',
+            )
           }
         }
-      } catch {
-        // Best-effort : la livraison n'est pas bloquée par un échec de reçu
+      } catch (err) {
+        this.logger.error(`Échec création reçu pour commande ${id}`, err instanceof Error ? err.stack : undefined)
       }
     }
 
     return this.getById(id)
   }
 
-  async createFromCheckout(data: any, customerId?: string) {
+  private async priceCart(
+    tx: any,
+    items: { productId: string; variantId?: string; quantity: number }[],
+    couponCode?: string | null,
+    _customerId?: string,
+  ) {
+    const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001'
+    let subtotal = 0
+    const pricedItems: {
+      product: typeof products.$inferSelect
+      variant: typeof productVariants.$inferSelect | undefined
+      quantity: number
+      unitPrice: number
+      lineTotal: number
+    }[] = []
+
+    for (const input of items) {
+      const [product] = await tx.select().from(products).where(and(
+        eq(products.id, input.productId),
+        eq(products.status, 'active'),
+        eq(products.moderationStatus, 'approved'),
+      )).limit(1)
+      if (!product) throw new BadRequestException(`Produit ${input.productId} indisponible`)
+
+      const variant = input.variantId
+        ? (await tx.select().from(productVariants).where(and(
+            eq(productVariants.id, input.variantId),
+            eq(productVariants.productId, product.id),
+            eq(productVariants.isActive, true),
+          )).limit(1))[0]
+        : undefined
+
+      if (input.variantId && !variant) throw new BadRequestException(`Variante ${input.variantId} invalide`)
+
+      if (variant && variant.stock < input.quantity) {
+        throw new BadRequestException(`Stock insuffisant pour ${variant.label} (dispo: ${variant.stock})`)
+      }
+
+      const unitPrice = Number(variant?.price ?? product.price)
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new BadRequestException('Prix invalide')
+
+      const lineTotal = unitPrice * input.quantity
+      subtotal += lineTotal
+      pricedItems.push({
+        product: { ...product, storeId: product.storeId ?? SYSTEM_STORE_ID },
+        variant,
+        quantity: input.quantity,
+        unitPrice,
+        lineTotal,
+      })
+    }
+
+    const shippingCost = subtotal >= 10000 ? 0 : 1500
+    let discount = 0
+    let couponId: string | null = null
+
+    if (couponCode) {
+      const [coupon] = await tx.select().from(coupons)
+        .where(and(eq(coupons.code, couponCode), eq(coupons.isActive, true)))
+        .limit(1)
+      if (coupon && new Date(coupon.endDate) > new Date()) {
+        couponId = coupon.id
+        if (coupon.type === 'percentage') {
+          discount = subtotal * Number(coupon.value) / 100
+          if (coupon.maxDiscount) discount = Math.min(discount, Number(coupon.maxDiscount))
+        } else if (coupon.type === 'fixed') {
+          discount = Number(coupon.value)
+        } else if (coupon.type === 'free_shipping') {
+          discount = shippingCost
+        }
+      }
+    }
+
+    const total = Math.max(0, subtotal + shippingCost - discount)
+    return { pricedItems, subtotal, shippingCost, discount, total, couponId }
+  }
+
+  async createFromCheckout(data: {
+    items: { productId: string; variantId?: string; quantity: number }[]
+    shippingAddressId: string
+    paymentMethod: string
+    couponCode?: string | null
+    notes?: string | null
+    idempotencyKey?: string | null
+  }, customerId?: string) {
     const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '')
     const randPart = Math.random().toString(36).substring(2, 6).toUpperCase()
     const orderNumber = `EXP-${datePart}-${randPart}`
-    // Utiliser le storeId fourni, ou celui du premier article, ou la boutique système (UUID fixe du seed)
     const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001'
-    const storeId = data.storeId ?? data.items?.[0]?.storeId ?? SYSTEM_STORE_ID
 
-    // UUID regex simple pour valider les IDs avant insertion FK
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const isValidUuid = (s: unknown): boolean =>
       typeof s === 'string' && UUID_RE.test(s)
-
-    // Vérifier que la boutique système existe, sinon la créer
-    if (!isValidUuid(storeId)) {
-      throw new Error(`storeId invalide : "${storeId}"`)
-    }
 
     // Idempotency : si une clé est fournie et qu'une commande existe déjà, la retourner
     if (data.idempotencyKey) {
@@ -122,64 +234,92 @@ export class OrdersService {
       if (existing) return this.getById(existing.id)
     }
 
-    // N'insérer les articles que si leur productId est un UUID valide (évite FK violation avec IDs mock)
-    const validItems = (data.items ?? []).filter((item: any) => isValidUuid(item.productId))
+    const validItems = (data.items ?? []).filter((item) => isValidUuid(item.productId))
 
-    // Tout est transactionnel : résolution de variante + décrément de stock +
-    // insertion. Une rupture de stock annule TOUTE la commande
+    // Résoudre l'adresse de livraison (read-only, OK hors transaction)
+    let shippingAddress: unknown = null
+    if (data.shippingAddressId && isValidUuid(data.shippingAddressId)) {
+      const [addr] = await this.db.select().from(addresses)
+        .where(and(eq(addresses.id, data.shippingAddressId), ...(customerId ? [eq(addresses.customerId, customerId)] : [])))
+        .limit(1)
+      if (addr) shippingAddress = addr
+    }
+
+    // Tout est transactionnel : calcul prix + réservation stock + insertion commande/items +
+    // payment pending. Une rupture de stock annule TOUTE la commande.
     const orderId = await this.db.transaction(async (tx) => {
+      // Recalculer TOUS les prix côté serveur — les montants envoyés par le client sont ignorés
+      const { pricedItems, subtotal, shippingCost, discount, total, couponId } = await this.priceCart(tx,
+        validItems.map((i) => ({
+          productId: i.productId,
+          variantId: i.variantId ?? undefined,
+          quantity: i.quantity ?? 1,
+        })),
+        data.couponCode ?? null,
+        customerId,
+      )
+
+      const storeId = pricedItems[0]?.product.storeId ?? SYSTEM_STORE_ID
+      const defaultStatus = data.paymentMethod === 'cod' ? 'confirmed' : 'pending'
       const [order] = await tx.insert(orders).values({
         storeId,
         idempotencyKey: data.idempotencyKey ?? null,
         customerId: isValidUuid(customerId) ? customerId : undefined,
         orderNumber,
-        status: 'pending',
-        subtotal: data.subtotal ?? '0',
-        shippingCost: data.shippingCost ?? '0',
-        taxAmount: data.taxAmount ?? '0',
-        discountAmount: data.discountAmount ?? '0',
-        total: data.total ?? '0',
-        currency: data.currency ?? 'XOF',
-        couponCode: data.couponCode,
-        shippingAddress: data.shippingAddress ? JSON.stringify(data.shippingAddress) : undefined,
-        billingAddress: data.billingAddress ? JSON.stringify(data.billingAddress) : undefined,
-        notes: data.notes,
+        status: defaultStatus,
+        subtotal: subtotal.toFixed(2),
+        shippingCost: shippingCost.toFixed(2),
+        taxAmount: '0',
+        discountAmount: discount.toFixed(2),
+        total: total.toFixed(2),
+        currency: 'XOF',
+        couponId,
+        couponCode: data.couponCode ?? null,
+        shippingAddress: shippingAddress ? JSON.stringify(shippingAddress) : undefined,
+        notes: data.notes ?? null,
       }).returning()
 
-      for (const item of validItems) {
-        const quantity = item.quantity ?? 1
-        // Résolution de la variante à partir de la sélection structurée du client.
-        // Sans sélection (produit sans déclinaison) ou variante introuvable : on
-        // conserve juste le libellé texte (sku) sans toucher au stock.
-        const resolvedVariantId = await this.resolveAndDecrementVariant(
-          tx,
-          item.productId,
-          item.variantAttributes,
-          quantity,
-          item.label ?? item.title ?? item.variantLabel ?? 'Article',
-        )
+      for (const pi of pricedItems) {
+        const variant = pi.variant
+        if (variant) {
+          const decremented = await tx.update(productVariants)
+            .set({ stock: sql`${productVariants.stock} - ${pi.quantity}`, updatedAt: new Date() })
+            .where(and(eq(productVariants.id, variant.id), gte(productVariants.stock, pi.quantity)))
+            .returning({ id: productVariants.id })
+          if (decremented.length === 0) {
+            throw new BadRequestException(`Stock insuffisant pour ${variant.label}`)
+          }
+        }
 
         await tx.insert(orderItems).values({
           orderId: order.id,
-          productId: item.productId,
-          variantId: resolvedVariantId ?? (isValidUuid(item.variantId) ? item.variantId : undefined),
+          productId: pi.product.id,
+          variantId: variant?.id ?? null,
           storeId,
-          // La déclinaison choisie par le client (ex. « Rouge, L ») arrive du mobile
-          // sous `variantLabel` ; on la conserve dans `sku` (relu comme variante côté
-          // mobile ET admin) pour que le gérant sache quoi préparer.
-          sku: item.sku ?? item.variantLabel ?? null,
-          label: item.label ?? item.title ?? 'Article',
-          imageUrl: item.imageUrl ?? item.image ?? null,
-          quantity,
-          unitPrice: item.unitPrice ?? item.price ?? '0',
-          totalPrice: ((Number(item.unitPrice ?? item.price ?? 0)) * quantity).toString(),
+          sku: variant?.sku ?? pi.product.slug,
+          label: variant ? `${pi.product.name} - ${variant.label}` : pi.product.name,
+          quantity: pi.quantity,
+          unitPrice: pi.unitPrice.toFixed(2),
+          totalPrice: pi.lineTotal.toFixed(2),
         })
       }
 
       await tx.insert(orderStatusLog).values({
         orderId: order.id,
         storeId,
-        toStatus: 'pending',
+        fromStatus: null,
+        toStatus: defaultStatus,
+        reason: 'Commande créée',
+      })
+
+      await tx.insert(payments).values({
+        orderId: order.id,
+        storeId,
+        method: data.paymentMethod ?? 'orange_money',
+        status: 'pending',
+        amount: total.toFixed(2),
+        currency: 'XOF',
+        idempotencyKey: data.idempotencyKey ? `${data.idempotencyKey}:payment` : null,
       })
 
       return order.id
@@ -408,8 +548,16 @@ export class OrdersService {
       delivered: 'toReview',
       cancelled: 'returns',
       refunded: 'returns',
+      partially_shipped: 'toShip',
     }
     return map[dbStatus] ?? dbStatus
+  }
+
+  private async getShippedQuantity(tx: any, orderItemId: string): Promise<number> {
+    const rows = await tx.select({ qty: shipmentItems.quantity })
+      .from(shipmentItems)
+      .where(eq(shipmentItems.orderItemId, orderItemId))
+    return rows.reduce((sum: number, r: { qty: number }) => sum + r.qty, 0)
   }
 
   async createShipment(orderId: string, data: {
@@ -422,57 +570,102 @@ export class OrdersService {
       .where(eq(orders.id, orderId)).limit(1)
     if (!order) throw new NotFoundException('Commande introuvable')
 
-    const [shipment] = await this.db.insert(shipments).values({
-      orderId,
-      storeId: order.storeId,
-      trackingNumber: data.trackingNumber ?? null,
-      deliveryPersonId: data.deliveryPersonId ?? null,
-      status: 'preparing',
-      notes: data.notes ?? null,
-    }).returning()
+    return this.db.transaction(async (tx) => {
+      for (const requested of data.items) {
+        if (requested.quantity < 1) throw new BadRequestException('Quantité invalide')
 
-    await this.db.insert(shipmentItems).values(
-      data.items.map((i) => ({
-        shipmentId: shipment.id,
-        orderItemId: i.orderItemId,
-        quantity: i.quantity,
-      }))
-    )
+        const [item] = await tx.select().from(orderItems).where(and(
+          eq(orderItems.id, requested.orderItemId),
+          eq(orderItems.orderId, orderId),
+        )).for('update').limit(1)
+        if (!item) throw new BadRequestException('Article hors commande')
 
-    for (const item of data.items) {
-      await this.db.update(orderItems)
-        .set({ status: 'ready' })
-        .where(eq(orderItems.id, item.orderItemId))
-    }
+        const alreadyShipped = await this.getShippedQuantity(tx, item.id)
+        const remaining = item.quantity - alreadyShipped
+        if (requested.quantity > remaining) {
+          throw new BadRequestException(`Quantité déjà expédiée pour "${item.label}" (restant: ${remaining}, demandé: ${requested.quantity})`)
+        }
 
-    await this.recalculateOrderStatus(orderId)
+        assertOrderItemTransition((item.status ?? 'pending') as OrderItemStatus, 'ready')
+      }
 
-    if (order) {
-      await this.orderEvents.onShipmentCreated(orderId, data.trackingNumber)
-    }
+      const [shipment] = await tx.insert(shipments).values({
+        orderId,
+        storeId: order.storeId,
+        trackingNumber: data.trackingNumber ?? null,
+        deliveryPersonId: data.deliveryPersonId ?? null,
+        status: 'preparing',
+        notes: data.notes ?? null,
+      }).returning()
 
-    return shipment
+      await tx.insert(shipmentItems).values(
+        data.items.map((i) => ({
+          shipmentId: shipment.id,
+          orderItemId: i.orderItemId,
+          quantity: i.quantity,
+        }))
+      )
+
+      for (const requested of data.items) {
+        await tx.update(orderItems)
+          .set({ status: 'ready' })
+          .where(eq(orderItems.id, requested.orderItemId))
+      }
+
+      await this.recalculateOrderStatusInTx(tx, orderId, order.storeId)
+
+      let msg = '📦 Une expédition a été créée pour votre commande.'
+      if (data.trackingNumber) msg += `\nNuméro de suivi : ${data.trackingNumber}`
+      await this.outbox.createEventInTx(tx, {
+        type: 'order.shipment_created',
+        aggregateType: 'order',
+        aggregateId: orderId,
+        idempotencyKey: `order:${orderId}:shipment:${shipment.id}`,
+        payload: { orderId, content: msg },
+      })
+
+      return shipment
+    })
   }
 
   async updateItemStatus(orderId: string, itemId: string, data: { status: string; issueReason?: string }) {
-    const patch: Record<string, unknown> = { status: data.status }
-    if (data.status === 'issue') patch.issueReason = data.issueReason
-    if (data.status === 'shipped') patch.shippedAt = new Date()
-    if (data.status === 'delivered') patch.deliveredAt = new Date()
+    return this.db.transaction(async (tx) => {
+      const [item] = await tx.select({
+        id: orderItems.id,
+        status: orderItems.status,
+        shippedAt: orderItems.shippedAt,
+        deliveredAt: orderItems.deliveredAt,
+        label: orderItems.label,
+        storeId: orderItems.storeId,
+      }).from(orderItems)
+        .where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, orderId)))
+        .for('update')
+        .limit(1)
 
-    await this.db.update(orderItems).set(patch)
-      .where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, orderId)))
+      if (!item) throw new NotFoundException('Article introuvable dans cette commande')
 
-    await this.recalculateOrderStatus(orderId)
+      assertOrderItemTransition((item.status ?? 'pending') as OrderItemStatus, data.status as OrderItemStatus)
 
-    if (data.status === 'issue') {
-      const [item] = await this.db.select().from(orderItems).where(eq(orderItems.id, itemId)).limit(1)
-      if (item) {
-        await this.orderEvents.onItemIssue(orderId, item.label, data.issueReason ?? '')
+      const patch: Record<string, unknown> = { status: data.status, updatedAt: new Date() }
+      if (data.status === 'issue') patch.issueReason = data.issueReason
+      if (data.status === 'shipped' && !item.shippedAt) patch.shippedAt = new Date()
+      if (data.status === 'delivered' && !item.deliveredAt) patch.deliveredAt = new Date()
+
+      if (data.status === 'issue') {
+        const msg = `⚠️ Un problème a été signalé sur l'article "${item.label}" : ${data.issueReason ?? ''}. Notre équipe vous contactera.`
+        await this.outbox.createEventInTx(tx, {
+          type: 'order.item_issue',
+          aggregateType: 'order',
+          aggregateId: orderId,
+          idempotencyKey: `order:${orderId}:item_issue:${itemId}`,
+          payload: { orderId, content: msg },
+        })
       }
-    }
 
-    return { success: true }
+      await tx.update(orderItems).set(patch).where(eq(orderItems.id, itemId))
+
+      await this.recalculateOrderStatusInTx(tx, orderId, item.storeId)
+    }).then(() => ({ success: true }))
   }
 
   async listShipments(orderId: string) {
@@ -481,41 +674,51 @@ export class OrdersService {
       .orderBy(shipments.createdAt)
   }
 
-  private async recalculateOrderStatus(orderId: string) {
-    const items = await this.db.select().from(orderItems)
+  private async recalculateOrderStatusInTx(tx: any, orderId: string, storeId: string): Promise<void> {
+    const items = await tx.select().from(orderItems)
       .where(eq(orderItems.orderId, orderId))
 
-    const statuses = items.map((i) => i.status)
+    const statuses = items.map((i: any) => i.status)
+    const allDelivered = statuses.length > 0 && statuses.every((s: string) => s === 'delivered')
+    const allCancelledOrIssue = statuses.length > 0 && statuses.every((s: string) => s === 'cancelled' || s === 'issue')
+    const hasShippedOrDelivered = statuses.some((s: string) => s === 'shipped' || s === 'delivered')
+    const allShipped = statuses.length > 0 && statuses.every((s: string) => s === 'shipped' || s === 'delivered')
+    const hasReady = statuses.some((s: string) => s === 'ready')
+
     let newStatus: string
+    if (allDelivered) newStatus = 'delivered'
+    else if (allCancelledOrIssue) newStatus = 'cancelled'
+    else if (hasShippedOrDelivered && !allShipped) newStatus = 'partially_shipped'
+    else if (allShipped) newStatus = 'shipped'
+    else if (hasReady) newStatus = 'processing'
+    else newStatus = 'confirmed'
 
-    if (statuses.every((s) => s === 'delivered')) {
-      newStatus = 'delivered'
-    } else if (statuses.every((s) => s === 'cancelled' || s === 'issue')) {
-      newStatus = 'cancelled'
-    } else if (statuses.some((s) => s === 'shipped' || s === 'delivered')) {
-      newStatus = 'shipped'
-    } else if (statuses.some((s) => s === 'ready')) {
-      newStatus = 'processing'
-    } else {
-      newStatus = 'confirmed'
-    }
-
-    const [order] = await this.db.select().from(orders).where(eq(orders.id, orderId)).limit(1)
+    const [order] = await tx.select({ id: orders.id, status: orders.status }).from(orders)
+      .where(eq(orders.id, orderId)).limit(1)
     if (order && order.status !== newStatus) {
-      await this.db.update(orders).set({
+      await tx.update(orders).set({
         status: newStatus,
         updatedAt: new Date(),
         ...(newStatus === 'shipped' ? { shippedAt: new Date() } : {}),
         ...(newStatus === 'delivered' ? { deliveredAt: new Date() } : {}),
       }).where(eq(orders.id, orderId))
 
-      await this.db.insert(orderStatusLog).values({
+      await tx.insert(orderStatusLog).values({
         orderId,
-        storeId: order.storeId,
+        storeId,
         fromStatus: order.status,
         toStatus: newStatus,
         reason: 'Recalcul automatique depuis statuts items',
       })
     }
+  }
+
+  private async recalculateOrderStatus(orderId: string) {
+    const [order] = await this.db.select({ id: orders.id, storeId: orders.storeId }).from(orders)
+      .where(eq(orders.id, orderId)).limit(1)
+    if (!order) return
+    return this.db.transaction(async (tx) => {
+      return this.recalculateOrderStatusInTx(tx, orderId, order.storeId)
+    })
   }
 }

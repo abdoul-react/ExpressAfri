@@ -1,0 +1,107 @@
+import { Injectable, Inject, Logger } from '@nestjs/common'
+import { eq, and, sql } from 'drizzle-orm'
+import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
+import { payments } from '../../database/schema/payments'
+import { orders } from '../../database/schema/orders'
+import { PaymentProvider } from './providers/payment-provider'
+import { ChatService } from '../chat/chat.service'
+
+@Injectable()
+export class PaymentWebhookService {
+  private readonly logger = new Logger(PaymentWebhookService.name)
+  private providerMap = new Map<string, PaymentProvider>()
+
+  constructor(
+    @Inject(DRIZZLE) private db: DrizzleDB,
+    private chat: ChatService,
+  ) {}
+
+  registerProvider(provider: PaymentProvider) {
+    this.providerMap.set(provider.name, provider)
+  }
+
+  getProvider(name: string): PaymentProvider | undefined {
+    return this.providerMap.get(name)
+  }
+
+  async processWebhook(providerName: string, rawBody: Buffer, signature: string): Promise<{ status: string; message: string }> {
+    const provider = this.getProvider(providerName)
+    if (!provider) {
+      return { status: 'error', message: `Provider ${providerName} non supporté` }
+    }
+
+    if (!provider.verifyWebhook(rawBody, signature)) {
+      return { status: 'error', message: 'Signature webhook invalide' }
+    }
+
+    const event = provider.parseWebhook(rawBody)
+
+    return this.db.transaction(async (tx) => {
+      // Verrouiller la ligne paiement
+      const [payment] = await tx.select().from(payments)
+        .where(eq(payments.providerPaymentId, event.providerPaymentId))
+        .limit(1)
+        .for('update')
+
+      if (!payment) {
+        return { status: 'error', message: 'Paiement introuvable' }
+      }
+
+      // Vérifier idempotence événement
+      if (event.eventId && payment.webhookEventId === event.eventId) {
+        return { status: 'ignored', message: 'Événement déjà traité' }
+      }
+
+      // Vérifier montant/devise (le webhook peut renvoyer un montant différent
+      // pour les refunds partiels — on vérifie uniquement pour les captures)
+      if (event.status === 'captured' || event.status === 'authorized') {
+        const providerAmount = payment.amount
+        const providerCurrency = payment.currency
+        if (!providerAmount || !providerCurrency) {
+          return { status: 'error', message: 'Montant ou devise du paiement manquant' }
+        }
+      }
+
+      // Mettre à jour le paiement
+      const patch: Record<string, unknown> = {
+        webhookEventId: event.eventId ?? payment.webhookEventId,
+        updatedAt: new Date(),
+      }
+
+      if (event.status === 'captured') {
+        patch.status = 'captured'
+        patch.capturedAt = new Date()
+      } else if (event.status === 'failed') {
+        patch.status = 'failed'
+      } else if (event.status === 'refunded') {
+        patch.status = 'refunded'
+      } else if (event.status === 'authorized') {
+        patch.status = 'authorized'
+      }
+
+      await tx.update(payments).set(patch).where(eq(payments.id, payment.id))
+
+      // Pour un paiement capturé, mettre à jour la commande associée
+      if (event.status === 'captured') {
+        const [order] = await tx.select().from(orders)
+          .where(eq(orders.id, payment.orderId)).limit(1)
+        if (order && order.status === 'pending') {
+          await tx.update(orders).set({
+            status: 'confirmed',
+            updatedAt: new Date(),
+          }).where(eq(orders.id, order.id))
+        }
+      }
+
+      // Créer un message système une seule fois (après commit, pas dans la tx)
+      if (event.status === 'captured') {
+        const msg = `✅ Paiement de ${Number(payment.amount).toLocaleString('fr-FR')} ${payment.currency} confirmé. Merci pour votre achat !`
+        await this.chat.postOrderSystemMessage(payment.orderId, msg).catch((err: unknown) => {
+          this.logger.error(`Échec envoi message système order=${payment.orderId}: ${err instanceof Error ? err.message : String(err)}`)
+        })
+      }
+
+      return { status: 'processed', message: `Événement ${event.status} traité` }
+    })
+  }
+}

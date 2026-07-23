@@ -42,6 +42,7 @@ export class MockAdminReceiptDataSource implements AdminReceiptDataSource {
     const receipt: Receipt = {
       id: `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       orderId,
+      storeId: 'store_mock',
       orderNumber: `REC-${orderId.slice(0, 8)}`,
       customerName: 'Client test',
       customerEmail: 'client@test.com',

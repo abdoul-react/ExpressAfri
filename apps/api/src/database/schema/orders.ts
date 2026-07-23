@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, decimal, integer, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, timestamp, decimal, integer, jsonb, uniqueIndex } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { stores } from './stores'
 import { customers } from './customers'
 import { products } from './products'
@@ -28,7 +29,11 @@ export const orders = pgTable('orders', {
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-})
+}, (table) => ({
+  ordersIdempotencyKeyUnique: uniqueIndex('orders_idempotency_key_unique')
+    .on(table.idempotencyKey)
+    .where(sql`${table.idempotencyKey} IS NOT NULL`),
+}))
 
 export const orderItems = pgTable('order_items', {
   id: uuid('id').primaryKey().defaultRandom(),

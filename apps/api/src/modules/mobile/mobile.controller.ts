@@ -1,8 +1,10 @@
-import { Controller, Post, Get, Put, Delete, Param, Query, Body, UseGuards, HttpCode, HttpStatus, UploadedFile, UseInterceptors, UnauthorizedException, BadRequestException } from '@nestjs/common'
+import { Controller, Post, Get, Put, Delete, Param, Query, Body, Req, UseGuards, HttpCode, HttpStatus, UploadedFile, UseInterceptors, UnauthorizedException, BadRequestException } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
 import { extname, join } from 'path'
+import { randomFilename, validateFileContent } from '../../common/upload/upload.helper'
 import { MobileService } from './mobile.service'
 import { CustomersService } from '../customers/customers.service'
 import { CustomerAuthGuard } from './customer-auth.guard'
@@ -35,6 +37,7 @@ export class MobileController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('auth/login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Connexion client mobile' })
@@ -43,19 +46,23 @@ export class MobileController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('auth/otp-request')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Demander un code OTP' })
-  async requestOtp(@Body() body: { contact: string; mode?: 'phone' | 'email' }) {
-    return this.service.requestOtp(body.contact, body.mode)
+  async requestOtp(@Body() body: { contact: string; mode?: 'phone' | 'email' }, @Req() req: any) {
+    const ip = req?.ip ?? req?.connection?.remoteAddress ?? ''
+    return this.service.requestOtp(body.contact, body.mode, ip)
   }
 
   @Public()
   @Post('auth/otp-verify')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Vérifier un code OTP' })
-  async verifyOtp(@Body() body: { contact: string; code: string }) {
-    return this.service.verifyOtp(body.contact, body.code)
+  async verifyOtp(@Body() body: { contact: string; code: string }, @Req() req: any) {
+    const ip = req?.ip ?? req?.connection?.remoteAddress ?? ''
+    return this.service.verifyOtp(body.contact, body.code, ip)
   }
 
   @Public()
@@ -100,6 +107,7 @@ export class MobileController {
     return this.service.updateProfile(user.id, body)
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('profile/avatar')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
@@ -107,8 +115,7 @@ export class MobileController {
     storage: diskStorage({
       destination: join(process.cwd(), 'uploads/avatars'),
       filename: (_req, file, cb) => {
-        const name = file.originalname.replace(extname(file.originalname), '').replace(/[^a-z0-9]/gi, '_').toLowerCase()
-        cb(null, `${name}_${Date.now()}${extname(file.originalname)}`)
+        cb(null, randomFilename(file.originalname))
       },
     }),
     fileFilter: (_req, file, cb) => {
@@ -123,6 +130,7 @@ export class MobileController {
   async uploadAvatar(@CurrentUser() user: any, @UploadedFile() file: Express.Multer.File) {
     if (!user?.id) throw new UnauthorizedException('Connexion requise')
     if (!file) throw new BadRequestException('Fichier requis')
+    validateFileContent(file.path, 'image/')
     const url = `/uploads/avatars/${file.filename}`
     await this.service.updateProfile(user.id, { avatar: url })
     return { url }
@@ -280,6 +288,7 @@ export class MobileController {
   // ====== SEARCH ======
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('search/by-image')
   @ApiOperation({ summary: 'Recherche par image (MVP heuristique)' })
   @ApiConsumes('multipart/form-data')
@@ -287,11 +296,10 @@ export class MobileController {
     storage: diskStorage({
       destination: join(process.cwd(), 'uploads', 'search'),
       filename: (_req, file, cb) => {
-        const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`
-        cb(null, `search-${unique}${extname(file.originalname)}`)
+        cb(null, randomFilename(file.originalname))
       },
     }),
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 Mo max
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
       const allowed = /jpeg|jpg|png|webp|gif/
       const ok = allowed.test(extname(file.originalname).toLowerCase()) && allowed.test(file.mimetype)
@@ -299,8 +307,9 @@ export class MobileController {
     },
   }))
   async searchByImage(@UploadedFile() file: Express.Multer.File) {
-    const imagePath = file?.path ?? ''
-    return this.service.searchByImage(imagePath)
+    if (!file) throw new BadRequestException('Fichier requis')
+    validateFileContent(file.path, 'image/')
+    return this.service.searchByImage(file.path)
   }
 
   // ====== PAYMENT ======

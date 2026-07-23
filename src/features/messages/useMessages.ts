@@ -11,6 +11,7 @@ export function useConversations() {
     queryKey: ["conversations"],
     queryFn: () => chatService.getConversations(),
     enabled: isAuthenticated,
+    refetchInterval: 10_000,
   });
 
   return { conversations: isAuthenticated ? data : [], isLoading };

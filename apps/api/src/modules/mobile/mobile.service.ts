@@ -1,6 +1,6 @@
 import { Injectable, Inject, UnauthorizedException, ConflictException, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
-import { eq, and, sql, desc, inArray, like } from 'drizzle-orm'
+import { eq, and, sql, desc, inArray, like, gte } from 'drizzle-orm'
 import * as bcrypt from 'bcryptjs'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { customers, addresses, storeFollows } from '../../database/schema/customers'
@@ -15,6 +15,7 @@ import { appSettings, featureFlags } from '../../database/schema/settings'
 import { conversations, messages } from '../../database/schema/chat'
 import { productReviews } from '../../database/schema/reviews'
 import { orders, orderItems, orderStatusLog } from '../../database/schema/orders'
+import { payments } from '../../database/schema/payments'
 import { shippingZones, shippingMethods } from '../../database/schema/shipping'
 import { loyaltyPoints } from '../../database/schema/loyalty'
 
@@ -117,7 +118,7 @@ export class MobileService {
     return { user: this.toProfile(customer), ...tokens }
   }
 
-  async requestOtp(contact: string, mode: 'phone' | 'email' = 'email') {
+  async requestOtp(contact: string, mode: 'phone' | 'email' = 'email', ipAddress = '') {
     const recentCount = await this.db.select({ count: sql<number>`count(*)` })
       .from(otpCodes)
       .where(and(
@@ -130,27 +131,22 @@ export class MobileService {
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString()
+    const codeHash = await bcrypt.hash(code, 10)
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000)
 
     await this.db
       .insert(otpCodes)
-      .values({ contact, code, expiresAt, attempts: 0 })
+      .values({ contact, codeHash, expiresAt, attempts: 0, ipAddress: ipAddress || null, ipAttempts: 0 })
       .onConflictDoUpdate({
         target: otpCodes.contact,
-        set: { code, expiresAt, attempts: 0, usedAt: null, createdAt: new Date() },
+        set: { codeHash, expiresAt, attempts: 0, ipAddress: ipAddress || null, ipAttempts: 0, usedAt: null, createdAt: new Date() },
       })
 
-    // In production: send SMS/email here
-    if (mode === 'email') {
-      console.log(`[OTP] Email ${contact}: code=${code}`)
-    } else {
-      console.log(`[OTP] SMS ${contact}: code=${code}`)
-    }
-
+    // En production : envoyer SMS/email ici sans logger le code
     return { ok: true }
   }
 
-  async verifyOtp(contact: string, code: string) {
+  async verifyOtp(contact: string, code: string, ipAddress = '') {
     const [stored] = await this.db
       .select()
       .from(otpCodes)
@@ -172,9 +168,13 @@ export class MobileService {
       throw new ForbiddenException('Trop de tentatives. Demandez un nouveau code.')
     }
 
-    if (stored.code !== code) {
+    const isValid = await bcrypt.compare(code, stored.codeHash)
+    if (!isValid) {
       await this.db.update(otpCodes)
-        .set({ attempts: sql`${otpCodes.attempts} + 1` })
+        .set({
+          attempts: sql`${otpCodes.attempts} + 1`,
+          ipAttempts: sql`${otpCodes.ipAttempts} + 1`,
+        })
         .where(eq(otpCodes.contact, contact))
       throw new UnauthorizedException('Code incorrect')
     }
@@ -349,48 +349,68 @@ export class MobileService {
     const orderNumber = `EA-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
     const storeId = orderItemsData[0].storeId
 
-    const [order] = await this.db.insert(orders).values({
-      storeId,
-      customerId,
-      orderNumber,
-      status: dto.paymentMethod === 'cod' ? 'confirmed' : 'pending',
-      subtotal: subtotal.toFixed(2),
-      shippingCost: shippingCost.toFixed(2),
-      taxAmount: taxAmount.toFixed(2),
-      discountAmount: discountAmount.toFixed(2),
-      total: total.toFixed(2),
-      currency: 'XOF',
-      couponId,
-      couponCode: dto.couponCode ?? null,
-      shippingAddress: JSON.stringify(address),
-      notes: dto.notes ?? null,
-      idempotencyKey: dto.idempotencyKey ?? null,
-    }).returning()
+    const order = await this.db.transaction(async (tx) => {
+      const [inserted] = await tx.insert(orders).values({
+        storeId,
+        customerId,
+        orderNumber,
+        status: dto.paymentMethod === 'cod' ? 'confirmed' : 'pending',
+        subtotal: subtotal.toFixed(2),
+        shippingCost: shippingCost.toFixed(2),
+        taxAmount: taxAmount.toFixed(2),
+        discountAmount: discountAmount.toFixed(2),
+        total: total.toFixed(2),
+        currency: 'XOF',
+        couponId,
+        couponCode: dto.couponCode ?? null,
+        shippingAddress: JSON.stringify(address),
+        notes: dto.notes ?? null,
+        idempotencyKey: dto.idempotencyKey ?? null,
+      }).returning()
 
-    await this.db.insert(orderItems).values(
-      orderItemsData.map((oi) => ({ ...oi, orderId: order.id }))
-    )
+      await tx.insert(orderItems).values(
+        orderItemsData.map((oi) => ({ ...oi, orderId: inserted.id }))
+      )
 
-    for (const item of dto.items) {
-      if (item.variantId) {
-        await this.db.update(productVariants)
-          .set({ stock: sql`stock - ${item.quantity}` })
-          .where(eq(productVariants.id, item.variantId))
+      for (const item of dto.items) {
+        if (item.variantId) {
+          const decremented = await tx.update(productVariants)
+            .set({ stock: sql`stock - ${item.quantity}`, updatedAt: new Date() })
+            .where(and(eq(productVariants.id, item.variantId), gte(productVariants.stock, item.quantity)))
+            .returning({ id: productVariants.id })
+          if (decremented.length === 0) {
+            const variant = await tx.select({ label: productVariants.label }).from(productVariants)
+              .where(eq(productVariants.id, item.variantId)).limit(1)
+            throw new BadRequestException(`Stock insuffisant pour ${variant[0]?.label ?? 'variante'}`)
+          }
+        }
       }
-    }
 
-    await this.db.insert(orderStatusLog).values({
-      orderId: order.id,
-      storeId,
-      fromStatus: null,
-      toStatus: order.status,
-      reason: 'Commande créée',
+      await tx.insert(orderStatusLog).values({
+        orderId: inserted.id,
+        storeId,
+        fromStatus: null,
+        toStatus: inserted.status,
+        reason: 'Commande créée',
+      })
+
+      await tx.insert(payments).values({
+        orderId: inserted.id,
+        storeId,
+        method: dto.paymentMethod,
+        status: 'pending',
+        amount: total.toFixed(2),
+        currency: 'XOF',
+        idempotencyKey: dto.idempotencyKey ? `${dto.idempotencyKey}:payment` : null,
+      })
+
+      await tx.update(customers).set({
+        totalOrders: sql`total_orders + 1`,
+        totalSpent: sql`total_spent + ${total}`,
+      }).where(eq(customers.id, customerId))
+
+      return inserted
     })
-
-    await this.db.update(customers).set({
-      totalOrders: sql`total_orders + 1`,
-      totalSpent: sql`total_spent + ${total}`,
-    }).where(eq(customers.id, customerId))
 
     return {
       id: order.id,

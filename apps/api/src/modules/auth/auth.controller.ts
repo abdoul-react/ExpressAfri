@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Put, Delete, Param, Query, Body, UseGuards, HttpCode, HttpStatus, ForbiddenException } from '@nestjs/common'
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger'
+import { Throttle } from '@nestjs/throttler'
 import { AuthService } from './auth.service'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { PermissionsGuard } from '../../common/guards/permissions.guard'
@@ -17,6 +18,7 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Connexion administrateur' })
   async login(@Body() dto: { email: string; password: string }) {
     return this.auth.login(dto.email, dto.password)

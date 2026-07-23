@@ -1,8 +1,10 @@
 import { Controller, Get, Post, Patch, Param, Query, Body, UseGuards, UseInterceptors, UploadedFile, HttpCode, HttpStatus, BadRequestException, ForbiddenException } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
-import { extname, join } from 'path'
+import { join } from 'path'
+import { randomFilename, validateFileContent } from '../../common/upload/upload.helper'
 import { AdminMessagesService } from './admin-messages.service'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
@@ -77,14 +79,14 @@ export class AdminMessagesController {
     return this.service.replyChatConversation(id, body, user?.storeId ?? undefined)
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('chat/attachments')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: join(process.cwd(), 'uploads/chat'),
       filename: (_req, file, cb) => {
-        const name = file.originalname.replace(extname(file.originalname), '').replace(/[^a-z0-9]/gi, '_').toLowerCase()
-        cb(null, `admin_${name}_${Date.now()}${extname(file.originalname)}`)
+        cb(null, randomFilename(file.originalname))
       },
     }),
     fileFilter: (_req, file, cb) => {
@@ -98,6 +100,11 @@ export class AdminMessagesController {
   @ApiOperation({ summary: 'Uploader une pièce jointe de chat côté admin (retourne url, name, type)' })
   async uploadChatAttachment(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Fichier requis')
+    const prefix = file.mimetype.startsWith('image/') ? 'image/'
+      : file.mimetype.startsWith('video/') ? 'video/'
+      : file.mimetype === 'application/pdf' ? 'application/'
+      : 'audio/'
+    validateFileContent(file.path, prefix)
     const url = `/uploads/chat/${file.filename}`
     const type = file.mimetype.startsWith('image/') ? 'image'
       : file.mimetype.startsWith('video/') ? 'video'

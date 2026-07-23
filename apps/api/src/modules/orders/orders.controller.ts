@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Put, Param, Query, Body, UseGuards, UnauthorizedException, HttpCode, HttpStatus } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger'
 import { OrdersService } from './orders.service'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
@@ -22,6 +23,7 @@ export class OrdersController {
     return this.service.list(query)
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post()
   @CustomerRoute()
   @UseGuards(CustomerAuthGuard)

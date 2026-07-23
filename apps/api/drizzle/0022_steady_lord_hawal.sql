@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "receipts_order_id_unique" ON "receipts" USING btree ("order_id");

@@ -1,29 +1,29 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common'
+import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common'
 import { eq, like, or, and, sql } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { receipts, receiptSettings } from '../../database/schema/receipts'
-import { orders } from '../../database/schema/orders'
+import { orders, orderItems } from '../../database/schema/orders'
 import { customers } from '../../database/schema/customers'
+import { payments } from '../../database/schema/payments'
 import { ChatService } from '../chat/chat.service'
 import { receiptMessage } from '../../common/system-messages'
-import { join } from 'path'
-import { mkdirSync } from 'fs'
 import PDFDocument from 'pdfkit'
-import { createWriteStream } from 'fs'
+import type { StorageService } from '../storage/storage.service'
 
 @Injectable()
 export class ReceiptsService {
+  private readonly logger = new Logger(ReceiptsService.name)
+
   constructor(
     @Inject(DRIZZLE) private db: DrizzleDB,
+    @Inject('STORAGE_SERVICE') private storage: StorageService,
     private chat: ChatService,
   ) {}
 
   /**
-   * Génère un PDF pour le reçu et le sauvegarde dans uploads/receipts/.
-   * Retourne le chemin relatif (ex. /uploads/receipts/<id>.pdf) utilisable
-   * comme downloadUrl et comme attachmentUrl dans le chat.
+   * Génère un Buffer PDF détaillé à partir du snapshot immuable du reçu.
    */
-  private async generatePdf(r: {
+  private async generatePdfBuffer(r: {
     id: string
     orderNumber: string
     customerName: string
@@ -34,15 +34,16 @@ export class ReceiptsService {
     sentAt: Date | null
     createdAt: Date | null
     storeId?: string
-  }): Promise<string> {
-    const dir = join(process.cwd(), 'uploads', 'receipts')
-    mkdirSync(dir, { recursive: true })
-    const filename = `${r.id}.pdf`
-    const filepath = join(dir, filename)
-    const relativePath = `/uploads/receipts/${filename}`
-
-    // Charger le branding configuré par l'admin (nom, couleur, code-barres,
-    // pied de page). Valeurs par défaut si aucun paramètre enregistré.
+    snapshot?: {
+      items: { label: string; sku: string | null; quantity: number; unitPrice: string; totalPrice: string }[]
+      subtotal: string
+      shippingCost: string
+      taxAmount: string
+      discountAmount: string
+      paymentMethod: string
+      paymentStatus: string
+    } | null
+  }): Promise<Buffer> {
     let brand = { name: 'ExpressAfri', color: '#f97316', footer: 'Merci pour votre achat.', showBarcode: false }
     if (r.storeId) {
       const [s] = await this.db.select().from(receiptSettings).where(eq(receiptSettings.storeId, r.storeId)).limit(1)
@@ -61,12 +62,13 @@ export class ReceiptsService {
     })
     const amount = new Intl.NumberFormat('fr-FR').format(Number(r.amount)) + ' ' + r.currency
 
-    await new Promise<void>((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'A5', margin: 40 })
-      const stream = createWriteStream(filepath)
-      doc.pipe(stream)
-      stream.on('finish', resolve)
-      stream.on('error', reject)
+    const buffers: Buffer[] = []
+    const doc = new PDFDocument({ size: 'A5', margin: 40 })
+    doc.on('data', (chunk: Buffer) => buffers.push(chunk))
+
+    return new Promise<Buffer>((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(buffers)))
+      doc.on('error', reject)
 
       // ── En-tête ──────────────────────────────────────────────────────────
       doc.rect(0, 0, doc.page.width, 80).fill(brand.color)
@@ -83,38 +85,96 @@ export class ReceiptsService {
       if (r.customerEmail) doc.text(`Email : ${r.customerEmail}`, 40, 134)
       if (r.customerPhone) doc.text(`Téléphone : ${r.customerPhone}`, 40, r.customerEmail ? 150 : 134)
 
-      const detailY = r.customerPhone ? 178 : r.customerEmail ? 162 : 146
+      // ── Détail des articles (depuis le snapshot) ──────────────────────────
+      const snapshot = r.snapshot
+      let detailY = r.customerPhone ? 178 : r.customerEmail ? 162 : 146
+
       doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827')
         .text('Détail de la commande', 40, detailY)
+      detailY += 18
       doc.font('Helvetica').fontSize(10).fillColor('#374151')
-      doc.text(`Référence : ${r.orderNumber}`, 40, detailY + 18)
-      doc.text(`Date : ${date}`, 40, detailY + 34)
+      doc.text(`Référence : ${r.orderNumber}`, 40, detailY)
+      detailY += 16
+      doc.text(`Date : ${date}`, 40, detailY)
+      detailY += 20
+
+      if (snapshot?.items && snapshot.items.length > 0) {
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#6b7280')
+        doc.text('Article', 40, detailY, { width: 140 })
+        doc.text('Qté', 180, detailY, { width: 30, align: 'center' })
+        doc.text('P.U.', 210, detailY, { width: 60, align: 'right' })
+        doc.text('Total', 270, detailY, { width: 60, align: 'right' })
+        detailY += 14
+
+        doc.font('Helvetica').fontSize(9).fillColor('#374151')
+        for (const item of snapshot.items) {
+          const label = item.label.length > 32 ? item.label.slice(0, 30) + '…' : item.label
+          const skuSuffix = item.sku ? ` (${item.sku})` : ''
+          doc.text(label + skuSuffix, 40, detailY, { width: 140 })
+          doc.text(String(item.quantity), 180, detailY, { width: 30, align: 'center' })
+          const pu = new Intl.NumberFormat('fr-FR').format(Number(item.unitPrice))
+          doc.text(pu, 210, detailY, { width: 60, align: 'right' })
+          const total = new Intl.NumberFormat('fr-FR').format(Number(item.totalPrice))
+          doc.text(total, 270, detailY, { width: 60, align: 'right' })
+          detailY += 16
+        }
+        detailY += 4
+
+        const fmt = (v: string) => new Intl.NumberFormat('fr-FR').format(Number(v))
+        doc.fontSize(9).fillColor('#6b7280')
+        const drawRow = (label: string, value: string, y: number) => {
+          doc.font('Helvetica').text(label, 40, y, { width: 160 })
+          doc.font('Helvetica-Bold').text(value, 270, y, { width: 60, align: 'right' })
+        }
+        drawRow('Sous-total', fmt(snapshot.subtotal) + ' ' + r.currency, detailY)
+        detailY += 16
+        if (Number(snapshot.shippingCost) > 0) {
+          drawRow('Livraison', fmt(snapshot.shippingCost) + ' ' + r.currency, detailY)
+          detailY += 16
+        }
+        if (Number(snapshot.discountAmount) > 0) {
+          drawRow('Remise', '-' + fmt(snapshot.discountAmount) + ' ' + r.currency, detailY)
+          detailY += 16
+        }
+        if (Number(snapshot.taxAmount) > 0) {
+          drawRow('Taxe', fmt(snapshot.taxAmount) + ' ' + r.currency, detailY)
+          detailY += 16
+        }
+
+        doc.fontSize(9).fillColor('#6b7280')
+        doc.font('Helvetica').text('Moyen de paiement', 40, detailY, { width: 160 })
+        doc.font('Helvetica-Bold').text(snapshot.paymentMethod, 270, detailY, { width: 60, align: 'right' })
+        detailY += 16
+        doc.font('Helvetica').text('Statut du paiement', 40, detailY, { width: 160 })
+        doc.font('Helvetica-Bold').text(snapshot.paymentStatus === 'captured' ? 'Payé' : snapshot.paymentStatus, 270, detailY, { width: 60, align: 'right' })
+        detailY += 16
+      }
 
       // ── Total ─────────────────────────────────────────────────────────────
-      const totalY = detailY + 70
-      doc.rect(40, totalY, doc.page.width - 80, 36).fill('#f9fafb')
+      detailY += 4
+      doc.rect(40, detailY, doc.page.width - 80, 36).fill('#f9fafb')
       doc.fillColor('#374151').font('Helvetica-Bold').fontSize(12)
-        .text('Total payé', 52, totalY + 10)
+        .text('Total payé', 52, detailY + 10)
       doc.fillColor(brand.color).fontSize(16)
-        .text(amount, 0, totalY + 8, { align: 'right', width: doc.page.width - 52 })
+        .text(amount, 0, detailY + 8, { align: 'right', width: doc.page.width - 52 })
 
-      // ── Code-barres (optionnel) ───────────────────────────────────────────
-      let footerY = totalY + 60
+      let footerY = detailY + 60
       if (brand.showBarcode) {
         doc.font('Courier-Bold').fontSize(13).fillColor('#111827')
           .text(r.orderNumber, 40, footerY, { align: 'center', width: doc.page.width - 80, characterSpacing: 4 })
         footerY += 24
       }
 
-      // ── Pied de page ──────────────────────────────────────────────────────
+      doc.fillColor('#9ca3af').font('Helvetica').fontSize(8)
+        .text('Reçu émis le ' + date + ' — document non modifiable.', 40, footerY, { align: 'center', width: doc.page.width - 80 })
+      footerY += 12
+
       doc.fillColor('#9ca3af').font('Helvetica').fontSize(9)
         .text(brand.footer, 40, footerY, { align: 'center', width: doc.page.width - 80 })
         .text('Ce reçu a été généré automatiquement.', 40, footerY + 14, { align: 'center', width: doc.page.width - 80 })
 
       doc.end()
     })
-
-    return relativePath
   }
 
   /** Langue préférée du client d'une commande (pour traduire le message de reçu). */
@@ -159,38 +219,101 @@ export class ReceiptsService {
     const [order] = await this.db.select().from(orders).where(where).limit(1)
     if (!order) throw new NotFoundException('Commande introuvable')
 
-    const billAddr = order.billingAddress as { name?: string; email?: string; phone?: string } | null
+    return this.db.transaction(async (tx) => {
+      // Idempotence dans la transaction : détecter un reçu existant créé
+      // par une transaction concurrente
+      const [existing] = await tx.select().from(receipts)
+        .where(eq(receipts.orderId, order.id)).limit(1)
+      if (existing) return existing
 
-    const [settings] = await this.db.select().from(receiptSettings).where(eq(receiptSettings.storeId, data.storeId)).limit(1)
+      // Verrouiller la ligne de paramètres pour le compteur atomique
+      const [lockedSettings] = await tx.select().from(receiptSettings)
+        .where(eq(receiptSettings.storeId, data.storeId))
+        .for('update')
+        .limit(1)
 
-    const prefix = settings?.prefix ?? 'REC-'
-    const [receipt] = await this.db.insert(receipts).values({
-      orderId: order.id,
-      storeId: data.storeId,
-      orderNumber: `${prefix}${order.orderNumber}`,
-      customerName: billAddr?.name ?? '',
-      customerEmail: billAddr?.email,
-      customerPhone: billAddr?.phone,
-      amount: order.total,
-      currency: order.currency,
-      type: settings?.defaultType ?? 'email',
-    }).returning()
-    return receipt
+      const prefix = lockedSettings?.prefix ?? 'REC-'
+      const fiscalYear = new Date().getFullYear()
+      let nextNumber = lockedSettings?.nextNumber ?? 1
+
+      // Incrémenter le compteur
+      if (lockedSettings) {
+        await tx.update(receiptSettings)
+          .set({ nextNumber: nextNumber + 1, updatedAt: new Date() })
+          .where(eq(receiptSettings.storeId, data.storeId))
+      }
+
+      // Construire le numéro séquentiel : REC-2026-000001
+      const seqPadded = String(nextNumber).padStart(6, '0')
+      const orderNumber = `${prefix}${fiscalYear}-${seqPadded}`
+
+      // Capturer le snapshot immuable
+      const orderItemsData = await tx.select({
+        label: orderItems.label,
+        sku: orderItems.sku,
+        quantity: orderItems.quantity,
+        unitPrice: orderItems.unitPrice,
+        totalPrice: orderItems.totalPrice,
+      }).from(orderItems).where(eq(orderItems.orderId, order.id))
+
+      const [payment] = await tx.select({
+        id: payments.id,
+        method: payments.method,
+        status: payments.status,
+      }).from(payments).where(eq(payments.orderId, order.id)).limit(1)
+
+      const billAddr = order.billingAddress as { name?: string; email?: string; phone?: string } | null
+
+      const snapshot = {
+        items: orderItemsData,
+        subtotal: order.subtotal,
+        shippingCost: order.shippingCost ?? '0',
+        taxAmount: order.taxAmount ?? '0',
+        discountAmount: order.discountAmount ?? '0',
+        paymentMethod: payment?.method ?? 'unknown',
+        paymentStatus: payment?.status ?? 'unknown',
+      }
+
+      const [receipt] = await tx.insert(receipts).values({
+        orderId: order.id,
+        storeId: data.storeId,
+        paymentId: payment?.id ?? null,
+        orderNumber,
+        customerName: billAddr?.name ?? '',
+        customerEmail: billAddr?.email,
+        customerPhone: billAddr?.phone,
+        amount: order.total,
+        currency: order.currency,
+        type: lockedSettings?.defaultType ?? 'email',
+        fiscalYear,
+        sequenceNumber: nextNumber,
+        snapshot,
+      }).returning()
+
+      return receipt
+    })
   }
 
   async send(id: string) {
     const [existing] = await this.db.select().from(receipts).where(eq(receipts.id, id)).limit(1)
     if (!existing) throw new NotFoundException('Reçu introuvable')
 
-    // Générer le PDF (ou réutiliser s'il existe déjà)
-    const downloadUrl = existing.downloadUrl ?? await this.generatePdf(existing)
+    let downloadUrl = existing.downloadUrl
+    if (!downloadUrl) {
+      const pdfBuffer = await this.generatePdfBuffer({
+        ...existing,
+        storeId: existing.storeId,
+        snapshot: existing.snapshot as any,
+      })
+      const key = `receipts/${existing.storeId}/${existing.id}.pdf`
+      downloadUrl = await this.storage.save(key, pdfBuffer, 'application/pdf')
+    }
 
     const [receipt] = await this.db.update(receipts)
       .set({ status: 'sent', sentAt: new Date(), downloadUrl })
       .where(eq(receipts.id, id))
       .returning()
 
-    // Livraison dans la boîte de réception du client : texte + PDF en pièce jointe
     const language = await this.customerLanguage(receipt.orderId)
     await this.chat.postOrderSystemMessage(
       receipt.orderId,
@@ -204,7 +327,16 @@ export class ReceiptsService {
     if (!ids?.length) return { sent: 0 }
     const rows = await this.db.select().from(receipts).where(sql`${receipts.id} = ANY(${ids}::uuid[])`)
     for (const r of rows) {
-      const downloadUrl = r.downloadUrl ?? await this.generatePdf(r)
+      let downloadUrl = r.downloadUrl
+      if (!downloadUrl) {
+        const pdfBuffer = await this.generatePdfBuffer({
+          ...r,
+          storeId: r.storeId,
+          snapshot: r.snapshot as any,
+        })
+        const key = `receipts/${r.storeId}/${r.id}.pdf`
+        downloadUrl = await this.storage.save(key, pdfBuffer, 'application/pdf')
+      }
       await this.db.update(receipts)
         .set({ status: 'sent', sentAt: new Date(), downloadUrl })
         .where(eq(receipts.id, r.id))
@@ -216,6 +348,12 @@ export class ReceiptsService {
       )
     }
     return { sent: rows.length }
+  }
+
+  async getOrderCustomerId(orderId: string): Promise<string | null> {
+    const [order] = await this.db.select({ customerId: orders.customerId }).from(orders)
+      .where(eq(orders.id, orderId)).limit(1)
+    return order?.customerId ?? null
   }
 
   async getSettings(storeId: string) {

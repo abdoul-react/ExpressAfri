@@ -1,8 +1,10 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, UseInterceptors, UploadedFile, HttpCode, HttpStatus, UnauthorizedException, BadRequestException } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
-import { extname, join } from 'path'
+import { join } from 'path'
+import { randomFilename, validateFileContent } from '../../common/upload/upload.helper'
 import { ChatService } from './chat.service'
 import { CustomerAuthGuard } from '../mobile/customer-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
@@ -62,6 +64,7 @@ export class ChatController {
     return this.service.sendMessage(id, { id: user.id, role: 'customer' }, body)
   }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('attachments')
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
@@ -69,8 +72,7 @@ export class ChatController {
     storage: diskStorage({
       destination: join(process.cwd(), 'uploads/chat'),
       filename: (_req, file, cb) => {
-        const name = file.originalname.replace(extname(file.originalname), '').replace(/[^a-z0-9]/gi, '_').toLowerCase()
-        cb(null, `${name}_${Date.now()}${extname(file.originalname)}`)
+        cb(null, randomFilename(file.originalname))
       },
     }),
     fileFilter: (_req, file, cb) => {
@@ -86,6 +88,11 @@ export class ChatController {
   async uploadAttachment(@CurrentUser() user: any, @UploadedFile() file: Express.Multer.File) {
     if (!user?.id) throw new UnauthorizedException('Connexion requise')
     if (!file) throw new BadRequestException('Fichier requis')
+    const prefix = file.mimetype.startsWith('image/') ? 'image/'
+      : file.mimetype.startsWith('video/') ? 'video/'
+      : file.mimetype === 'application/pdf' ? 'application/'
+      : 'audio/'
+    validateFileContent(file.path, prefix)
     const url = `/uploads/chat/${file.filename}`
     const type = file.mimetype.startsWith('image/') ? 'image'
       : file.mimetype.startsWith('video/') ? 'video'

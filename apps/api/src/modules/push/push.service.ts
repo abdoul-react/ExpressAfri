@@ -4,6 +4,8 @@ import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { pushTokens } from '../../database/schema/push-tokens'
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
+const MAX_RETRIES = 3
+const RETRY_DELAY_MS = 1_000
 
 type PushMessage = { title: string; body: string; data?: Record<string, unknown> }
 
@@ -13,11 +15,6 @@ export class PushService {
 
   constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
 
-  /**
-   * Enregistre (ou réassocie) un jeton Expo Push pour un client. Upsert sur le
-   * `token` : un même appareil qui change de compte réécrit sa ligne vers le
-   * client courant.
-   */
   async registerToken(customerId: string, token: string, platform?: string) {
     const value = (token ?? '').trim()
     if (!value) return
@@ -30,18 +27,12 @@ export class PushService {
       })
   }
 
-  /** Retire un jeton (déconnexion). */
   async removeToken(token: string) {
     const value = (token ?? '').trim()
     if (!value) return
     await this.db.delete(pushTokens).where(eq(pushTokens.token, value))
   }
 
-  /**
-   * Envoie une notification push à tous les appareils d'un client. Best-effort :
-   * ne lève jamais (une notif ratée ne doit pas casser l'action métier). No-op
-   * si le client n'a aucun jeton. Purge les jetons périmés (`DeviceNotRegistered`).
-   */
   async sendToCustomer(customerId: string | null | undefined, message: PushMessage): Promise<void> {
     try {
       if (!customerId) return
@@ -56,27 +47,45 @@ export class PushService {
         sound: 'default' as const,
       }))
 
-      // Expo accepte des lots ≤ 100 messages.
       const stale: string[] = []
       for (let i = 0; i < messages.length; i += 100) {
         const batch = messages.slice(i, i + 100)
-        const res = await fetch(EXPO_PUSH_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify(batch),
-        })
-        if (!res.ok) {
-          this.logger.warn(`Expo push HTTP ${res.status}`)
-          continue
-        }
-        const json: any = await res.json()
-        const tickets: any[] = Array.isArray(json?.data) ? json.data : []
-        tickets.forEach((ticket, idx) => {
-          if (ticket?.status === 'error' && ticket?.details?.error === 'DeviceNotRegistered') {
-            const bad = batch[idx]?.to
-            if (bad) stale.push(bad)
+        let lastErr: Error | undefined
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+          if (attempt > 0) {
+            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * Math.pow(2, attempt - 1)))
           }
-        })
+          try {
+            const res = await fetch(EXPO_PUSH_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify(batch),
+            })
+            if (res.ok) {
+              const json: any = await res.json()
+              const tickets: any[] = Array.isArray(json?.data) ? json.data : []
+              tickets.forEach((ticket, idx) => {
+                if (ticket?.status === 'error' && ticket?.details?.error === 'DeviceNotRegistered') {
+                  const bad = batch[idx]?.to
+                  if (bad) stale.push(bad)
+                }
+              })
+              lastErr = undefined
+              break
+            }
+            if (res.status >= 500) {
+              lastErr = new Error(`Expo HTTP ${res.status}`)
+              continue
+            }
+            lastErr = new Error(`Expo HTTP ${res.status} (non retryable)`)
+            break
+          } catch (fetchErr) {
+            lastErr = fetchErr instanceof Error ? fetchErr : new Error(String(fetchErr))
+          }
+        }
+        if (lastErr) {
+          this.logger.warn(`Push batch échoué après ${MAX_RETRIES} tentatives: ${lastErr.message}`)
+        }
       }
 
       if (stale.length > 0) {

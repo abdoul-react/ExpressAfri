@@ -1,7 +1,9 @@
 import { Controller, Get, Post, Put, Delete, Param, Query, Body, UseGuards, UseInterceptors, UploadedFile, BadRequestException, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
-import { extname, join } from 'path'
+import { join } from 'path'
+import { randomFilename, validateFileContent } from '../../common/upload/upload.helper'
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger'
 import { ContentService } from './content.service'
 import { CreateBannerDto, UpdateBannerDto, CreateFeedSectionDto, UpdateFeedSectionDto, ReorderDto } from './content.dto'
@@ -41,19 +43,18 @@ export class ContentController {
   @ApiOperation({ summary: 'Supprimer une bannière' })
   async deleteBanner(@Param('id', ParseUUIDPipe) id: string) { return this.service.deleteBanner(id) }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('banners/upload')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: join(process.cwd(), 'uploads/banners'),
       filename: (_req, file, cb) => {
-        const name = file.originalname.replace(extname(file.originalname), '').replace(/[^a-z0-9]/gi, '_').toLowerCase()
-        cb(null, `${name}_${Date.now()}${extname(file.originalname)}`)
+        cb(null, randomFilename(file.originalname))
       },
     }),
     fileFilter: (_req, file, cb) => {
       if (!file.mimetype.match(/^image\/(png|jpe?g|webp|gif)$/)) {
-        // SVG interdit : risque XSS stored (le fichier est servi sur la même origine que le token admin)
         cb(new BadRequestException('Format non accepté (png, jpg, webp, gif) — SVG interdit pour raison de sécurité'), false)
       } else { cb(null, true) }
     },
@@ -63,6 +64,7 @@ export class ContentController {
   @ApiOperation({ summary: 'Uploader une image de bannière (retourne l\'URL à utiliser dans imageUrl)' })
   async uploadBannerImage(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Fichier requis')
+    validateFileContent(file.path, 'image/')
     return { url: `/uploads/banners/${file.filename}` }
   }
 
@@ -122,18 +124,17 @@ export class ContentController {
   @ApiOperation({ summary: 'Modifier un logo (URL)' })
   async updateLogo(@Param('id') id: string, @Body() body: { url: string }) { return this.service.updateLogo(id, body.url) }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('logos/:id/upload')
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: join(process.cwd(), 'uploads/logos'),
       filename: (_req, file, cb) => {
-        const name = file.originalname.replace(extname(file.originalname), '').replace(/[^a-z0-9]/gi, '_').toLowerCase()
-        cb(null, `${name}_${Date.now()}${extname(file.originalname)}`)
+        cb(null, randomFilename(file.originalname))
       },
     }),
     fileFilter: (_req, file, cb) => {
       if (!file.mimetype.match(/^image\/(png|jpe?g|webp|gif|ico)$/)) {
-        // SVG interdit : risque XSS stored (le fichier est servi sur la même origine que le token admin)
         cb(new BadRequestException('Format non accepté (png, jpg, webp, gif, ico) — SVG interdit pour raison de sécurité'), false)
       } else { cb(null, true) }
     },
@@ -143,6 +144,7 @@ export class ContentController {
   @ApiOperation({ summary: 'Uploader un logo (fichier)' })
   async uploadLogo(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Fichier requis')
+    validateFileContent(file.path, 'image/')
     const url = `/uploads/logos/${file.filename}`
     return this.service.updateLogo(id, url)
   }
@@ -164,14 +166,14 @@ export class ContentController {
   @ApiOperation({ summary: 'Supprimer une publication' })
   async deleteFeedPost(@Param('id', ParseUUIDPipe) id: string) { return this.service.deleteFeedPost(id) }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('feed-posts/upload')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: join(process.cwd(), 'uploads/feed'),
       filename: (_req, file, cb) => {
-        const name = file.originalname.replace(extname(file.originalname), '').replace(/[^a-z0-9]/gi, '_').toLowerCase()
-        cb(null, `${name}_${Date.now()}${extname(file.originalname)}`)
+        cb(null, randomFilename(file.originalname))
       },
     }),
     fileFilter: (_req, file, cb) => {
@@ -185,6 +187,8 @@ export class ContentController {
   @ApiOperation({ summary: 'Uploader le média d\'une publication (image ou vidéo)' })
   async uploadFeedMedia(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Fichier requis')
+    const prefix = file.mimetype.startsWith('video/') ? 'video/' : 'image/'
+    validateFileContent(file.path, prefix)
     const url = `/uploads/feed/${file.filename}`
     const mediaType = file.mimetype.startsWith('video/') ? 'video' : 'image'
     return { url, mediaType }
@@ -260,14 +264,14 @@ export class ContentController {
   @ApiOperation({ summary: 'Supprimer moyen paiement' })
   async deletePaymentMethod(@Param('id') id: string) { return this.service.deletePaymentMethod(id) }
 
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('payment-methods/:id/logo')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file', {
     storage: diskStorage({
       destination: join(process.cwd(), 'uploads/payment-logos'),
       filename: (_req, file, cb) => {
-        const name = file.originalname.replace(extname(file.originalname), '').replace(/[^a-z0-9]/gi, '_').toLowerCase()
-        cb(null, `${name}_${Date.now()}${extname(file.originalname)}`)
+        cb(null, randomFilename(file.originalname))
       },
     }),
     fileFilter: (_req, file, cb) => {
@@ -281,6 +285,7 @@ export class ContentController {
   @ApiOperation({ summary: 'Uploader le logo d\'un moyen de paiement' })
   async uploadPaymentMethodLogo(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Fichier requis')
+    validateFileContent(file.path, 'image/')
     const url = `/uploads/payment-logos/${file.filename}`
     return this.service.updatePaymentMethod(id, { logoUrl: url })
   }

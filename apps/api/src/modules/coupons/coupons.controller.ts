@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { CouponsService } from './coupons.service'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { Public } from '../../common/decorators/public.decorator'
+import { Permissions } from '../../common/decorators/permissions.decorator'
 
 @ApiTags('Coupons')
 @Controller('coupons')
@@ -35,18 +36,21 @@ export class CouponsController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @Permissions('coupons.create')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Créer un coupon' })
   async create(@Body() body: any) { return this.service.create(body) }
 
   @Put(':id')
   @UseGuards(JwtAuthGuard)
+  @Permissions('coupons.update')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Modifier un coupon' })
   async update(@Param('id') id: string, @Body() body: any) { return this.service.update(id, body) }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
+  @Permissions('coupons.delete')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Supprimer un coupon' })
   async delete(@Param('id') id: string) { return this.service.delete(id) }

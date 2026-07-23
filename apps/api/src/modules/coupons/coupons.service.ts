@@ -2,10 +2,14 @@ import { Injectable, Inject, NotFoundException, ConflictException } from '@nestj
 import { eq, like, or, and, sql, lt, gt } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { coupons, couponUsage } from '../../database/schema/coupons'
+import { AuditService } from '../audit/audit.service'
 
 @Injectable()
 export class CouponsService {
-  constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private db: DrizzleDB,
+    private audit: AuditService,
+  ) {}
 
   async list(params: { page?: number; limit?: number; search?: string; status?: string; type?: string; affiliateId?: string }) {
     const page = params.page ?? 1
@@ -48,17 +52,47 @@ export class CouponsService {
     const existing = await this.getByCode(data.code)
     if (existing) throw new ConflictException('Ce code promo existe déjà')
     const [coupon] = await this.db.insert(coupons).values({ ...data, code: data.code.toUpperCase() }).returning()
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'CREATE',
+      resource: 'coupons',
+      resourceId: coupon.id,
+      details: { code: coupon.code, type: coupon.type },
+      status: 'success',
+    })
+    
     return coupon
   }
 
   async update(id: string, data: any) {
     const [coupon] = await this.db.update(coupons).set({ ...data, updatedAt: new Date() }).where(eq(coupons.id, id)).returning()
     if (!coupon) throw new NotFoundException('Coupon introuvable')
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'UPDATE',
+      resource: 'coupons',
+      resourceId: id,
+      details: { code: coupon.code, updatedFields: Object.keys(data) },
+      status: 'success',
+    })
+    
     return coupon
   }
 
   async delete(id: string) {
+    const coupon = await this.getById(id)
     await this.db.delete(coupons).where(eq(coupons.id, id))
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'DELETE',
+      resource: 'coupons',
+      resourceId: id,
+      details: { code: coupon.code, type: coupon.type },
+      status: 'success',
+    })
   }
 
   async validate(code: string, customerEmail?: string, orderAmount?: number) {

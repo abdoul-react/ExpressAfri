@@ -4,12 +4,14 @@ import { eq, sql } from 'drizzle-orm'
 import * as bcrypt from 'bcryptjs'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { admins, roles } from '../../database/schema/auth'
+import { AuditService } from '../audit/audit.service'
 
 @Injectable()
 export class AuthService {
   constructor(
     @Inject(DRIZZLE) private db: DrizzleDB,
     private jwt: JwtService,
+    private audit: AuditService,
   ) {}
 
   async login(email: string, password: string) {
@@ -94,16 +96,48 @@ export class AuthService {
   async createAdmin(data: { email: string; name: string; password: string; role?: string; isSuperAdmin?: boolean }) {
     const passwordHash = await bcrypt.hash(data.password, 10)
     const [admin] = await this.db.insert(admins).values({ email: data.email, name: data.name, passwordHash, role: data.role ?? 'admin', isSuperAdmin: data.isSuperAdmin ?? false }).returning()
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'CREATE',
+      resource: 'admins',
+      resourceId: admin.id,
+      details: { email: admin.email, role: admin.role, isSuperAdmin: admin.isSuperAdmin },
+      status: 'success',
+    })
+    
     return { id: admin.id, email: admin.email, name: admin.name, role: admin.role, isSuperAdmin: admin.isSuperAdmin, isActive: admin.isActive }
   }
 
   async updateAdmin(id: string, data: { name?: string; email?: string; isActive?: boolean; role?: string }) {
     const [admin] = await this.db.update(admins).set({ ...data, updatedAt: new Date() }).where(eq(admins.id, id)).returning()
     if (!admin) throw new NotFoundException('Admin introuvable')
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'UPDATE',
+      resource: 'admins',
+      resourceId: id,
+      details: { email: admin.email, updatedFields: Object.keys(data) },
+      status: 'success',
+    })
+    
     return { id: admin.id, email: admin.email, name: admin.name, role: admin.role, isSuperAdmin: admin.isSuperAdmin, isActive: admin.isActive }
   }
 
-  async deleteAdmin(id: string) { await this.db.delete(admins).where(eq(admins.id, id)) }
+  async deleteAdmin(id: string) {
+    const admin = await this.getAdminById(id)
+    await this.db.delete(admins).where(eq(admins.id, id))
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'DELETE',
+      resource: 'admins',
+      resourceId: id,
+      details: { email: admin.email, role: admin.role },
+      status: 'success',
+    })
+  }
 
   async changeAdminPassword(id: string, newPassword: string) {
     if (!newPassword || newPassword.length < 8) {
@@ -116,6 +150,16 @@ export class AuthService {
       .where(eq(admins.id, id))
       .returning()
     if (!admin) throw new NotFoundException('Admin introuvable')
+    
+    // ✅ Audit log
+    await this.audit.create({
+      action: 'CHANGE_PASSWORD',
+      resource: 'admins',
+      resourceId: id,
+      details: { email: admin.email },
+      status: 'success',
+    })
+    
     return { id: admin.id, email: admin.email, name: admin.name, updated: true }
   }
 

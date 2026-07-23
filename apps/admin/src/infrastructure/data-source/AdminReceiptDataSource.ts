@@ -1,6 +1,8 @@
 export interface Receipt {
   id: string
   orderId: string
+  storeId: string
+  paymentId?: string
   orderNumber: string
   customerName: string
   customerEmail: string
@@ -12,6 +14,8 @@ export interface Receipt {
   sentAt?: string
   createdAt: string
   downloadUrl?: string
+  fiscalYear?: number
+  sequenceNumber?: number
 }
 
 export interface ReceiptSettings {

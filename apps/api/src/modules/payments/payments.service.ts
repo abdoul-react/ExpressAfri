@@ -1,11 +1,16 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common'
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common'
 import { eq, like, or, and, sql } from 'drizzle-orm'
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module'
 import { payments, refunds } from '../../database/schema/payments'
+import { orders } from '../../database/schema/orders'
+import { PaymentWebhookService } from './payment-webhook.service'
 
 @Injectable()
 export class PaymentsService {
-  constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private db: DrizzleDB,
+    private webhookService: PaymentWebhookService,
+  ) {}
 
   async list(params: { page?: number; limit?: number; search?: string; status?: string; method?: string; orderId?: string }) {
     const page = params.page ?? 1; const limit = params.limit ?? 10; const offset = (page - 1) * limit
@@ -29,7 +34,15 @@ export class PaymentsService {
     return { ...payment, refunds: refundList }
   }
 
-  async create(data: any) {
+  async create(data: {
+    orderId: string
+    storeId: string
+    amount: string
+    method?: string
+    currency?: string
+    transactionId?: string
+    status?: string
+  }) {
     const [payment] = await this.db.insert(payments).values(data).returning()
     return payment
   }
@@ -40,5 +53,49 @@ export class PaymentsService {
     const [refund] = await this.db.insert(refunds).values({ paymentId: id, orderId: payment.orderId, storeId: payment.storeId, amount: String(data.amount), reason: data.reason }).returning()
     await this.db.update(payments).set({ status: 'refunded', updatedAt: new Date() }).where(eq(payments.id, id))
     return refund
+  }
+
+  async initialize(orderId: string, method?: string, returnUrl?: string) {
+    const [payment] = await this.db.select().from(payments)
+      .where(eq(payments.orderId, orderId)).limit(1)
+    if (!payment) throw new NotFoundException('Aucun paiement trouvé pour cette commande')
+
+    if (payment.status !== 'pending') {
+      throw new BadRequestException(`Paiement déjà initié (statut: ${payment.status})`)
+    }
+
+    const provider = this.webhookService.getProvider('mock')
+    if (!provider) throw new BadRequestException('Aucun provider de paiement configuré')
+
+    const result = await provider.initialize({
+      paymentId: payment.id,
+      amount: payment.amount,
+      currency: payment.currency,
+      method: method ?? payment.method,
+      returnUrl,
+    })
+
+    await this.db.update(payments).set({
+      provider: provider.name,
+      providerPaymentId: result.providerPaymentId,
+      status: result.status,
+      method: method ?? payment.method,
+      updatedAt: new Date(),
+    }).where(eq(payments.id, payment.id))
+
+    const [updated] = await this.db.select().from(payments).where(eq(payments.id, payment.id)).limit(1)
+
+    return {
+      payment: updated,
+      checkoutUrl: result.checkoutUrl ?? null,
+    }
+  }
+
+  async handleWebhook(providerName: string, rawBody: Buffer, signature: string) {
+    return this.webhookService.processWebhook(providerName, rawBody, signature)
+  }
+
+  async getByOrderId(orderId: string) {
+    return this.db.select().from(payments).where(eq(payments.orderId, orderId)).orderBy(payments.createdAt)
   }
 }

@@ -1,3 +1,4 @@
+import helmet from 'helmet'
 import { NestFactory } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
@@ -7,6 +8,21 @@ import { AppModule } from './app.module'
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
+
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    frameguard: { action: 'deny' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  }))
 
   // 64 Mo : un produit peut porter jusqu'à 8 photos en base64 (5 Mo × 1,33 d'encodage)
   app.useBodyParser('json', { limit: '64mb' })
@@ -22,7 +38,12 @@ async function bootstrap() {
     .map((o) => o.trim())
     .filter(Boolean)
   app.enableCors({ origin: corsOrigins, methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', credentials: true })
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }))
+  app.useGlobalPipes(new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+    transformOptions: { enableImplicitConversion: true },
+  }))
 
   const config = new DocumentBuilder()
     .setTitle('ExpressAfri API')

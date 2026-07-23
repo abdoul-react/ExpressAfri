@@ -39,6 +39,7 @@ const STATUS_FLOW: Record<string, string[]> = {
   delivered: ['refunded'],
   cancelled: [],
   refunded: [],
+  partially_shipped: ['shipped', 'delivered', 'cancelled'],
 }
 
 const TIMELINE_DOT: Record<string, string> = {
@@ -283,7 +284,7 @@ export function AdminOrderDetailPage() {
                             checked={isSelected}
                             onChange={toggleItem}
                             className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-600"
-                            disabled={itemStatus === 'delivered' || itemStatus === 'cancelled'}
+                            disabled={itemStatus === 'delivered' || itemStatus === 'cancelled' || itemStatus === 'shipped'}
                           />
                         </div>
 
