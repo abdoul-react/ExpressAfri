@@ -273,13 +273,23 @@ describe('Production readiness e2e (Phase F) - skeleton', () => {
     const r1 = await request(app.getHttpServer()).post('/payments/webhooks/mock').set('x-webhook-signature', signature).send(payload).expect(201)
     const r2 = await request(app.getHttpServer()).post('/payments/webhooks/mock').set('x-webhook-signature', signature).send(payload).expect(201)
 
-    // first should process, second should be ignored
+    // first should process, second should be ignored (order may vary)
     expect(r1.body.status === 'processed' || r1.body.status === 'ignored').toBeTruthy()
     expect(r2.body.status === 'ignored' || r2.body.status === 'processed').toBeTruthy()
 
-    // fetch payment and ensure status captured and webhookEventId stored
-    const pr = await db.execute(`SELECT status, webhook_event_id FROM payments WHERE id = '${payment.id}' LIMIT 1`)
-    const prow = pr && pr.rows && pr.rows[0] ? pr.rows[0] : pr[0]
+    // Poll the payments row until the webhook has been applied or timeout to avoid flakes
+    const maxWaitMs = 5000
+    const intervalMs = 100
+    let prow: any = null
+    const start = Date.now()
+    while (Date.now() - start < maxWaitMs) {
+      const pr = await db.execute(`SELECT status, webhook_event_id FROM payments WHERE id = '${payment.id}' LIMIT 1`)
+      prow = pr && pr.rows && pr.rows[0] ? pr.rows[0] : pr[0]
+      if (prow && prow.status === 'captured' && prow.webhook_event_id === payload.eventId) break
+      await new Promise((r) => setTimeout(r, intervalMs))
+    }
+
+    expect(prow).toBeDefined()
     expect(prow.status).toBe('captured')
     expect(prow.webhook_event_id).toBe(payload.eventId)
   }, 30000)
