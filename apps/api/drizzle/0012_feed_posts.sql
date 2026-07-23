@@ -23,4 +23,5 @@ CREATE TABLE "feed_post_likes" (
 	CONSTRAINT "feed_post_likes_post_id_customer_id_unique" UNIQUE("post_id","customer_id")
 );
 --> statement-breakpoint
-ALTER TABLE "feed_post_likes" ADD CONSTRAINT "feed_post_likes_post_id_feed_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."feed_posts"("id") ON DELETE cascade ON UPDATE no action;
+DO $\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'feed_post_likes_post_id_feed_posts_id_fk') THEN\n    ALTER TABLE "feed_post_likes" ADD CONSTRAINT "feed_post_likes_post_id_feed_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."feed_posts"("id") ON DELETE cascade ON UPDATE no action;\n  END IF;\nEND $;
+

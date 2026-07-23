@@ -138,5 +138,5 @@ CREATE TABLE IF NOT EXISTS "otp_codes" (
 	"created_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-ALTER TABLE "admin_tickets" ADD CONSTRAINT "admin_tickets_assigned_to_admins_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."admins"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "ticket_messages" ADD CONSTRAINT "ticket_messages_ticket_id_admin_tickets_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "public"."admin_tickets"("id") ON DELETE no action ON UPDATE no action;
+DO $\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'admin_tickets_assigned_to_admins_id_fk') THEN\n    ALTER TABLE "admin_tickets" ADD CONSTRAINT "admin_tickets_assigned_to_admins_id_fk" FOREIGN KEY ("assigned_to") REFERENCES "public"."admins"("id") ON DELETE no action ON UPDATE no action;\n  END IF;\nEND $;--> statement-breakpoint
+DO $\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ticket_messages_ticket_id_admin_tickets_id_fk') THEN\n    ALTER TABLE "ticket_messages" ADD CONSTRAINT "ticket_messages_ticket_id_admin_tickets_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "public"."admin_tickets"("id") ON DELETE no action ON UPDATE no action;\n  END IF;\nEND $;

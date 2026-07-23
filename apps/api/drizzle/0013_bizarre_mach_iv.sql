@@ -30,4 +30,4 @@ ALTER TABLE "messages" ADD COLUMN "attachment_url" text;--> statement-breakpoint
 ALTER TABLE "messages" ADD COLUMN "attachment_name" text;--> statement-breakpoint
 ALTER TABLE "messages" ADD COLUMN "reply_to_id" uuid;--> statement-breakpoint
 ALTER TABLE "messages" ADD COLUMN "deleted_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "feed_post_likes" ADD CONSTRAINT "feed_post_likes_post_id_feed_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."feed_posts"("id") ON DELETE cascade ON UPDATE no action;
+DO $\nBEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'feed_post_likes_post_id_feed_posts_id_fk') THEN\n    ALTER TABLE "feed_post_likes" ADD CONSTRAINT "feed_post_likes_post_id_feed_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."feed_posts"("id") ON DELETE cascade ON UPDATE no action;\n  END IF;\nEND $;
