@@ -257,13 +257,14 @@ describe('Production readiness e2e (Phase F) - skeleton', () => {
     const orderResp = await request(app.getHttpServer()).post('/mobile/orders').set('Authorization', 'Bearer ' + accessToken).send({ items: [{ productId, variantId, quantity: 1 }], shippingAddressId, paymentMethod: 'card', idempotencyKey }).expect(201)
     const orderId = orderResp.body.id || orderResp.body.order?.id || orderResp.body.orderId || orderResp.body.data?.id
 
-    // create payment row referencing this order and providerPaymentId 'mock_payment_id'
+    // create payment row referencing this order and a unique providerPaymentId for this test
     const amount = orderResp.body.total ?? orderResp.body.order?.total ?? '10.00'
     const currency = 'XOF'
-    const [payment] = await db.insert(payments).values({ orderId, storeId: SYSTEM_STORE_ID, amount: String(amount), currency, providerPaymentId: 'mock_payment_id', provider: 'mock', status: 'pending' }).returning()
+    const providerPaymentId = `mock_payment_id_${Date.now()}`
+    const [payment] = await db.insert(payments).values({ orderId, storeId: SYSTEM_STORE_ID, amount: String(amount), currency, providerPaymentId, provider: 'mock', status: 'pending' }).returning()
 
-    // prepare webhook payload
-    const payload = { eventId: `evt_${Date.now()}`, providerPaymentId: 'mock_payment_id', status: 'captured' }
+    // prepare webhook payload using the same providerPaymentId
+    const payload = { eventId: `evt_${Date.now()}`, providerPaymentId, status: 'captured' }
     const raw = Buffer.from(JSON.stringify(payload), 'utf8')
     const hmac = crypto.createHmac('sha256', secret)
     hmac.update(raw)
