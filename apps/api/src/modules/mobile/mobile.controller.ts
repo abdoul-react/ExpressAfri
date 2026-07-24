@@ -632,6 +632,6 @@ export class MobileController {
     @Body() body: { content: string },
   ) {
     if (!body?.content?.trim()) throw new BadRequestException('content requis');
-    return { ok: true };
+    return this.service.submitSuggestion(user?.id ?? null, body.content.trim());
   }
 }

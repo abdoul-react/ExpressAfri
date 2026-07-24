@@ -1647,6 +1647,16 @@ export class MobileService {
     );
   }
 
+  async submitSuggestion(customerId: string | null, content: string) {
+    await this.db.insert(contentBlocks).values({
+      groupName: 'suggestions',
+      key: `suggestion_${Date.now()}`,
+      value: JSON.stringify({ content, customerId, submittedAt: new Date().toISOString() }),
+      isActive: true,
+    });
+    return { ok: true };
+  }
+
   // ====== PAYMENT ======
 
   async getPaymentMethods() {
