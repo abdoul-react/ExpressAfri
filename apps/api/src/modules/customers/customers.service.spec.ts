@@ -13,6 +13,7 @@ describe('CustomersService', () => {
       insert: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      transaction: jest.fn((cb) => cb(mockDb)),
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
