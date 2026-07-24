@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useColors, useThemedStyles, type Colors, spacing, radius, fontSize } from '@/design-system';
 import { Icon } from '@/icons';
 import { ScreenHeader, Button } from '@/components';
-import { apiAdapter } from '@/infrastructure/api/apiAdapter';
+import { submitSuggestion } from '@/features/checkout/checkoutApiService';
 
 export default function SuggestionsScreen() {
   const router = useRouter();
@@ -21,7 +21,7 @@ export default function SuggestionsScreen() {
     if (!text.trim()) return;
     setSending(true);
     try {
-      await apiAdapter.post('/mobile/suggestions', { content: text.trim() });
+      await submitSuggestion(text.trim());
       setText('');
       Alert.alert(t('common.confirm'), t('suggestions.sent'));
     } catch {

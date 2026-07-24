@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiAdapter } from '@/infrastructure/api/apiAdapter'
+import { contentService } from '@/features/content'
 
 export function useSearchTrending() {
   return useQuery<string[]>({
     queryKey: ['search', 'trending'],
-    queryFn: () => apiAdapter.get('/mobile/search/trending'),
+    queryFn: () => contentService.getTrending(),
     staleTime: 5 * 60 * 1000,
   })
 }

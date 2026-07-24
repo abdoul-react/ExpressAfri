@@ -100,8 +100,8 @@ export function AdminCategoryListPage() {
     setConfirm({
       title: `Supprimer "${name}" ?`,
       description: subCount > 0
-        ? `${subCount} sous-catégorie(s) seront également supprimées.`
-        : 'Cette action est irréversible.',
+        ? `${subCount} sous-categorie(s) seront remontees a la racine (non supprimees).`
+        : 'Cette action est irreversible.',
       variant: 'danger',
       onConfirm: async () => {
         try {

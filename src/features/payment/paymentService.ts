@@ -9,4 +9,8 @@ export const paymentService = {
   async getCardBrands(): Promise<string[]> {
     return paymentDataSource.getCardBrands();
   },
+
+  async initializePayment(orderId: string, method: string): Promise<{ paymentUrl?: string; status: string }> {
+    return paymentDataSource.initializePayment(orderId, method);
+  },
 };

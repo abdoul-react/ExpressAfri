@@ -1,5 +1,4 @@
 import { contentService } from "@/features/content";
-import { apiAdapter } from "@/infrastructure/api/apiAdapter";
 import type { FeedPost } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -27,8 +26,7 @@ export function useFeed() {
 export function useToggleFeedLike() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (postId: string) =>
-      apiAdapter.post(`/mobile/feed/${postId}/like`, {}) as Promise<{ liked: boolean; likes: number }>,
+    mutationFn: (postId: string) => contentService.toggleFeedLike(postId),
     onMutate: async (postId) => {
       await qc.cancelQueries({ queryKey: ["feed-posts"] });
       const prev = qc.getQueryData<FeedPost[]>(["feed-posts"]);
@@ -41,8 +39,6 @@ export function useToggleFeedLike() {
       );
       return { prev };
     },
-    // La réponse serveur {liked, likes} est la source de vérité : on l'applique
-    // au cache plutôt que d'invalider (pas de refetch → pas de clignotement).
     onSuccess: (result, postId) => {
       qc.setQueryData<FeedPost[]>(["feed-posts"], (posts = []) =>
         posts.map((p) =>

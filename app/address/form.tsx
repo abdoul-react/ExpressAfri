@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Switch, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,8 @@ import { Icon } from '@/icons';
 import { ScreenHeader, Button, KeyboardScreen } from '@/components';
 import { useAddressForm } from '@/features/address';
 import { COUNTRIES } from '@/store/settingsStore';
+import { useQuery } from '@tanstack/react-query';
+import { contentService } from '@/features/content';
 
 export default function AddressFormScreen() {
   const styles = useThemedStyles(makeStyles);
@@ -21,6 +23,21 @@ export default function AddressFormScreen() {
   const { isEditing, country, setCountry, form, setField, makeDefault, setMakeDefault, valid, save } =
     useAddressForm(id);
   const [countrySheet, setCountrySheet] = useState(false);
+
+  // Pays livrables en tete, reste par ordre alphabetique
+  const { data: shippingCodes = [] } = useQuery<string[]>({
+    queryKey: ['shipping-countries'],
+    queryFn: () => contentService.getShippingCountries(),
+    staleTime: 10 * 60 * 1000,
+  });
+  const sortedCountries = useMemo(() => {
+    if (!shippingCodes.length) return COUNTRIES;
+    const set = new Set(shippingCodes);
+    return [
+      ...COUNTRIES.filter((c) => set.has(c.code)),
+      ...COUNTRIES.filter((c) => !set.has(c.code)),
+    ];
+  }, [shippingCodes]);
 
   return (
     <KeyboardScreen style={styles.container}>
@@ -91,7 +108,7 @@ export default function AddressFormScreen() {
           <Pressable style={styles.sheet}>
             <Text style={styles.sheetTitle}>{t("address.country")}</Text>
             <ScrollView>
-              {COUNTRIES.map((c) => (
+              {sortedCountries.map((c) => (
                 <Pressable key={c.code} style={styles.option} onPress={() => { setCountry(c); setCountrySheet(false); }}>
                   <Image source={{ uri: `https://flagcdn.com/w80/${c.code.toLowerCase()}.png` }} style={styles.flag} />
                   <Text style={styles.optionLabel}>{c.name}</Text>

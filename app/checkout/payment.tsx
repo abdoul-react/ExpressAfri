@@ -15,6 +15,7 @@ import {
   type Colors,
 } from "@/design-system";
 import { usePaymentMethods } from "@/features/payment";
+import { paymentService } from "@/features/payment/paymentService";
 import { createOrder } from "@/features/checkout/checkoutApiService";
 import { useAddressStore } from "@/store/addressStore";
 import { Icon } from "@/icons";
@@ -55,22 +56,19 @@ export default function PaymentScreen() {
   const { methods, isLoading, error, refetch } = usePaymentMethods();
   const mobileMoneyMethods = methods.filter(
     (m) =>
-      m.type === 'mobile-money' &&
-      (m.supportedCountries?.length === 0 || m.supportedCountries?.includes(countryCode))
+      m.type === "mobile-money" &&
+      (m.supportedCountries?.length === 0 || m.supportedCountries?.includes(countryCode)),
   );
 
-  const [method, setMethod] = useState<PaymentMethodId | string>('');
-  const [operator, setOperator] = useState<string>('');
+  const [method, setMethod] = useState<PaymentMethodId | string>("");
+  const [operator, setOperator] = useState<string>("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
 
-  // Valeur effective : méthode choisie par l'utilisateur ou première de la liste
-  const effectiveMethod = method || methods[0]?.id || '';
-  // Valeur effective : opérateur choisi ou premier opérateur mobile money disponible
-  const effectiveOperator = operator || mobileMoneyMethods[0]?.id || '';
+  const effectiveMethod = method || methods[0]?.id || "";
+  const effectiveOperator = operator || mobileMoneyMethods[0]?.id || "";
 
-  // Card form state
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvv, setCardCvv] = useState("");
@@ -83,12 +81,10 @@ export default function PaymentScreen() {
   const clearSelected = useCartStore((s) => s.clearSelected);
   const queryClient = useQueryClient();
   const subtotal = useCartStore((s) =>
-    s.items
-      .filter((i) => i.selected)
-      .reduce((sum, i) => sum + i.priceUsd * i.quantity, 0),
+    s.items.filter((i) => i.selected).reduce((sum, i) => sum + i.priceUsd * i.quantity, 0),
   );
   const defaultAddressId = useAddressStore((s) => s.defaultId);
-  const total = subtotal; // Le calcul final est fait côté serveur
+  const total = subtotal;
 
   const formatCardNumber = (text: string) => {
     const digits = text.replace(/\D/g, "").slice(0, 16);
@@ -110,7 +106,7 @@ export default function PaymentScreen() {
   const isMobileMoneyValid = effectiveOperator && phoneNumber.trim().length >= 8;
 
   const selectedMethodObj = methods.find((m) => m.id === effectiveMethod);
-  const isMobileMoney = selectedMethodObj?.type === 'mobile-money';
+  const isMobileMoney = selectedMethodObj?.type === "mobile-money";
   const isCard = effectiveMethod === "card";
   const canPay = isCard ? isCardValid : isMobileMoney ? isMobileMoneyValid : !!effectiveMethod;
 
@@ -125,31 +121,36 @@ export default function PaymentScreen() {
           productId: item.productId,
           quantity: item.quantity,
         })),
-        shippingAddressId: defaultAddressId ?? '',
+        shippingAddressId: defaultAddressId ?? "",
         paymentMethod: effectiveMethod,
       });
 
-      // Ne retirer que les articles achetés (les non sélectionnés restent au panier)
+      // Pour les methodes non-COD, initialiser le parcours PSP
+      if (effectiveMethod !== "cod" && order?.id) {
+        try {
+          await paymentService.initializePayment(order.id, effectiveMethod);
+        } catch {
+          // Echec PSP non bloquant : le webhook confirmera le statut reel
+        }
+      }
+
       clearSelected();
-      // La nouvelle commande doit apparaître immédiatement dans « Mes commandes »
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
       router.replace({
         pathname: "/checkout/success",
-        params: order?.id ? { orderId: order.id, orderNumber: order.orderNumber ?? '' } : {},
+        params: order?.id ? { orderId: order.id, orderNumber: order.orderNumber ?? "" } : {},
       });
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Erreur lors du paiement';
+      const message = e instanceof Error ? e.message : "Erreur lors du paiement";
       setPayError(
-        message.includes('401')
-          ? 'Session expirée — reconnectez-vous pour passer la commande'
+        message.includes("401")
+          ? "Session expiree - reconnectez-vous pour passer la commande"
           : message,
       );
     } finally {
       setIsProcessing(false);
     }
   };
-
-  // selectedMethodObj déjà défini plus haut
 
   if (isLoading) {
     return (
@@ -202,7 +203,6 @@ export default function PaymentScreen() {
         {methods.map((m) => {
           const active = effectiveMethod === m.id;
           const logoUri = resolveMediaUrl(m.logoUrl);
-          // expo-image ne supporte pas le SVG nativement — utiliser l'icône de fallback
           const useLogo = !!logoUri && !isSvgUrl(m.logoUrl);
           return (
             <View key={m.id}>
@@ -219,11 +219,7 @@ export default function PaymentScreen() {
                       accessibilityLabel={m.labelKey}
                     />
                   ) : (
-                    <Icon
-                      name={m.icon}
-                      size={24}
-                      color={active ? colors.primary : colors.text}
-                    />
+                    <Icon name={m.icon} size={24} color={active ? colors.primary : colors.text} />
                   )}
                 </View>
                 <View style={{ flex: 1 }}>
@@ -235,20 +231,16 @@ export default function PaymentScreen() {
                 </View>
               </Pressable>
 
-              {/* Opérateurs mobile money — filtrés par pays */}
               {active && isMobileMoney && (
                 <View style={styles.operatorsWrap}>
                   <Text style={styles.operatorsCountry}>
-                    Opérateurs disponibles dans votre pays
+                    {t("checkout.availableOperators", "Operateurs disponibles dans votre pays")}
                   </Text>
                   <View style={styles.operators}>
                     {mobileMoneyMethods.map((op) => (
                       <Pressable
                         key={op.id}
-                        style={[
-                          styles.operator,
-                          effectiveOperator === op.id && styles.operatorActive,
-                        ]}
+                        style={[styles.operator, effectiveOperator === op.id && styles.operatorActive]}
                         onPress={() => setOperator(op.id)}
                       >
                         <Text
@@ -265,10 +257,9 @@ export default function PaymentScreen() {
                 </View>
               )}
 
-              {/* Numéro de téléphone Mobile Money */}
               {active && isMobileMoney && effectiveOperator && (
                 <View style={styles.formSection}>
-                  <Text style={styles.formLabel}>Numéro de téléphone*</Text>
+                  <Text style={styles.formLabel}>{t("checkout.phoneNumber", "Numero de telephone")}*</Text>
                   <TextInput
                     style={styles.cardInput}
                     value={phoneNumber}
@@ -281,23 +272,20 @@ export default function PaymentScreen() {
                 </View>
               )}
 
-              {/* Formulaire carte bancaire */}
               {active && isCard && (
                 <View style={styles.formSection}>
                   <View style={styles.cardHeaderRow}>
-                    <Text style={styles.formLabel}>Numéro de carte*</Text>
+                    <Text style={styles.formLabel}>{t("checkout.cardNumber", "Numero de carte")}*</Text>
                     {detectCardBrand(cardNumber) && (
                       <View style={styles.brandBadge}>
-                        <Text style={styles.brandBadgeText}>
-                          {detectCardBrand(cardNumber)}
-                        </Text>
+                        <Text style={styles.brandBadgeText}>{detectCardBrand(cardNumber)}</Text>
                       </View>
                     )}
                   </View>
                   <TextInput
                     style={styles.cardInput}
                     value={cardNumber}
-                    onChangeText={(t) => setCardNumber(formatCardNumber(t))}
+                    onChangeText={(v) => setCardNumber(formatCardNumber(v))}
                     placeholder="1234 5678 9012 3456"
                     placeholderTextColor={colors.textMuted}
                     keyboardType="number-pad"
@@ -307,12 +295,12 @@ export default function PaymentScreen() {
                   />
                   <View style={styles.cardRow}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.formLabel}>Date d&apos;expiration*</Text>
+                      <Text style={styles.formLabel}>{t("checkout.cardExpiry", "Date d'expiration")}*</Text>
                       <TextInput
                         ref={expiryRef}
                         style={styles.cardInput}
                         value={cardExpiry}
-                        onChangeText={(t) => setCardExpiry(formatExpiry(t))}
+                        onChangeText={(v) => setCardExpiry(formatExpiry(v))}
                         placeholder="MM/AA"
                         placeholderTextColor={colors.textMuted}
                         keyboardType="number-pad"
@@ -327,7 +315,7 @@ export default function PaymentScreen() {
                         ref={cvvRef}
                         style={styles.cardInput}
                         value={cardCvv}
-                        onChangeText={(t) => setCardCvv(t.replace(/\D/g, "").slice(0, 3))}
+                        onChangeText={(v) => setCardCvv(v.replace(/\D/g, "").slice(0, 3))}
                         placeholder="123"
                         placeholderTextColor={colors.textMuted}
                         keyboardType="number-pad"
@@ -337,7 +325,7 @@ export default function PaymentScreen() {
                       />
                     </View>
                   </View>
-                  <Text style={styles.formLabel}>Nom du titulaire*</Text>
+                  <Text style={styles.formLabel}>{t("checkout.cardHolder", "Nom du titulaire")}*</Text>
                   <TextInput
                     ref={nameRef}
                     style={styles.cardInput}
@@ -361,9 +349,7 @@ export default function PaymentScreen() {
           </Text>
         </View>
 
-        {payError ? (
-          <Text style={styles.errorText}>{payError}</Text>
-        ) : null}
+        {payError ? <Text style={styles.errorText}>{payError}</Text> : null}
 
         {selectedMethodObj && (
           <View style={styles.confirmCard}>
@@ -371,9 +357,7 @@ export default function PaymentScreen() {
             <Text style={styles.confirmText}>
               {t("checkout.youWillPay")} {selectedMethodObj.labelKey}.
             </Text>
-            <Text style={styles.confirmText}>
-              {t("checkout.afterValidation")}
-            </Text>
+            <Text style={styles.confirmText}>{t("checkout.afterValidation")}</Text>
           </View>
         )}
       </ScrollView>
@@ -419,21 +403,9 @@ const makeStyles = (colors: Colors) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    methodLogo: {
-      width: 36,
-      height: 36,
-      borderRadius: 8,
-    },
-    methodLabel: {
-      fontSize: fontSize.md,
-      fontWeight: "700",
-      color: colors.text,
-    },
-    methodHint: {
-      fontSize: fontSize.xs,
-      color: colors.textMuted,
-      marginTop: 2,
-    },
+    methodLogo: { width: 36, height: 36, borderRadius: 8 },
+    methodLabel: { fontSize: fontSize.md, fontWeight: "700", color: colors.text },
+    methodHint: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 2 },
     radio: {
       width: 22,
       height: 22,
@@ -444,12 +416,7 @@ const makeStyles = (colors: Colors) =>
       justifyContent: "center",
     },
     radioOn: { borderColor: colors.primary },
-    radioDot: {
-      width: 12,
-      height: 12,
-      borderRadius: 6,
-      backgroundColor: colors.primary,
-    },
+    radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary },
     operatorsWrap: { marginBottom: spacing.sm },
     operatorsCountry: {
       fontSize: fontSize.xs,
@@ -472,10 +439,7 @@ const makeStyles = (colors: Colors) =>
       paddingHorizontal: spacing.lg,
       paddingVertical: spacing.sm,
     },
-    operatorActive: {
-      borderColor: colors.primary,
-      backgroundColor: colors.primarySoft,
-    },
+    operatorActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
     operatorText: { fontSize: fontSize.sm, color: colors.text },
     operatorTextActive: { color: colors.primary, fontWeight: "700" },
     secure: {
@@ -493,11 +457,7 @@ const makeStyles = (colors: Colors) =>
       padding: spacing.lg,
       gap: spacing.xs,
     },
-    confirmTitle: {
-      fontSize: fontSize.md,
-      fontWeight: "800",
-      color: colors.text,
-    },
+    confirmTitle: { fontSize: fontSize.md, fontWeight: "800", color: colors.text },
     confirmText: { fontSize: fontSize.sm, color: colors.textSecondary },
     formSection: {
       backgroundColor: colors.background,
@@ -506,11 +466,7 @@ const makeStyles = (colors: Colors) =>
       marginBottom: spacing.md,
       gap: spacing.sm,
     },
-    formLabel: {
-      fontSize: fontSize.sm,
-      fontWeight: "600",
-      color: colors.text,
-    },
+    formLabel: { fontSize: fontSize.sm, fontWeight: "600", color: colors.text },
     cardInput: {
       height: 48,
       borderWidth: 1.5,
@@ -521,10 +477,7 @@ const makeStyles = (colors: Colors) =>
       color: colors.text,
       backgroundColor: colors.surface,
     },
-    cardRow: {
-      flexDirection: "row",
-      gap: spacing.md,
-    },
+    cardRow: { flexDirection: "row", gap: spacing.md },
     cardHeaderRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -536,11 +489,7 @@ const makeStyles = (colors: Colors) =>
       paddingHorizontal: spacing.sm,
       paddingVertical: 2,
     },
-    brandBadgeText: {
-      fontSize: fontSize.xs,
-      fontWeight: "800",
-      color: colors.primary,
-    },
+    brandBadgeText: { fontSize: fontSize.xs, fontWeight: "800", color: colors.primary },
     errorText: {
       marginTop: spacing.sm,
       color: colors.danger,

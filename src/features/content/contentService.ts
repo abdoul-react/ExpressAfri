@@ -22,4 +22,16 @@ export const contentService = {
   async getFeedSections(): Promise<FeedSection[]> {
     return contentDataSource.getFeedSections();
   },
+
+  async toggleFeedLike(postId: string): Promise<{ liked: boolean; likes: number }> {
+    return contentDataSource.toggleFeedLike(postId);
+  },
+
+  async getTrending(): Promise<string[]> {
+    return contentDataSource.getTrending();
+  },
+
+  async getShippingCountries(): Promise<string[]> {
+    return contentDataSource.getShippingCountries();
+  },
 };
