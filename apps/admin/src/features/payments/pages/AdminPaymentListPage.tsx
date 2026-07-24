@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CreditCard, XCircle } from 'lucide-react'
 import { useAdminPayments } from '../hooks/useAdminPayments'
+import { useAdminPaymentMethods } from '@/features/content'
 import {
   PageHeader, SearchInput, Select, Input, DataTable, StatusBadge, Card, EmptyState,
   type Column,
@@ -9,8 +10,6 @@ import {
 import { PAYMENT_STATUS } from '@/lib/status'
 import type { PaymentQueryParams } from '@/infrastructure/data-source/AdminPaymentDataSource'
 import { formatPrice, formatDate } from '@/lib/format'
-
-const MOCK_METHODS = ['Orange Money', 'Wave', 'Carte Visa', 'Mobile Money']
 
 export function AdminPaymentListPage() {
   const navigate = useNavigate()
@@ -30,6 +29,7 @@ export function AdminPaymentListPage() {
   }
 
   const { data, isLoading, isError, error } = useAdminPayments(params)
+  const { data: paymentMethods } = useAdminPaymentMethods()
 
   const columns: Column<any>[] = [
     {
@@ -104,7 +104,7 @@ export function AdminPaymentListPage() {
           onChange={(v) => { setMethodFilter(v); setPage(1) }}
           size="sm"
           placeholder="Tous moyens"
-          options={MOCK_METHODS.map((m) => ({ value: m, label: m }))}
+          options={(paymentMethods ?? []).map((m: any) => ({ value: m.name ?? m.slug ?? m.id, label: m.name ?? m.label ?? m.id }))}
         />
         <Input
           type="date"

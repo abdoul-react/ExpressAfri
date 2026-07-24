@@ -5,7 +5,7 @@ import type { ReceiptSettings } from '@/infrastructure/data-source/AdminReceiptD
 
 export function useAdminReceipts(params: ReceiptQueryParams) {
   return useQuery({
-    queryKey: ['admin', 'receipts', params],
+    queryKey: ['admin', 'receipts', 'list', params],
     queryFn: () => fetchReceipts(params),
     placeholderData: (prev) => prev,
   })
@@ -16,7 +16,7 @@ export function useCreateReceipt() {
   return useMutation({
     mutationFn: (orderId: string) => createReceipt(orderId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'receipts'] })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'receipts', 'list'] })
     },
   })
 }
@@ -34,7 +34,7 @@ export function useSendReceipt() {
   return useMutation({
     mutationFn: (id: string) => sendReceipt(id),
     onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'receipts'] })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'receipts', 'list'] })
       queryClient.invalidateQueries({ queryKey: ['admin', 'receipt', id] })
     },
   })
@@ -45,7 +45,7 @@ export function useSendBulkReceipts() {
   return useMutation({
     mutationFn: (ids: string[]) => sendBulkReceipts(ids),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'receipts'] })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'receipts', 'list'] })
     },
   })
 }
