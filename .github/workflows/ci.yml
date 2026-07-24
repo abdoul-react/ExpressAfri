@@ -67,6 +67,7 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
       NODE_ENV: test
+      JWT_SECRET: ci-test-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
