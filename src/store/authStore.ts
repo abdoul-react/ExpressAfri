@@ -1,4 +1,6 @@
-import { isMock } from "@/infrastructure/mock";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { unregisterPushToken } from "@/features/notifications/pushNotifications";
+import { logger } from "@/infrastructure/logging";
 import {
   clearTokens as apiClearTokens,
   loadTokensFromStorage as apiLoadTokens,
@@ -6,14 +8,12 @@ import {
   registerSessionExpiredHandler,
   apiAdapter,
 } from "@/infrastructure/api/apiAdapter";
-
-const apiGetAccessToken = () => apiAdapter.getAccessToken();
-import { logger } from "@/infrastructure/logging";
+import { isMock } from "@/infrastructure/mock";
 import { clearPrivateQueries } from "@/infrastructure/query/queryClient";
-import { unregisterPushToken } from "@/features/notifications/pushNotifications";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+
+const apiGetAccessToken = () => apiAdapter.getAccessToken();
 
 export type User = {
   name: string;

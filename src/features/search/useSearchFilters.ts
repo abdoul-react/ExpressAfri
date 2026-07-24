@@ -62,7 +62,7 @@ export function useFilteredProducts(filters: SearchFilters) {
     queryFn: () => catalogService.getProducts(),
   });
 
-  const allProducts = data ?? [];
+  const allProducts = useMemo(() => data ?? [], [data]);
 
   const categoriesQ = useQuery({
     queryKey: ['categories'],

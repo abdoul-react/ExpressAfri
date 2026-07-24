@@ -1649,6 +1649,7 @@ export class MobileService {
 
   async submitSuggestion(customerId: string | null, content: string) {
     await this.db.insert(contentBlocks).values({
+      storeId: SYSTEM_STORE_ID,
       groupName: 'suggestions',
       key: `suggestion_${Date.now()}`,
       value: JSON.stringify({ content, customerId, submittedAt: new Date().toISOString() }),

@@ -55,8 +55,20 @@ export function useCacheManager() {
   }, []);
 
   useEffect(() => {
-    measure();
-  }, [measure]);
+    let cancelled = false;
+    AsyncStorage.getAllKeys()
+      .then(async (keys) => {
+        const clearable = keys.filter((k) => !PRESERVED_KEYS.includes(k));
+        let bytes = 0;
+        if (clearable.length) {
+          const pairs = await AsyncStorage.multiGet(clearable);
+          for (const [, v] of pairs) bytes += v ? v.length : 0;
+        }
+        if (!cancelled) setSizeLabel(formatBytes(bytes));
+      })
+      .catch(() => { if (!cancelled) setSizeLabel(""); });
+    return () => { cancelled = true; };
+  }, []);
 
   const clearCache = useCallback(async () => {
     setIsClearing(true);

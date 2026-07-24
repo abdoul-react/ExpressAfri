@@ -2,13 +2,12 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "@/store/authStore";
 import { registerForPushNotifications } from "@/features/notifications/pushNotifications";
+import type * as ExpoNotifications from "expo-notifications";
 
-let Notifications: typeof import("expo-notifications") | null = null;
-try {
-  Notifications = require("expo-notifications");
-} catch {
-  // Expo Go SDK 53+ : notifications push non disponibles
-}
+let Notifications: typeof ExpoNotifications | null = null;
+void import("expo-notifications")
+  .then((mod) => { Notifications = mod; })
+  .catch(() => { /* Expo Go SDK 53+ : notifications push non disponibles */ });
 
 /**
  * Câble le cycle de vie des notifications push :

@@ -1,5 +1,4 @@
-import { searchProducts } from "@/features/catalog";
-import { catalogService } from "@/features/catalog";
+import { searchProducts, catalogService } from "@/features/catalog";
 import type { Product } from "@/types";
 import { useQuery } from "@tanstack/react-query";
 
