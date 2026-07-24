@@ -1,10 +1,11 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
-import { eq, like, or, and, sql } from 'drizzle-orm';
+import { eq, like, or, and, sql, desc } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module';
 import {
   loyaltyRules,
   loyaltyRewards,
   loyaltyPoints,
+  loyaltyTransactions,
 } from '../../database/schema/loyalty';
 
 @Injectable()
@@ -148,10 +149,20 @@ export class LoyaltyService {
     return { ...lp, points: lp.balance, lifetimePoints: lp.balance };
   }
 
-  async getTransactions(_customerId: string) {
-    // Les transactions détaillées nécessitent une table dédiée (non créée dans ce sprint)
-    // On retourne un tableau vide pour éviter le 404 — à implémenter si la table est ajoutée
-    return [];
+  async getTransactions(customerId: string, params: { page?: number; limit?: number }) {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const offset = (page - 1) * limit;
+    const [data, [{ count }]] = await Promise.all([
+      this.db.select().from(loyaltyTransactions)
+        .where(eq(loyaltyTransactions.customerId, customerId))
+        .orderBy(desc(loyaltyTransactions.createdAt))
+        .limit(limit).offset(offset),
+      this.db.select({ count: sql<number>`count(*)` })
+        .from(loyaltyTransactions)
+        .where(eq(loyaltyTransactions.customerId, customerId)),
+    ]);
+    return { data, total: Number(count), page };
   }
 
   async deleteRule(id: string) {
