@@ -23,5 +23,8 @@ export function useAuth() {
   const requestPasswordReset = (email: string) =>
     authService.requestPasswordReset(email);
 
-  return { loginWithEmail, registerWithEmail, requestOtp, verifyOtp, requestPasswordReset };
+  const socialLogin = (provider: string, payload: { email?: string; name?: string; id?: string }) =>
+    authService.socialLogin(provider, payload);
+
+  return { loginWithEmail, registerWithEmail, requestOtp, verifyOtp, requestPasswordReset, socialLogin };
 }

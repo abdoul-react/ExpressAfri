@@ -7,13 +7,10 @@ export class ApiCategoryDataSource implements CategoryDataSource {
     return apiAdapter.get("/mobile/categories");
   }
 
-  async getSubcategories(categoryId: string): Promise<string[]> {
+  async getSubcategories(categoryId: string): Promise<{ id: string; name: string; image?: string }[]> {
     if (!categoryId) return [];
     try {
-      const children: { id: string; name: string }[] = await apiAdapter.get(
-        `/mobile/categories/${categoryId}/children`,
-      );
-      return children.map((c) => c.name);
+      return await apiAdapter.get(`/mobile/categories/${categoryId}/children`);
     } catch {
       return [];
     }

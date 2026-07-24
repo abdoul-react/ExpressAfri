@@ -10,7 +10,6 @@ import { spacing, radius, fontSize, useColors, useThemedStyles, type Colors } fr
 import { Icon } from '@/icons';
 import { Button, ProductCard } from '@/components';
 import { useFeatureFlags } from '@/features/content';
-import { useSuggestions } from '@/features/catalog';
 import { useTranslation } from 'react-i18next';
 import { useCartStore } from '@/store/cartStore';
 import { useWishlistStore } from '@/store/wishlistStore';
@@ -21,8 +20,8 @@ const RESULT_TABS_KEY: ('suggestions' | 'orders' | 'prices')[] = ['suggestions',
 
 /** Upload d'une image vers l'endpoint /mobile/search/by-image */
 async function uploadImageSearch(uri: string): Promise<Product[]> {
+  // EXPO_PUBLIC_API_URL inclut déjà le préfixe /api (ex: https://api.expressafri.com/api)
   const apiBase = process.env.EXPO_PUBLIC_API_URL ?? '';
-  // Construire le FormData multipart
   const formData = new FormData();
   const filename = uri.split('/').pop() ?? 'photo.jpg';
   const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
@@ -33,7 +32,6 @@ async function uploadImageSearch(uri: string): Promise<Product[]> {
   const response = await fetch(`${apiBase}/mobile/search/by-image`, {
     method: 'POST',
     body: formData,
-    // Ne pas mettre Content-Type manuellement — React Native le gère avec boundary
   });
   if (!response.ok) throw new Error(`Erreur serveur ${response.status}`);
   return response.json();
@@ -56,22 +54,24 @@ export default function CameraScreen() {
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
 
-  // Fallback local quand l'upload échoue ou en mode dev
-  const localSuggestions = useSuggestions();
-
   const startScan = async (uri: string) => {
     setPhotoUri(uri);
     setPhase('scanning');
     setSearchError(null);
     try {
       const results = await uploadImageSearch(uri);
-      setSearchResults(results);
+      if (results.length === 0) {
+        setSearchResults([]);
+        setSearchError(t('camera.noResults', 'Aucun produit similaire trouvé.'));
+      } else {
+        setSearchResults(results);
+      }
       setPhase('results');
-    } catch {
-      // Fallback : afficher les suggestions locales avec message d'erreur discret
-      setSearchResults(localSuggestions);
-      setSearchError('Recherche approximative — connexion au serveur impossible.');
-      setPhase('results');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setSearchResults([]);
+      setSearchError(msg);
+      setPhase('error');
     }
   };
 
@@ -222,7 +222,12 @@ export default function CameraScreen() {
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.grid}>
             {searchError ? (
-              <Text style={styles.errorHint}>{searchError}</Text>
+              <View style={styles.errorBlock}>
+                <Text style={styles.errorHint}>{searchError}</Text>
+                <Pressable onPress={retake} style={styles.retryBtn}>
+                  <Text style={styles.retryText}>{t('common.retry', 'Réessayer')}</Text>
+                </Pressable>
+              </View>
             ) : null}
             {results.map((p) => (
               <View key={p.id} style={styles.gridItem}>
@@ -262,7 +267,10 @@ const makeStyles = (colors: Colors) => StyleSheet.create({
   scanSubText: { color: 'rgba(255,255,255,0.7)', fontSize: fontSize.sm, marginTop: spacing.xs },
   scanClose: { marginTop: spacing.xl, width: 52, height: 52, borderRadius: 26, borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)', alignItems: 'center', justifyContent: 'center' },
   // Résultats
-  errorHint: { color: colors.textMuted, fontSize: fontSize.xs, textAlign: 'center', paddingHorizontal: spacing.lg, paddingBottom: spacing.md, width: '100%' },
+  errorBlock: { width: '100%', alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.md },
+  errorHint: { color: colors.danger, fontSize: fontSize.sm, textAlign: 'center', paddingHorizontal: spacing.lg },
+  retryBtn: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.primary },
+  retryText: { color: colors.primary, fontWeight: '700', fontSize: fontSize.sm },
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, top: '30%', backgroundColor: colors.background, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, overflow: 'hidden' },
   sheetHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginTop: spacing.sm },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },

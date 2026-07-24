@@ -46,14 +46,7 @@ export function useStoreCatalog(activeId: string) {
   const categories: Category[] = categoriesQ.data ?? [];
   const active = categories.find((c) => c.id === activeId) ?? null;
 
-  // Les sous-catégories peuvent être :
-  // 1. Des objets Category (children de la catégorie active)
-  // 2. Des strings (noms de sous-catégories)
-  const subsRaw = subsQ.data ?? [];
-  // Normaliser en tableau de strings pour l'affichage
-  const subs: string[] = subsRaw.map((s: any) =>
-    typeof s === 'string' ? s : (s.name ?? s.slug ?? String(s)),
-  );
+  const subs: { id: string; name: string; image?: string }[] = subsQ.data ?? [];
 
   const categoryProducts: Product[] = productsQ.data ?? [];
 

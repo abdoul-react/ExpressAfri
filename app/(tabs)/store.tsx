@@ -226,23 +226,21 @@ export default function StoreScreen() {
 
           {/* Sous-catégories — 3 colonnes, vignette + nom */}
           <View style={styles.grid}>
-            {subs.map((label, i) => (
+            {subs.map((sub) => (
               <Pressable
-                key={label}
+                key={sub.id}
                 style={styles.tile}
-                onPress={() => router.push("/search")}
+                onPress={() => router.push(`/category/${sub.id}`)}
               >
                 <View style={styles.tileImgWrap}>
                   <Image
-                    source={{
-                      uri: `https://picsum.photos/seed/${activeId}${i}/240`,
-                    }}
+                    source={{ uri: sub.image ?? `https://picsum.photos/seed/${sub.id}/240` }}
                     style={styles.tileImg}
                     contentFit="cover"
                   />
                 </View>
                 <Text style={styles.tileLabel} numberOfLines={2}>
-                  {t(label)}
+                  {t(sub.name)}
                 </Text>
               </Pressable>
             ))}

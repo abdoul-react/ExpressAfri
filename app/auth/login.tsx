@@ -38,7 +38,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const { loginWithEmail, requestOtp } = useAuth();
+  const { loginWithEmail, requestOtp, socialLogin } = useAuth();
   const signIn = useAuthStore((s) => s.signIn);
   const continueAsGuest = useAuthStore((s) => s.continueAsGuest);
   const countryCode = useSettingsStore((s) => s.country);
@@ -91,10 +91,23 @@ export default function LoginScreen() {
     router.push("/auth/forgot-password");
   };
 
-  const socialSignIn = (_provider: string) => {
-    // La connexion sociale n'est pas encore branchée côté API : une fausse session
-    // locale (sans token) rendrait les commandes invisibles dans « Mes commandes »
-    setError(t("auth.socialUnavailable", "Connexion sociale bientôt disponible — utilisez l'email ou le téléphone"));
+  const socialSignIn = async (provider: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const response = await socialLogin(provider, {});
+      const user = response.user ?? { name: 'Utilisateur', email: '' };
+      const tokens = {
+        access: response.accessToken ?? response.access,
+        refresh: response.refreshToken ?? response.refresh,
+      };
+      signIn(user, tokens);
+      router.replace('/');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const guest = () => {

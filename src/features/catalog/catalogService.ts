@@ -18,7 +18,7 @@ export const catalogService = {
     return categoryDataSource.getCategories();
   },
 
-  async getSubcategories(categoryId: string): Promise<string[]> {
+  async getSubcategories(categoryId: string): Promise<{ id: string; name: string; image?: string }[]> {
     return categoryDataSource.getSubcategories(categoryId);
   },
 };

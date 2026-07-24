@@ -30,10 +30,15 @@ export async function requestPasswordReset(email: string) {
   return authDataSource.requestPasswordReset(email);
 }
 
+export async function socialLogin(provider: string, payload: { email?: string; name?: string; id?: string }) {
+  return authDataSource.socialLogin(provider, payload);
+}
+
 export default {
   requestOtp,
   verifyOtp,
   loginWithEmail,
   registerWithEmail,
   requestPasswordReset,
+  socialLogin,
 };
