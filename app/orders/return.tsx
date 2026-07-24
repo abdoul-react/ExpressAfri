@@ -9,7 +9,7 @@ import { useColors, useThemedStyles, type Colors, spacing, radius, fontSize } fr
 import { Icon } from '@/icons';
 import { ScreenHeader, Button, StatusState, SkeletonOrders, KeyboardScreen } from '@/components';
 import { useOrderDetail } from '@/features/orders';
-import { apiAdapter } from '@/infrastructure/api/apiAdapter';
+import { orderService } from '@/features/orders/orderService';
 
 // Motifs de retour proposés (le dernier ouvre un champ libre)
 const REASONS = [
@@ -55,8 +55,8 @@ export default function ReturnRequestScreen() {
     setIsSubmitting(true);
     setError(null);
     try {
-      await apiAdapter.post('/returns/mobile', {
-        orderId,
+      await orderService.submitReturn({
+        orderId: orderId!,
         reason: reasonText,
         items: items
           .filter((it) => selectedIds.includes(it.productId ?? it.id))

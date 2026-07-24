@@ -1,4 +1,5 @@
 import type { Order, OrderStatus } from "@/types";
+import type { ReturnPayload } from "@/infrastructure/data-source/OrderDataSource";
 import { orderDataSource } from "@/infrastructure/data-source";
 
 export const orderService = {
@@ -8,5 +9,9 @@ export const orderService = {
 
   async getOrderById(id: string): Promise<Order | undefined> {
     return orderDataSource.getOrderById(id);
+  },
+
+  async submitReturn(payload: ReturnPayload): Promise<{ ok: boolean }> {
+    return orderDataSource.submitReturn(payload);
   },
 };

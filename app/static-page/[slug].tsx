@@ -1,6 +1,6 @@
 import { ScreenHeader, StatusState } from "@/components";
 import { useColors } from "@/design-system";
-import { apiAdapter } from "@/infrastructure/api/apiAdapter";
+import { contentService } from "@/features/content";
 import { useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { View } from "react-native";
@@ -18,8 +18,7 @@ export default function StaticPageScreen() {
 
   const { data: page, isLoading, isError } = useQuery({
     queryKey: ["static-page", slug],
-    // Endpoint dédié mobile qui cherche par slug (pas par UUID)
-    queryFn: () => apiAdapter.get(`/mobile/static-pages/${slug}`),
+    queryFn: () => contentService.getStaticPageBySlug(slug!),
     enabled: !!slug,
   });
 

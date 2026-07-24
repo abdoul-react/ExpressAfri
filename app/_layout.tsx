@@ -17,8 +17,8 @@ import { syncAddressesFromServer } from '@/store/addressStore';
 import { ThemeProvider, lightColors, darkColors, type Colors } from '@/design-system';
 import { catalogService } from '@/features/catalog';
 import { contentService } from '@/features/content';
+import { paymentService } from '@/features/payment/paymentService';
 import { refreshProfile } from '@/features/profile';
-import { apiAdapter } from '@/infrastructure/api/apiAdapter';
 import { usePushRegistration } from '@/hooks/usePushRegistration';
 
 // Garder le splash NATIF affiché tant que la session n'est pas restaurée :
@@ -106,7 +106,7 @@ function AppShell() {
   // staleTime: 0 → toujours refetch au montage pour que les changements admin soient immédiats
   const { data: appSettings = [] } = useQuery<{ key: string; value: string }[]>({
     queryKey: ['app-settings'],
-    queryFn: () => apiAdapter.get('/mobile/settings'),
+    queryFn: () => contentService.getAppSettings(),
     staleTime: 0,
   });
 
@@ -196,22 +196,22 @@ function AppShell() {
       });
       queryClient.prefetchQuery({
         queryKey: ['payment-methods'],
-        queryFn: () => apiAdapter.get('/mobile/payment/methods'),
+        queryFn: () => paymentService.getMethods(),
         staleTime: 30_000,
       });
       queryClient.prefetchQuery({
         queryKey: ['app-settings'],
-        queryFn: () => apiAdapter.get('/mobile/settings'),
+        queryFn: () => contentService.getAppSettings(),
         staleTime: 30_000,
       });
       queryClient.prefetchQuery({
         queryKey: ['app-logos'],
-        queryFn: () => apiAdapter.get('/mobile/logos'),
+        queryFn: () => contentService.getAppLogos(),
         staleTime: 30_000,
       });
       queryClient.prefetchQuery({
         queryKey: ['feature-flags'],
-        queryFn: () => apiAdapter.get('/mobile/feature-flags'),
+        queryFn: () => contentService.getFeatureFlags(),
         staleTime: 30_000,
       });
     }

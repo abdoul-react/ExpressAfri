@@ -9,10 +9,10 @@ import { ApiWishlistDataSource } from "./api/ApiWishlistDataSource";
 import { ApiChatDataSource } from "./api/ApiChatDataSource";
 
 export type { DataSource } from "./DataSource";
-export type { ProductDataSource } from "./ProductDataSource";
+export type { ProductDataSource, ReviewPayload } from "./ProductDataSource";
 export type { CategoryDataSource } from "./CategoryDataSource";
 export type { OrderDataSource } from "./OrderDataSource";
-export type { PaymentDataSource, PaymentMethod } from "./PaymentDataSource";
+export type { PaymentDataSource, PaymentMethod, Wallet } from "./PaymentDataSource";
 export type { ContentDataSource, Shortcut, SuggestedPerson, FeedSection } from "./ContentDataSource";
 export type { AuthDataSource, AuthResult, OtpResult } from "./AuthDataSource";
 export type { AddressDataSource, Address } from "./AddressDataSource";

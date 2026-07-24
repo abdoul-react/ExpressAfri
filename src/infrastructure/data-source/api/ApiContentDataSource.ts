@@ -81,4 +81,28 @@ export class ApiContentDataSource implements ContentDataSource {
   async getShippingCountries(): Promise<string[]> {
     return apiAdapter.get("/mobile/shipping-countries");
   }
+
+  async getFeedSectionProducts(sectionId: string) {
+    return apiAdapter.get(`/mobile/feed-sections/${sectionId}/products`);
+  }
+
+  async listStaticPages(): Promise<{ slug: string; title: string; updatedAt: string }[]> {
+    return apiAdapter.get('/mobile/static-pages');
+  }
+
+  async getStaticPageBySlug(slug: string) {
+    return apiAdapter.get(`/mobile/static-pages/${slug}`);
+  }
+
+  async getAppSettings(): Promise<{ key: string; value: string }[]> {
+    return apiAdapter.get('/mobile/settings');
+  }
+
+  async getAppLogos(): Promise<any[]> {
+    return apiAdapter.get('/mobile/logos');
+  }
+
+  async getFeatureFlags(): Promise<any[]> {
+    return apiAdapter.get('/mobile/feature-flags');
+  }
 }

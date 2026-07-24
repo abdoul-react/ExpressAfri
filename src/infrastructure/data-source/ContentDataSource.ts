@@ -36,7 +36,13 @@ export interface ContentDataSource {
   getBanners(screen?: string): Promise<Banner[]>;
   getSuggestedPeople(): Promise<SuggestedPerson[]>;
   getFeedSections(): Promise<FeedSection[]>;
+  getFeedSectionProducts(sectionId: string): Promise<{ id: string; title: string; displayStyle: string; items: any[] }>;
   toggleFeedLike(postId: string): Promise<{ liked: boolean; likes: number }>;
   getTrending(): Promise<string[]>;
   getShippingCountries(): Promise<string[]>;
+  listStaticPages(): Promise<{ slug: string; title: string; updatedAt: string }[]>;
+  getStaticPageBySlug(slug: string): Promise<{ slug: string; title: string; content: string; updatedAt?: string }>;
+  getAppSettings(): Promise<{ key: string; value: string }[]>;
+  getAppLogos(): Promise<any[]>;
+  getFeatureFlags(): Promise<any[]>;
 }

@@ -1,4 +1,4 @@
-import type { PaymentMethod } from "@/infrastructure/data-source";
+import type { PaymentMethod, Wallet } from "@/infrastructure/data-source";
 import { paymentDataSource } from "@/infrastructure/data-source";
 
 export const paymentService = {
@@ -12,5 +12,9 @@ export const paymentService = {
 
   async initializePayment(orderId: string, method: string): Promise<{ paymentUrl?: string; status: string }> {
     return paymentDataSource.initializePayment(orderId, method);
+  },
+
+  async getWallet(): Promise<Wallet> {
+    return paymentDataSource.getWallet();
   },
 };

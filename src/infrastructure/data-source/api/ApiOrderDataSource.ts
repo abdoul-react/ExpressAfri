@@ -1,4 +1,4 @@
-import type { OrderDataSource } from "../OrderDataSource";
+import type { OrderDataSource, ReturnPayload } from "../OrderDataSource";
 import type { Order, OrderStatus } from "@/types";
 import { apiAdapter } from "@/infrastructure/api/apiAdapter";
 
@@ -8,7 +8,10 @@ export class ApiOrderDataSource implements OrderDataSource {
   }
 
   async getOrderById(id: string): Promise<Order | undefined> {
-    // Endpoint mobile : même format que la liste (items {productId, image}, address objet)
     return apiAdapter.get(`/orders/mobile/${id}`);
+  }
+
+  async submitReturn(payload: ReturnPayload): Promise<{ ok: boolean }> {
+    return apiAdapter.post('/returns/mobile', payload as unknown as Record<string, unknown>);
   }
 }

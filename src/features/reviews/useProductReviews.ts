@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiAdapter } from '@/infrastructure/api/apiAdapter';
+import { catalogService } from '@/features/catalog';
 import { resolveMediaUrl } from '@/utils/resolveMediaUrl';
 
 export type ProductReview = {
@@ -30,7 +30,7 @@ export function useProductReviews(productId: string | undefined) {
   const { data = [], isLoading } = useQuery<ProductReview[]>({
     queryKey: ['reviews', productId],
     queryFn: async () => {
-      const rows: ServerReview[] = await apiAdapter.get(`/mobile/products/${productId}/reviews`);
+      const rows: ServerReview[] = await catalogService.getProductReviews(productId!);
       return rows.map(normalize);
     },
     enabled: !!productId,
@@ -48,7 +48,7 @@ export function useSubmitReview(productId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { rating: number; title?: string; content?: string }) =>
-      apiAdapter.post(`/mobile/products/${productId}/reviews`, data),
+      catalogService.submitProductReview(productId, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['reviews', productId] });
       qc.invalidateQueries({ queryKey: ['product', productId] });

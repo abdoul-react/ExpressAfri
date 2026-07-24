@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { spacing, radius, fontSize, useColors, useThemedStyles, type Colors } from '@/design-system';
 import { Icon } from '@/icons';
 import { ScreenHeader, StatusState } from '@/components';
-import { apiAdapter } from '@/infrastructure/api/apiAdapter';
+import { contentService } from '@/features/content';
 
 type PageEntry = { slug: string; title: string; updatedAt: string };
 
@@ -23,7 +23,7 @@ export default function LegalScreen() {
 
   const { data: pages = [], isLoading, isError, refetch } = useQuery<PageEntry[]>({
     queryKey: ['static-pages-list'],
-    queryFn: () => apiAdapter.get('/mobile/static-pages'),
+    queryFn: () => contentService.listStaticPages(),
     staleTime: 5 * 60 * 1000,
   });
 

@@ -34,4 +34,28 @@ export const contentService = {
   async getShippingCountries(): Promise<string[]> {
     return contentDataSource.getShippingCountries();
   },
+
+  async getFeedSectionProducts(sectionId: string) {
+    return contentDataSource.getFeedSectionProducts(sectionId);
+  },
+
+  async listStaticPages() {
+    return contentDataSource.listStaticPages();
+  },
+
+  async getStaticPageBySlug(slug: string) {
+    return contentDataSource.getStaticPageBySlug(slug);
+  },
+
+  async getAppSettings() {
+    return contentDataSource.getAppSettings();
+  },
+
+  async getAppLogos() {
+    return contentDataSource.getAppLogos();
+  },
+
+  async getFeatureFlags() {
+    return contentDataSource.getFeatureFlags();
+  },
 };

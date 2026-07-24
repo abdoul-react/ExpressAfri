@@ -12,7 +12,6 @@ import { useCheckout } from "@/features/checkout";
 import { useCardBrands } from "@/features/payment";
 import { usePrice } from "@/hooks/usePrice";
 import { useAuthStore } from "@/store/authStore";
-import { apiAdapter } from "@/infrastructure/api/apiAdapter";
 import { Icon } from "@/icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -40,12 +39,11 @@ export default function CheckoutScreen() {
 
   // Un compte authentifié (avec vrai token) est requis : sans lui, la commande
   // serait créée anonyme et invisible dans « Mes commandes »
-  const hasToken = !!apiAdapter.getAccessToken();
   React.useEffect(() => {
-    if (!isAuthenticated || !hasToken) {
+    if (!isAuthenticated) {
       router.replace("/auth/login");
     }
-  }, [isAuthenticated, hasToken, router]);
+  }, [isAuthenticated, router]);
 
   const {
     items,
@@ -61,7 +59,7 @@ export default function CheckoutScreen() {
     refetch,
   } = useCheckout();
 
-  if (!isAuthenticated || !hasToken) return null;
+  if (!isAuthenticated) return null;
 
   if (isLoading) {
     return (

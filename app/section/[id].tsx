@@ -1,7 +1,7 @@
 import { ProductCard, SkeletonProductGrid, StatusState } from "@/components";
 import { spacing, useThemedStyles, type Colors } from "@/design-system";
 import { ScreenHeader } from "@/components";
-import { apiAdapter } from "@/infrastructure/api/apiAdapter";
+import { contentService } from "@/features/content";
 import { useCartStore } from "@/store/cartStore";
 import { useCartBadge } from "@/hooks/useCartBadge";
 import { useWishlistStore } from "@/store/wishlistStore";
@@ -35,7 +35,7 @@ export default function SectionScreen() {
 
   const { data, isLoading } = useQuery<SectionDetail>({
     queryKey: ["section", id],
-    queryFn: () => apiAdapter.get(`/mobile/feed-sections/${id}/products`),
+    queryFn: () => contentService.getFeedSectionProducts(id!),
     enabled: !!id,
   });
 

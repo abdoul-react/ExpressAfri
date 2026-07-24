@@ -1,4 +1,4 @@
-import type { PaymentDataSource } from "../PaymentDataSource";
+import type { PaymentDataSource, Wallet } from "../PaymentDataSource";
 import type { PaymentMethod } from "../PaymentDataSource";
 import { apiAdapter } from "@/infrastructure/api/apiAdapter";
 
@@ -13,5 +13,9 @@ export class ApiPaymentDataSource implements PaymentDataSource {
 
   async initializePayment(orderId: string, method: string): Promise<{ paymentUrl?: string; status: string }> {
     return apiAdapter.post(`/payments/${orderId}/initialize`, { method });
+  }
+
+  async getWallet(): Promise<Wallet> {
+    return apiAdapter.get("/mobile/wallet");
   }
 }

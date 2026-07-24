@@ -13,8 +13,16 @@ export type PaymentMethod = {
   supportedCountries?: string[];
 };
 
+export type Wallet = {
+  balance: number;
+  lifetime: number;
+  tier: string;
+  totalSavings: number;
+};
+
 export interface PaymentDataSource {
   getMethods(): Promise<PaymentMethod[]>;
   getCardBrands(): Promise<string[]>;
   initializePayment(orderId: string, method: string): Promise<{ paymentUrl?: string; status: string }>;
+  getWallet(): Promise<Wallet>;
 }
