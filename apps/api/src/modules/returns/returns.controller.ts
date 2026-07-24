@@ -1,14 +1,28 @@
-import { Controller, Get, Post, Put, Param, Query, Body, UseGuards, UnauthorizedException, NotFoundException, BadRequestException } from '@nestjs/common'
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger'
-import { ReturnsService } from './returns.service'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
-import { CustomerAuthGuard } from '../mobile/customer-auth.guard'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import { CustomerRoute } from '../../common/decorators/customer-route.decorator'
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Param,
+  Query,
+  Body,
+  UseGuards,
+  UnauthorizedException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ReturnsService } from './returns.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { Permissions } from '../../common/decorators/permissions.decorator';
+import { CustomerAuthGuard } from '../mobile/customer-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { CustomerRoute } from '../../common/decorators/customer-route.decorator';
 
 @ApiTags('Returns')
 @Controller('returns')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class ReturnsController {
   constructor(private service: ReturnsService) {}
@@ -20,8 +34,8 @@ export class ReturnsController {
   @UseGuards(CustomerAuthGuard)
   @ApiOperation({ summary: 'Retours du client connecté' })
   async mobileList(@CurrentUser() user: any) {
-    if (!user?.id) return []
-    return this.service.mobileList(user.id)
+    if (!user?.id) return [];
+    return this.service.mobileList(user.id);
   }
 
   @Post('mobile')
@@ -30,29 +44,50 @@ export class ReturnsController {
   @ApiOperation({ summary: 'Créer une demande de retour (client)' })
   async mobileCreate(
     @CurrentUser() user: any,
-    @Body() body: { orderId: string; reason: string; items?: { productId: string; quantity: number }[] },
+    @Body()
+    body: {
+      orderId: string;
+      reason: string;
+      items?: { productId: string; quantity: number }[];
+    },
   ) {
-    if (!user?.id) throw new UnauthorizedException('Connexion requise')
-    if (!body?.orderId) throw new BadRequestException('orderId requis')
-    if (!body?.reason?.trim()) throw new BadRequestException('Le motif est requis')
-    return this.service.mobileCreate(user.id, body)
+    if (!user?.id) throw new UnauthorizedException('Connexion requise');
+    if (!body?.orderId) throw new BadRequestException('orderId requis');
+    if (!body?.reason?.trim())
+      throw new BadRequestException('Le motif est requis');
+    return this.service.mobileCreate(user.id, body);
   }
 
   // ── Routes admin ──
 
+  @Get('summary')
+  @ApiOperation({ summary: 'Résumé des retours' })
+  async getSummary() {
+    return this.service.getSummary();
+  }
+
   @Get()
   @ApiOperation({ summary: 'Liste des retours' })
-  async list(@Query() query: any) { return this.service.list(query) }
+  async list(@Query() query: any) {
+    return this.service.list(query);
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Détail retour' })
-  async getById(@Param('id') id: string) { return this.service.getById(id) }
+  async getById(@Param('id') id: string) {
+    return this.service.getById(id);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Créer un retour' })
-  async create(@Body() body: any) { return this.service.create(body) }
+  async create(@Body() body: any) {
+    return this.service.create(body);
+  }
 
   @Put(':id/status')
+  @Permissions('returns.update')
   @ApiOperation({ summary: 'Changer le statut du retour' })
-  async updateStatus(@Param('id') id: string, @Body() body: any) { return this.service.updateStatus(id, body.status, body) }
+  async updateStatus(@Param('id') id: string, @Body() body: any) {
+    return this.service.updateStatus(id, body.status, body);
+  }
 }

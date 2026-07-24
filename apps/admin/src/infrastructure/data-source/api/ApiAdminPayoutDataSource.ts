@@ -4,6 +4,7 @@ import api from '@/lib/api'
 function toPayout(raw: any): Payout {
   return {
     ...raw,
+    status: raw.status === 'completed' ? 'paid' : raw.status,
     amount: Number(raw.amount),
     commissionRate: Number(raw.commissionRate),
     commissionAmount: Number(raw.commissionAmount),
@@ -13,7 +14,11 @@ function toPayout(raw: any): Payout {
 
 export class ApiAdminPayoutDataSource implements AdminPayoutDataSource {
   async list(params: PayoutQueryParams): Promise<PaginatedResult<Payout>> {
-    const { data } = await api.get('/payouts', { params })
+    const apiParams = { ...params }
+    if (apiParams.status === 'paid') {
+      apiParams.status = 'completed'
+    }
+    const { data } = await api.get('/payouts', { params: apiParams })
     return { ...data, data: data.data.map(toPayout) }
   }
 
@@ -38,7 +43,7 @@ export class ApiAdminPayoutDataSource implements AdminPayoutDataSource {
   }
 
   async processPayout(id: string): Promise<Payout> {
-    const { data } = await api.put(`/payouts/${id}/process`, { processedBy: '' })
+    const { data } = await api.put(`/payouts/${id}/process`)
     return toPayout(data)
   }
 
