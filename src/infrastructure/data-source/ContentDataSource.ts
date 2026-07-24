@@ -36,4 +36,7 @@ export interface ContentDataSource {
   getBanners(screen?: string): Promise<Banner[]>;
   getSuggestedPeople(): Promise<SuggestedPerson[]>;
   getFeedSections(): Promise<FeedSection[]>;
+  toggleFeedLike(postId: string): Promise<{ liked: boolean; likes: number }>;
+  getTrending(): Promise<string[]>;
+  getShippingCountries(): Promise<string[]>;
 }

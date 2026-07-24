@@ -19,6 +19,7 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { TokenBlacklistService } from './token-blacklist.service';
+import { MobileService } from '../mobile/mobile.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -34,7 +35,16 @@ export class AuthController {
     private auth: AuthService,
     private jwt: JwtService,
     private blacklist: TokenBlacklistService,
+    private mobile: MobileService,
   ) {}
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rafraîchir le token admin (délègue au service mobile)' })
+  async refresh(@Body() body: { refreshToken: string }) {
+    return this.mobile.refreshToken(body.refreshToken);
+  }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)

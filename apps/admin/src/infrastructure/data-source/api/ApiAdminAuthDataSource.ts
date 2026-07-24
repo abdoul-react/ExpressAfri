@@ -50,8 +50,8 @@ export class ApiAdminAuthDataSource implements AdminAuthDataSource {
     } catch {
       // on ignore les erreurs réseau — le nettoyage local se fait quoi qu'il arrive
     } finally {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('admin_token')
+      localStorage.removeItem('admin_refresh_token')
     }
   }
 

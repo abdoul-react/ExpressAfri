@@ -25,5 +25,6 @@ import { PushModule } from '../push/push.module';
   ],
   controllers: [MobileController],
   providers: [MobileService, CustomerJwtStrategy],
+  exports: [MobileService],
 })
 export class MobileModule {}

@@ -37,4 +37,13 @@ export class MockAuthDataSource implements AuthDataSource {
     await new Promise((r) => setTimeout(r, 250));
     return { ok: true };
   }
+
+  async socialLogin(_provider: string, _payload: { email?: string; name?: string; id?: string }): Promise<AuthResult> {
+    await new Promise((r) => setTimeout(r, 250));
+    return {
+      user: { id: "mock-user", name: "Utilisateur Mock", avatar: "https://picsum.photos/seed/me/120" },
+      accessToken: "mock-access-token",
+      refreshToken: "mock-refresh-token",
+    };
+  }
 }

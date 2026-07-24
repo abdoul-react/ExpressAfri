@@ -21,4 +21,8 @@ export class ApiAuthDataSource implements AuthDataSource {
   async requestPasswordReset(email: string): Promise<OtpResult> {
     return apiAdapter.post("/mobile/auth/password-reset", { email });
   }
+
+  async socialLogin(provider: string, payload: { email?: string; name?: string; id?: string }): Promise<AuthResult> {
+    return apiAdapter.post("/mobile/auth/social", { provider, ...payload });
+  }
 }

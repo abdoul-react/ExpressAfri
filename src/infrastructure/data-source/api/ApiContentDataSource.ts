@@ -69,4 +69,16 @@ export class ApiContentDataSource implements ContentDataSource {
         : s,
     );
   }
+
+  async toggleFeedLike(postId: string): Promise<{ liked: boolean; likes: number }> {
+    return apiAdapter.post(`/mobile/feed/${postId}/like`, {});
+  }
+
+  async getTrending(): Promise<string[]> {
+    return apiAdapter.get("/mobile/search/trending");
+  }
+
+  async getShippingCountries(): Promise<string[]> {
+    return apiAdapter.get("/mobile/shipping-countries");
+  }
 }

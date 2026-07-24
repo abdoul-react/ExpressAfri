@@ -10,4 +10,8 @@ export class ApiPaymentDataSource implements PaymentDataSource {
   async getCardBrands(): Promise<string[]> {
     return apiAdapter.get("/mobile/payment/card-brands");
   }
+
+  async initializePayment(orderId: string, method: string): Promise<{ paymentUrl?: string; status: string }> {
+    return apiAdapter.post(`/payments/${orderId}/initialize`, { method });
+  }
 }

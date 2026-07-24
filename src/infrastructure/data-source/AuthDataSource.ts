@@ -15,4 +15,5 @@ export interface AuthDataSource {
   loginWithEmail(email: string, password: string): Promise<AuthResult>;
   registerWithEmail(data: { firstName: string; lastName: string; email: string; password: string; phone?: string }): Promise<AuthResult>;
   requestPasswordReset(email: string): Promise<OtpResult>;
+  socialLogin(provider: string, payload: { email?: string; name?: string; id?: string }): Promise<AuthResult>;
 }

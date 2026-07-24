@@ -25,6 +25,18 @@ export class MockContentDataSource implements ContentDataSource {
   }
 
   async getFeedSections(): Promise<FeedSection[]> {
-    return []
+    return [];
+  }
+
+  async toggleFeedLike(_postId: string): Promise<{ liked: boolean; likes: number }> {
+    return { liked: true, likes: 0 };
+  }
+
+  async getTrending(): Promise<string[]> {
+    return [];
+  }
+
+  async getShippingCountries(): Promise<string[]> {
+    return [];
   }
 }

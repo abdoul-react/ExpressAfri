@@ -15,3 +15,7 @@ export type CheckoutPayload = {
 export async function createOrder(payload: CheckoutPayload) {
   return apiAdapter.post("/mobile/orders", payload as any);
 }
+
+export async function submitSuggestion(content: string): Promise<{ ok: boolean }> {
+  return apiAdapter.post("/mobile/suggestions", { content });
+}
