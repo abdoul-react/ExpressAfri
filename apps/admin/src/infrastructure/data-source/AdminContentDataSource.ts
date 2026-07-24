@@ -316,4 +316,8 @@ export interface AdminContentDataSource {
   updatePaymentMethod(id: string, data: UpdatePaymentMethodInput): Promise<PaymentMethod>
   deletePaymentMethod(id: string): Promise<void>
   uploadPaymentMethodLogo(id: string, file: File): Promise<PaymentMethod>
+
+  // ── Reviews ──
+  listReviews(params: Record<string, string>): Promise<any>
+  moderateReview(id: string, isActive: boolean): Promise<any>
 }

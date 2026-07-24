@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { adminAnalyticsService } from '../services/adminAnalyticsService'
+import { adminAnalyticsDataSource } from '@/infrastructure/data-source'
 
 export function useAdminAnalytics(period: string = 'month', opts: { enabled?: boolean } = {}) {
   return useQuery({
@@ -19,4 +20,12 @@ export function useCohortData() {
 
 export function useAbandonedCartData(from?: string, to?: string) {
   return useQuery({ queryKey: ['admin', 'analytics', 'abandoned', from, to], queryFn: () => adminAnalyticsService.getAbandonedCartData(from, to), placeholderData: (prev) => prev })
+}
+
+export function useStoreDashboard(enabled = true) {
+  return useQuery({
+    queryKey: ['admin', 'analytics', 'store-dashboard'],
+    queryFn: () => adminAnalyticsDataSource.getStoreDashboard(),
+    enabled,
+  })
 }

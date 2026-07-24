@@ -129,7 +129,7 @@ export function AdminLoyaltyPage() {
   async function handleAdjust() {
     if (!adjustModal) return
     try {
-      await adjust.mutateAsync({ customerId: adjustModal.id, points: adjustPoints, reason: adjustReason })
+      await adjust.mutateAsync({ customerId: adjustModal.id, balance: adjustPoints, reason: adjustReason })
       toast.success('Points ajustés')
       setAdjustModal(null); setAdjustPoints(0); setAdjustReason('')
     } catch {

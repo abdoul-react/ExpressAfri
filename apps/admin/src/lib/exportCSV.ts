@@ -8,21 +8,23 @@ import { toast } from './toast'
  * Convertit un tableau d'objets en chaîne CSV.
  * Les colonnes sont déduites des clés du premier objet.
  */
+const SEP = ';'
+
 function toCsvString(data: Record<string, unknown>[]): string {
   if (data.length === 0) return ''
 
   const headers = Object.keys(data[0])
   const escape = (val: unknown): string => {
     const str = val == null ? '' : String(val)
-    // Échappe les guillemets doubles et encapsule si nécessaire
-    if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+    if (str.includes('"') || str.includes(SEP) || str.includes('\n')) {
       return `"${str.replace(/"/g, '""')}"`
     }
     return str
   }
 
-  const rows = data.map((row) => headers.map((h) => escape(row[h])).join(','))
-  return [headers.map(escape).join(','), ...rows].join('\r\n')
+  // sep= directive → Excel détecte automatiquement le séparateur
+  const rows = data.map((row) => headers.map((h) => escape(row[h])).join(SEP))
+  return [`sep=${SEP}`, headers.map(escape).join(SEP), ...rows].join('\r\n')
 }
 
 /**

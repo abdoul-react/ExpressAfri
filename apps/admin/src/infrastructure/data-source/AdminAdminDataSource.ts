@@ -5,12 +5,14 @@ export interface CreateAdminInput {
   name: string
   password: string
   role: string
+  storeId?: string | null
 }
 
 export interface UpdateAdminInput {
   email?: string
   name?: string
   role?: string
+  storeId?: string | null
 }
 
 export interface AdminAdminDataSource {

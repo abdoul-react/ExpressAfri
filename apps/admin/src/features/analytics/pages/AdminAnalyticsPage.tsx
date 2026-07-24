@@ -27,8 +27,8 @@ import {
 } from '@/components/ui'
 import { CHART_COLORS } from '@/lib/chart'
 import { formatPrice } from '@/lib/format'
-function formatNum(n: number) { return n.toLocaleString('fr-FR') }
-function pct(n: number) { return (n >= 0 ? '+' : '') + n.toFixed(1) + '%' }
+function formatNum(n: number) { const v = Number(n); return isFinite(v) ? v.toLocaleString('fr-FR') : '0' }
+function pct(n: number) { const v = Number(n); return (v >= 0 ? '+' : '') + (isFinite(v) ? v.toFixed(1) : '0') + '%' }
 
 const PERIODS = [
   { value: 'today', label: "Aujourd'hui" },

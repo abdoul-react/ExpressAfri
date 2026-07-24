@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/api'
+import { adminContentService } from '../services/adminContentService'
 
 export interface Review {
   id: string
@@ -24,9 +24,7 @@ export function useAdminReviews(page: number, limit: number, statusFilter: 'all'
     queryFn: async () => {
       const params: Record<string, string> = { page: String(page), limit: String(limit) }
       if (statusFilter !== 'all') params.status = statusFilter
-      const { data } = await api.get('/reviews', { params })
-      if (Array.isArray(data)) return { data, total: data.length, page: 1 }
-      return data
+      return adminContentService.listReviews(params)
     },
   })
 }
@@ -35,7 +33,7 @@ export function useModerateReview() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      api.put(`/reviews/${id}/moderate`, { isActive }),
+      adminContentService.moderateReview(id, isActive),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'reviews'] })
     },

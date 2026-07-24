@@ -1,10 +1,12 @@
-import { pgTable, uuid, text, timestamp, decimal } from 'drizzle-orm/pg-core'
-import { stores } from './stores'
-import { admins } from './auth'
+import { pgTable, uuid, text, timestamp, decimal } from 'drizzle-orm/pg-core';
+import { stores } from './stores';
+import { admins } from './auth';
 
 export const payouts = pgTable('payouts', {
   id: uuid('id').primaryKey().defaultRandom(),
-  storeId: uuid('store_id').notNull().references(() => stores.id),
+  storeId: uuid('store_id')
+    .notNull()
+    .references(() => stores.id),
   type: text('type').notNull().default('seller'),
   recipientId: uuid('recipient_id').notNull(),
   recipientName: text('recipient_name').notNull(),
@@ -20,4 +22,4 @@ export const payouts = pgTable('payouts', {
   processedAt: timestamp('processed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-})
+});

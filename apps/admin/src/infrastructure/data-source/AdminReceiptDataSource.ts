@@ -29,6 +29,8 @@ export interface ReceiptSettings {
   logoUrl?: string
   showBarcode?: boolean
   accentColor?: string
+  nextNumber?: number
+  fiscalYear?: number
 }
 
 export interface ReceiptQueryParams {

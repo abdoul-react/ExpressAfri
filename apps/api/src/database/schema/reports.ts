@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, timestamp, jsonb } from 'drizzle-orm/pg-core';
 
 export const reports = pgTable('reports', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -16,4 +16,4 @@ export const reports = pgTable('reports', {
   evidence: jsonb('evidence'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-})
+});

@@ -295,4 +295,9 @@ export class MockAdminMessageDataSource implements AdminMessageDataSource {
     await this.delay(200)
     return { customerId, blocked }
   }
+
+  async getChatAwaitingCount() {
+    await this.delay()
+    return { count: 0 }
+  }
 }

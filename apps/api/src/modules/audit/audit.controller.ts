@@ -1,7 +1,8 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common'
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger'
-import { AuditService } from './audit.service'
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
+import { Controller, Get, Query, UseGuards, Res } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import type { Response } from 'express';
+import { AuditService } from './audit.service';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
 @ApiTags('Audit')
 @Controller('audit')
@@ -33,16 +34,39 @@ export class AuditController {
       from,
       to,
       search,
-    })
+    });
   }
 
   @Get('export')
-  @ApiOperation({ summary: "Export des logs d'audit (retourne JSON — converti en CSV côté admin)" })
+  @ApiOperation({ summary: "Export CSV des logs d'audit" })
   async export(
+    @Res() res: Response,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    // Le front-end (exportCSV.ts) se charge de la conversion JSON → CSV
-    return this.service.list({ from, to, limit: 10000 })
+    const result = await this.service.list({ from, to, limit: 10000 });
+    const rows = result.data;
+
+    const SEP = ';';
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const headers = ['Date', 'Acteur (Email)', 'Action', 'Ressource', 'ID Ressource', 'Statut', 'D\u00E9tails'];
+    const lines = rows.map((r: any) =>
+      [
+        r.createdAt ? new Date(r.createdAt).toLocaleString('fr-FR', { timeZone: 'UTC' }) : '',
+        r.actorEmail ?? r.actorId ?? '',
+        r.action ?? '',
+        r.resource ?? '',
+        r.resourceId ?? '',
+        r.status ?? '',
+        r.details ? JSON.stringify(r.details) : '',
+      ].map(esc).join(SEP),
+    );
+
+    const csv = '\uFEFF' + [`sep=${SEP}`, headers.map(esc).join(SEP), ...lines].join('\r\n');
+    const date = new Date().toISOString().split('T')[0];
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="audit-${date}.csv"`);
+    res.send(csv);
   }
 }

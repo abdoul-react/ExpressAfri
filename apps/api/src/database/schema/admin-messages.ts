@@ -1,5 +1,13 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, jsonb } from 'drizzle-orm/pg-core'
-import { admins } from './auth'
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  boolean,
+  integer,
+  jsonb,
+} from 'drizzle-orm/pg-core';
+import { admins } from './auth';
 
 export const adminTickets = pgTable('admin_tickets', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -8,26 +16,36 @@ export const adminTickets = pgTable('admin_tickets', {
   customerEmail: text('customer_email').notNull(),
   subject: text('subject').notNull(),
   lastMessage: text('last_message'),
-  status: text('status', { enum: ['open', 'in_progress', 'resolved', 'closed'] }).notNull().default('open'),
-  priority: text('priority', { enum: ['low', 'medium', 'high'] }).notNull().default('medium'),
+  status: text('status', {
+    enum: ['open', 'in_progress', 'resolved', 'closed'],
+  })
+    .notNull()
+    .default('open'),
+  priority: text('priority', { enum: ['low', 'medium', 'high'] })
+    .notNull()
+    .default('medium'),
   assignedTo: uuid('assigned_to').references(() => admins.id),
   unread: boolean('unread').default(true),
   messageCount: integer('message_count').default(0),
   chatConversationId: uuid('chat_conversation_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-})
+});
 
 export const ticketMessages = pgTable('ticket_messages', {
   id: uuid('id').primaryKey().defaultRandom(),
-  ticketId: uuid('ticket_id').notNull().references(() => adminTickets.id),
+  ticketId: uuid('ticket_id')
+    .notNull()
+    .references(() => adminTickets.id),
   senderId: text('sender_id').notNull(),
   senderName: text('sender_name').notNull(),
   senderType: text('sender_type', { enum: ['customer', 'admin'] }).notNull(),
   content: text('content').notNull(),
-  attachments: jsonb('attachments').$type<{ name: string; url: string }[]>().default([]),
+  attachments: jsonb('attachments')
+    .$type<{ name: string; url: string }[]>()
+    .default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-})
+});
 
 export const internalMessages = pgTable('internal_messages', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -38,6 +56,16 @@ export const internalMessages = pgTable('internal_messages', {
   subject: text('subject').notNull(),
   content: text('content').notNull(),
   isRead: boolean('is_read').default(false),
-  thread: jsonb('thread').$type<{ id: string; fromAdminId: string; fromAdminName: string; content: string; createdAt: string }[]>().default([]),
+  thread: jsonb('thread')
+    .$type<
+      {
+        id: string;
+        fromAdminId: string;
+        fromAdminName: string;
+        content: string;
+        createdAt: string;
+      }[]
+    >()
+    .default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-})
+});

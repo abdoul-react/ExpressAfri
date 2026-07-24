@@ -284,4 +284,15 @@ export class ApiAdminContentDataSource implements AdminContentDataSource {
     }
     return res.json() as Promise<PaymentMethod>
   }
+
+  async listReviews(params: Record<string, string>): Promise<any> {
+    const { data } = await api.get('/reviews', { params })
+    if (Array.isArray(data)) return { data, total: data.length, page: 1 }
+    return data
+  }
+
+  async moderateReview(id: string, isActive: boolean): Promise<any> {
+    const { data } = await api.put(`/reviews/${id}/moderate`, { isActive })
+    return data
+  }
 }

@@ -1,4 +1,11 @@
-import { pgTable, uuid, text, timestamp, integer, jsonb } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  integer,
+  jsonb,
+} from 'drizzle-orm/pg-core';
 
 export const outboxEvents = pgTable('outbox_events', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -14,4 +21,4 @@ export const outboxEvents = pgTable('outbox_events', {
   lastError: text('last_error'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   processedAt: timestamp('processed_at', { withTimezone: true }),
-})
+});

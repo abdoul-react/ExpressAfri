@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import api from '@/lib/api'
 import { adminMessageService } from '../services/adminMessageService'
 import type { SendInternalMessageInput } from '@/infrastructure/data-source/AdminMessageDataSource'
 
@@ -151,9 +152,20 @@ export function useSetCustomerChatBlocked() {
   })
 }
 
-/** Compte total non-lus (support + internes) — utilisé par le badge Sidebar */
+/** Conversations chat en attente de réponse admin (filtrées côté serveur par storeId pour les gérants) */
+export function useChatAwaitingCount() {
+  return useQuery({
+    queryKey: ['admin', 'messages', 'chat-awaiting-count'],
+    queryFn: () => adminMessageService.getChatAwaitingCount(),
+    refetchInterval: 15_000,
+    select: (d) => d.count,
+  })
+}
+
+/** Compte total non-lus (support + internes + chat en attente) — utilisé par le badge Sidebar */
 export function useUnreadMessageCount() {
   const { data: supportCount = 0 } = useUnreadSupportCount()
   const { data: internalCount = 0 } = useUnreadInternalCount()
-  return supportCount + internalCount
+  const { data: chatCount = 0 } = useChatAwaitingCount()
+  return supportCount + internalCount + chatCount
 }

@@ -1,7 +1,7 @@
-import { Injectable, Inject } from '@nestjs/common'
-import { sql } from 'drizzle-orm'
-import { DRIZZLE, type DrizzleDB } from '../database/database.module'
-import { REDIS, type RedisClient } from '../common/redis/redis.module'
+import { Injectable, Inject } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
+import { DRIZZLE, type DrizzleDB } from '../database/database.module';
+import { REDIS, type RedisClient } from '../common/redis/redis.module';
 
 @Injectable()
 export class HealthService {
@@ -11,29 +11,29 @@ export class HealthService {
   ) {}
 
   liveness() {
-    return { status: 'ok', timestamp: new Date().toISOString() }
+    return { status: 'ok', timestamp: new Date().toISOString() };
   }
 
   async readiness() {
-    const checks: Record<string, string> = {}
-    let allHealthy = true
+    const checks: Record<string, string> = {};
+    let allHealthy = true;
 
     try {
-      await this.db.execute(sql`SELECT 1`)
-      checks.database = 'healthy'
+      await this.db.execute(sql`SELECT 1`);
+      checks.database = 'healthy';
     } catch {
-      checks.database = 'unhealthy'
-      allHealthy = false
+      checks.database = 'unhealthy';
+      allHealthy = false;
     }
 
     try {
-      await this.redis.ping()
-      checks.redis = 'healthy'
+      await this.redis.ping();
+      checks.redis = 'healthy';
     } catch {
-      checks.redis = 'unhealthy'
-      allHealthy = false
+      checks.redis = 'unhealthy';
+      allHealthy = false;
     }
 
-    return { status: allHealthy ? 'ok' : 'error', ...checks }
+    return { status: allHealthy ? 'ok' : 'error', ...checks };
   }
 }

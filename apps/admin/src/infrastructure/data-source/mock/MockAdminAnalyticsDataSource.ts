@@ -69,4 +69,14 @@ export class MockAdminAnalyticsDataSource implements AdminAnalyticsDataSource {
     ].join('\n')
     return new Blob([csv], { type: 'text/csv' })
   }
+
+  async getStoreDashboard() {
+    await this.delay(400)
+    return {
+      orders: { total: 12, pending: 3 },
+      revenue: { total: 450000, month: 120000, growth: 8.5 },
+      products: { active: 24 },
+      recentOrders: [],
+    }
+  }
 }

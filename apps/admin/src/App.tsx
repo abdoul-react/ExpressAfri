@@ -8,6 +8,8 @@ import { TooltipProvider } from '@/components/ui'
 import { ProtectedRoute } from '@/components/guards/ProtectedRoute'
 import { AdminLayout } from '@/components/layout/AdminLayout'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
+import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage'
+import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage'
 import { UnauthorizedPage } from '@/pages/UnauthorizedPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { LoadingBlock } from '@/components/ui/Spinner'
@@ -88,6 +90,8 @@ export default function App() {
           <ThemedToaster />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
 
             <Route

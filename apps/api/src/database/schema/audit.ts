@@ -1,4 +1,11 @@
-import { pgTable, uuid, text, timestamp, jsonb, boolean } from 'drizzle-orm/pg-core'
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  jsonb,
+  boolean,
+} from 'drizzle-orm/pg-core';
 
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -14,4 +21,4 @@ export const auditLogs = pgTable('audit_logs', {
   status: text('status').notNull().default('success'),
   errorMessage: text('error_message'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-})
+});

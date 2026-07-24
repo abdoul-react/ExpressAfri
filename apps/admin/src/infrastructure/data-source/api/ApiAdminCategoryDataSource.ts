@@ -3,8 +3,8 @@ import api from '@/lib/api'
 
 export class ApiAdminCategoryDataSource implements AdminCategoryDataSource {
   async list(): Promise<Category[]> {
-    const { data } = await api.get('/categories')
-    return data as Category[]
+    const { data } = await api.get('/categories', { params: { limit: 500 } })
+    return (Array.isArray(data) ? data : (data.data ?? [])) as Category[]
   }
 
   async getById(id: string): Promise<Category> {

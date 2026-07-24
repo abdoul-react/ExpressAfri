@@ -4,14 +4,24 @@ import type {
   UpdateKycPayload,
   UpdateDocumentPayload,
   UpdateCommissionPayload,
+  UpdateStorePayload,
   StoreManager,
   CreateManagerPayload,
   SetManagerActivePayload,
   ResetManagerPasswordPayload,
+  CreateStorePayload,
 } from '@/infrastructure/data-source/AdminStoreDataSource'
 import { toServiceError } from '@/lib/service-error'
 
 class AdminStoreService {
+  async create(payload: CreateStorePayload) {
+    try {
+      return await adminStoreDataSource.create(payload)
+    } catch (err) {
+      throw toServiceError(err, 'Création de la boutique')
+    }
+  }
+
   async list(params: StoreQueryParams) {
     try {
       return await adminStoreDataSource.list(params)
@@ -26,6 +36,22 @@ class AdminStoreService {
       throw toServiceError(err, 'Récupération de la boutique')
     }
   }
+  async update(id: string, payload: UpdateStorePayload) {
+    try {
+      return await adminStoreDataSource.update(id, payload)
+    } catch (err) {
+      throw toServiceError(err, 'Mise à jour de la boutique')
+    }
+  }
+
+  async delete(id: string) {
+    try {
+      return await adminStoreDataSource.delete(id)
+    } catch (err) {
+      throw toServiceError(err, 'Suppression de la boutique')
+    }
+  }
+
   async approve(id: string) {
     try {
       return await adminStoreDataSource.approve(id)

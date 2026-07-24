@@ -7,6 +7,7 @@ import { useAdminAssignments, useAssignDelivery, useUpdateAssignmentStatus } fro
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import type { DeliveryPerson, DeliveryCountry, DeliveryPersonQueryParams, CreateDeliveryPersonInput, UpdateDeliveryPersonInput, DeliveryAssignment } from '@/infrastructure/data-source/AdminDeliveryDataSource'
 import { GEOGRAPHY } from '../services/geographyService'
+import { WORLD_COUNTRIES } from '@/lib/countries'
 import { resolveAdminMediaUrl } from '@/lib/resolveAdminMediaUrl'
 import { exportToCSV } from '@/lib/exportCSV'
 import {
@@ -176,7 +177,7 @@ export function AdminDeliveryListPage() {
       align: 'right',
       cell: (p) => (
         <div className="flex items-center justify-end gap-1">
-          <PermissionGuard permission="shipping.update">
+          <PermissionGuard permission="delivery.manage">
             <Button
               variant="ghost" size="sm" leftIcon={Pencil}
               onClick={(e) => { e.stopPropagation(); setEditPerson(p) }}
@@ -196,7 +197,7 @@ export function AdminDeliveryListPage() {
           >
             Assignations
           </Button>
-          <PermissionGuard permission="shipping.delete">
+          <PermissionGuard permission="delivery.manage">
             <Button
               variant="ghost" size="sm"
               className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/10"
@@ -218,12 +219,12 @@ export function AdminDeliveryListPage() {
         description={data ? `${data.total} livreur${data.total > 1 ? 's' : ''} partenaire${data.total > 1 ? 's' : ''}` : 'Gestion des livreurs partenaires'}
         actions={
           <>
-            <PermissionGuard permission="shipping.read">
+            <PermissionGuard permission="delivery.manage">
               <Button variant="outline" leftIcon={Download} onClick={handleExport}>
                 Exporter CSV
               </Button>
             </PermissionGuard>
-            <PermissionGuard permission="shipping.create">
+            <PermissionGuard permission="delivery.manage">
               <Button leftIcon={Plus} onClick={() => setShowCreate(true)}>
                 Nouveau livreur
               </Button>
@@ -245,7 +246,7 @@ export function AdminDeliveryListPage() {
           value={countryFilter}
           onChange={handleCountryFilterChange}
           placeholder="Tous les pays"
-          options={GEOGRAPHY.map((c) => ({ value: c.code, label: `${c.flag} ${c.name}` }))}
+          options={WORLD_COUNTRIES.map((c) => ({ value: c.code, label: `${c.flag} ${c.name}` }))}
         />
         <Select
           size="sm"
@@ -343,10 +344,8 @@ function DeliveryPersonFormModal({ person, onClose }: { person?: DeliveryPerson;
   const create = useCreateDeliveryPerson()
   const update = useUpdateDeliveryPerson()
 
-  const defaultCountry = GEOGRAPHY[0]
-  const initialCountry: DeliveryCountry = person
-    ? person.country
-    : { code: defaultCountry.code, name: defaultCountry.name }
+  const defaultCountry = WORLD_COUNTRIES.find((c) => c.code === 'NE') ?? WORLD_COUNTRIES[0]
+  const initialCountry: DeliveryCountry = person?.country ?? { code: defaultCountry.code, name: defaultCountry.name }
 
   const [selectedCountryCode, setSelectedCountryCode] = useState(initialCountry.code)
   const [form, setForm] = useState<CreateDeliveryPersonInput>({
@@ -369,13 +368,14 @@ function DeliveryPersonFormModal({ person, onClose }: { person?: DeliveryPerson;
   const saving = create.isPending || update.isPending
 
   function handleCountryChange(code: string) {
+    const wc = WORLD_COUNTRIES.find((c) => c.code === code)
+    if (!wc) return
     const geo = GEOGRAPHY.find((c) => c.code === code)
-    if (!geo) return
     setSelectedCountryCode(code)
     setForm((f) => ({
       ...f,
-      country: { code: geo.code, name: geo.name },
-      region: geo.regions[0] ?? '',
+      country: { code: wc.code, name: wc.name },
+      region: geo?.regions[0] ?? '',
     }))
   }
 
@@ -484,17 +484,26 @@ function DeliveryPersonFormModal({ person, onClose }: { person?: DeliveryPerson;
                 className="w-full"
                 value={selectedCountryCode}
                 onChange={handleCountryChange}
-                options={GEOGRAPHY.map((c) => ({ value: c.code, label: `${c.flag} ${c.name}` }))}
+                options={WORLD_COUNTRIES.map((c) => ({ value: c.code, label: `${c.flag} ${c.name}` }))}
               />
             </FormField>
             <FormField label="Région / Ville" required>
-              <Select
-                size="sm"
-                className="w-full"
-                value={form.region}
-                onChange={(v) => setForm({ ...form, region: v })}
-                options={regions.map((r) => ({ value: r, label: r }))}
-              />
+              {regions.length > 0 ? (
+                <Select
+                  size="sm"
+                  className="w-full"
+                  value={form.region}
+                  onChange={(v) => setForm({ ...form, region: v })}
+                  options={regions.map((r) => ({ value: r, label: r }))}
+                />
+              ) : (
+                <Input
+                  size="sm"
+                  value={form.region}
+                  onChange={(e) => setForm({ ...form, region: e.target.value })}
+                  placeholder="Ex : Paris, Lyon, Casablanca…"
+                />
+              )}
             </FormField>
           </div>
         </div>

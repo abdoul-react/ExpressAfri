@@ -12,35 +12,45 @@ import {
   Wallet,
 } from 'lucide-react'
 import { useAdminAuth } from '@/features/auth'
-import { useAdminAnalytics } from '@/features/analytics/hooks/useAdminAnalytics'
+import { useAdminAnalytics, useStoreDashboard } from '@/features/analytics/hooks/useAdminAnalytics'
 import type { AnalyticsChartDataPoint, AnalyticsTopItem, GeographicData } from '@/infrastructure/data-source/AdminAnalyticsDataSource'
 import {
   AreaChartCard,
+  Badge,
   Button,
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
   DonutChartCard,
   PageHeader,
   Skeleton,
   StatCard,
+  StatusBadge,
   Tabs,
   TabsList,
   TabsTrigger,
 } from '@/components/ui'
 import { CHART_COLORS } from '@/lib/chart'
+import { ORDER_STATUS } from '@/lib/status'
+import { formatPrice, formatDate } from '@/lib/format'
+import { WORLD_COUNTRIES } from '@/lib/countries'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmtCurrency(v: number): string {
-  if (v >= 1_000_000_000) return (v / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + ' Md'
-  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1).replace(/\.0$/, '') + ' M'
-  if (v >= 1_000) return (v / 1_000).toFixed(0) + ' K'
-  return v.toString()
+  const n = Number(v)
+  if (!isFinite(n)) return '0'
+  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + ' Md'
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + ' M'
+  if (n >= 1_000) return (n / 1_000).toFixed(0) + ' K'
+  return n.toString()
 }
 
 function fmtNumber(v: number): string {
-  return new Intl.NumberFormat('fr-FR').format(v)
+  const n = Number(v)
+  if (!isFinite(n)) return '0'
+  return new Intl.NumberFormat('fr-FR').format(n)
 }
 
 function fmtGrowth(g: number): string {
@@ -185,11 +195,7 @@ function GeographicTable({
 }
 
 function getFlagEmoji(code: string): string {
-  const map: Record<string, string> = {
-    CI: '🇨🇮', SN: '🇸🇳', CM: '🇨🇲', ML: '🇲🇱', BF: '🇧🇫',
-    NE: '🇳🇪', TG: '🇹🇬', BJ: '🇧🇯', GH: '🇬🇭', NG: '🇳🇬',
-  }
-  return map[code] ?? '🌍'
+  return WORLD_COUNTRIES.find((c) => c.code === code)?.flag ?? '🌍'
 }
 
 // ─── Sélecteur de période ─────────────────────────────────────────────────────
@@ -208,27 +214,114 @@ export function DashboardPage() {
   const { admin } = useAdminAuth()
   const navigate = useNavigate()
   const [period, setPeriod] = useState<string>('month')
-  // Gérant de boutique : le dashboard agrège des données de TOUTE la plateforme —
-  // on l'amène directement à ses produits.
   const isStoreManager = !!admin?.storeId
   const { data, isLoading, isError } = useAdminAnalytics(period, { enabled: !isStoreManager })
+  const { data: storeData, isLoading: storeLoading } = useStoreDashboard(isStoreManager)
 
   if (isStoreManager) {
+    const sd = storeData
+    const revenueGrowth = sd?.revenue?.growth ?? 0
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
-          Bienvenue{admin?.name ? `, ${admin.name}` : ''}
-        </h1>
-        <p className="max-w-md text-sm text-gray-500 dark:text-gray-400">
-          Vous gérez votre boutique : retrouvez vos produits et vos commandes dans le menu.
-        </p>
-        <div className="flex gap-3">
-          <Button leftIcon={Package} onClick={() => navigate('/products')}>
-            Mes produits
-          </Button>
-          <Button variant="outline" leftIcon={ShoppingCart} onClick={() => navigate('/orders')}>
-            Mes commandes
-          </Button>
+      <div className="space-y-6">
+        <PageHeader
+          title={`Bonjour${admin?.name ? `, ${admin.name}` : ''} 👋`}
+          description="Tableau de bord de votre boutique"
+          actions={
+            <div className="flex gap-2">
+              <Button leftIcon={Package} variant="outline" onClick={() => navigate('/products')}>
+                Produits
+              </Button>
+              <Button leftIcon={ShoppingCart} onClick={() => navigate('/orders')}>
+                Commandes
+              </Button>
+            </div>
+          }
+        />
+
+        {/* KPIs boutique */}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Revenus totaux"
+            value={sd ? `${fmtCurrency(sd.revenue.total)} FCFA` : '—'}
+            sub={sd ? `Ce mois : ${fmtCurrency(sd.revenue.month)} FCFA` : undefined}
+            trend={sd ? { value: revenueGrowth } : undefined}
+            icon={Wallet}
+            tone="primary"
+            loading={storeLoading}
+          />
+          <StatCard
+            label="Commandes"
+            value={sd ? fmtNumber(sd.orders.total) : '—'}
+            sub={sd ? `${fmtNumber(sd.orders.pending)} en attente` : undefined}
+            icon={ShoppingBag}
+            tone="success"
+            loading={storeLoading}
+          />
+          <StatCard
+            label="Produits actifs"
+            value={sd ? fmtNumber(sd.products.active) : '—'}
+            icon={Package}
+            tone="info"
+            loading={storeLoading}
+          />
+          <StatCard
+            label="Commandes en attente"
+            value={sd ? fmtNumber(sd.orders.pending) : '—'}
+            sub="À traiter en priorité"
+            icon={ShoppingCart}
+            tone="purple"
+            loading={storeLoading}
+          />
+        </div>
+
+        {/* Commandes récentes */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Commandes récentes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {storeLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : !sd?.recentOrders?.length ? (
+              <p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">Aucune commande pour l'instant</p>
+            ) : (
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                {sd.recentOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex cursor-pointer items-center justify-between py-3 hover:bg-gray-50 dark:hover:bg-gray-800/40 px-1 rounded"
+                    onClick={() => navigate(`/orders/${order.id}`)}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{order.reference ?? order.id.slice(0, 8)}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">{formatDate(order.createdAt)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <StatusBadge map={ORDER_STATUS} value={order.status} />
+                      <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {formatPrice(order.total)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Raccourcis */}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: 'Voir toutes les commandes', path: '/orders', icon: ShoppingCart },
+            { label: 'Gérer les produits', path: '/products', icon: Package },
+          ].map((link) => (
+            <Button key={link.path} variant="outline" leftIcon={link.icon} rightIcon={ArrowRight}
+              onClick={() => navigate(link.path)} className="w-full justify-between">
+              <span className="flex-1 truncate text-left">{link.label}</span>
+            </Button>
+          ))}
         </div>
       </div>
     )
@@ -303,7 +396,7 @@ export function DashboardPage() {
         />
         <StatCard
           label="Taux de conversion"
-          value={s ? s.conversionRate.toFixed(1) + '%' : '—'}
+          value={s?.conversionRate != null ? Number(s.conversionRate).toFixed(1) + '%' : '—'}
           sub={s ? `${fmtNumber(s.products.sold)} produits vendus` : undefined}
           icon={TrendingUp}
           tone="purple"
@@ -320,7 +413,7 @@ export function DashboardPage() {
           </Card>
         ) : (
           <AreaChartCard
-            title="Revenus (30 j)"
+            title={`Revenus (${PERIODS.find((p) => p.value === period)?.label ?? '30 j'})`}
             data={toChartData(data?.revenueChart ?? [])}
             color={CHART_COLORS.primary}
             height={220}
@@ -341,7 +434,7 @@ export function DashboardPage() {
           </Card>
         ) : (
           <AreaChartCard
-            title="Commandes (30 j)"
+            title={`Commandes (${PERIODS.find((p) => p.value === period)?.label ?? '30 j'})`}
             data={toChartData(data?.ordersChart ?? [])}
             color={CHART_COLORS.secondary}
             height={220}
@@ -359,16 +452,34 @@ export function DashboardPage() {
 
       {/* Top produits + Top boutiques */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <TopList
-          title="Top produits"
-          items={data?.topProducts ?? []}
-          loading={isLoading}
-        />
-        <TopList
-          title="Top boutiques"
-          items={data?.topStores ?? []}
-          loading={isLoading}
-        />
+        <TopList title="Top produits" items={data?.topProducts ?? []} loading={isLoading} />
+        <TopList title="Top boutiques" items={data?.topStores ?? []} loading={isLoading} />
+      </div>
+
+      {/* Top catégories */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TopList title="Top catégories" items={data?.topCategories ?? []} loading={isLoading} valueLabel="FCFA" />
+        {isLoading ? (
+          <Card>
+            <Skeleton className="mb-4 h-5 w-32" />
+            <Skeleton className="h-[220px] w-full" />
+          </Card>
+        ) : (
+          <AreaChartCard
+            title="Nouveaux clients"
+            data={toChartData(data?.customerChart ?? [])}
+            color={CHART_COLORS.secondary}
+            height={220}
+            valueFormatter={(v) => `${fmtNumber(v)} clients`}
+            headerRight={
+              data?.summary && (
+                <span className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                  +{fmtNumber(data.summary.customers.new)} ce mois
+                </span>
+              )
+            }
+          />
+        )}
       </div>
 
       {/* Revenus par paiement + Géo */}

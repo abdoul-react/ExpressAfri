@@ -1,5 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminStoreService } from '../services/adminStoreService'
+import type { CreateStorePayload } from '@/infrastructure/data-source/AdminStoreDataSource'
+
+export function useCreateStore() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateStorePayload) => adminStoreService.create(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stores'] })
+    },
+  })
+}
 
 export function useApproveStore() {
   const queryClient = useQueryClient()

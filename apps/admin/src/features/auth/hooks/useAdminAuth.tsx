@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import type { AdminUser } from '@/types/AdminUser'
 import type { Permission } from '@/types/Permission'
+import type { LoginResponse } from '@/infrastructure/data-source/AdminAuthDataSource'
 import { adminAuthService } from '../services/adminAuthService'
 import { hasPermission as checkPermission } from '@/lib/permissions'
 
@@ -8,7 +9,7 @@ interface AdminAuthContextValue {
   admin: AdminUser | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<LoginResponse>
   logout: () => Promise<void>
   hasPermission: (permission: Permission) => boolean
   hasAnyPermission: (permissions: Permission[]) => boolean
@@ -45,10 +46,13 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       })
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string): Promise<LoginResponse> => {
     const result = await adminAuthService.login({ email, password })
-    adminAuthService.persistAuth(result.accessToken, result.user)
-    setAdmin(result.user)
+    if (!result.requiresTotp) {
+      adminAuthService.persistAuth(result.accessToken, result.user)
+      setAdmin(result.user)
+    }
+    return result
   }, [])
 
   const logout = useCallback(async () => {

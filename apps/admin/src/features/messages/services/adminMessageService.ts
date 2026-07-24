@@ -131,6 +131,14 @@ class AdminMessageService {
       throw toServiceError(err, 'Blocage/déblocage du chat client')
     }
   }
+
+  async getChatAwaitingCount() {
+    try {
+      return await adminMessageDataSource.getChatAwaitingCount()
+    } catch (err) {
+      throw toServiceError(err, 'Nb conversations en attente')
+    }
+  }
 }
 
 export const adminMessageService = new AdminMessageService()

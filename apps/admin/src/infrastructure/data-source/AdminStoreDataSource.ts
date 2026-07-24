@@ -135,9 +135,29 @@ export interface ResetManagerPasswordPayload {
 
 // ─── DataSource ───────────────────────────────────────────────────────────────
 
+export interface CreateStorePayload {
+  name: string
+  email: string
+  phone?: string
+  country?: string
+  commissionRate?: number
+}
+
+export interface UpdateStorePayload {
+  name?: string
+  email?: string
+  phone?: string
+  country?: string
+  city?: string
+  description?: string
+}
+
 export interface AdminStoreDataSource {
   list(params: StoreQueryParams): Promise<PaginatedResult<AdminStore>>
   getById(id: string): Promise<AdminStore>
+  create(payload: CreateStorePayload): Promise<AdminStore>
+  update(id: string, payload: UpdateStorePayload): Promise<AdminStore>
+  delete(id: string): Promise<void>
   approve(id: string): Promise<AdminStore>
   reject(id: string, reason?: string): Promise<AdminStore>
   suspend(id: string, reason?: string): Promise<AdminStore>

@@ -42,8 +42,38 @@ export class ApiAdminUserDataSource implements AdminUserDataSource {
     return toCustomer(data as Record<string, unknown>)
   }
 
-  async getCustomerOrders(_customerId: string): Promise<OrderDTO[]> {
-    throw new Error('Customer orders are not available via API')
+  async getCustomerOrders(customerId: string): Promise<OrderDTO[]> {
+    const { data } = await api.get('/orders', { params: { customerId, limit: 50 } })
+    const items = (data.data ?? data) as Record<string, unknown>[]
+    return items.map((raw) => ({
+      id: raw.id as string,
+      orderNumber: (raw.orderNumber ?? raw.id) as string,
+      customerId: raw.customerId as string,
+      customerName: (raw.customerName ?? '') as string,
+      customerEmail: raw.customerEmail as string | undefined,
+      customerPhone: raw.customerPhone as string | undefined,
+      items: (raw.items ?? []) as OrderDTO['items'],
+      subtotal: Number(raw.subtotal ?? 0),
+      shippingCost: Number(raw.shippingCost ?? 0),
+      taxAmount: Number(raw.taxAmount ?? 0),
+      discountAmount: Number(raw.discountAmount ?? 0),
+      total: Number(raw.total ?? 0),
+      status: raw.status as string,
+      currency: (raw.currency ?? 'XOF') as string,
+      paymentMethod: raw.paymentMethod as string | undefined,
+      paymentStatus: raw.paymentStatus as string | undefined,
+      shippingAddress: raw.shippingAddress as Record<string, unknown> | undefined,
+      trackingNumber: raw.trackingNumber as string | undefined,
+      notes: raw.notes as string | undefined,
+      createdAt: raw.createdAt as string,
+      updatedAt: raw.updatedAt as string,
+      statusLog: ((raw.statusLog ?? []) as any[]).map((e) => ({
+        status: e.toStatus,
+        timestamp: e.createdAt,
+        note: e.reason,
+        updatedBy: e.changedBy,
+      })),
+    }))
   }
 
   async updateCustomer(id: string, payload: CustomerUpdateInput): Promise<CustomerDTO> {
@@ -55,11 +85,11 @@ export class ApiAdminUserDataSource implements AdminUserDataSource {
     await api.delete(`/customers/${id}`)
   }
 
-  async banCustomer(id: string): Promise<void> {
-    await api.put(`/customers/${id}`, { isBanned: true })
+  async banCustomer(id: string, reason?: string): Promise<void> {
+    await api.post(`/customers/${id}/ban`, { reason: reason ?? '' })
   }
 
   async unbanCustomer(id: string): Promise<void> {
-    await api.put(`/customers/${id}`, { isBanned: false })
+    await api.post(`/customers/${id}/unban`)
   }
 }

@@ -11,6 +11,7 @@ function toAdminUser(raw: any): AdminUser {
     isSuperAdmin: raw.isSuperAdmin ?? false,
     permissions: raw.permissions ?? (raw.isSuperAdmin ? '*' : []),
     storeId: raw.storeId ?? null,
+    totpEnabled: raw.totpEnabled ?? false,
   }
 }
 
@@ -18,6 +19,9 @@ export class ApiAdminAuthDataSource implements AdminAuthDataSource {
   async login(request: LoginRequest): Promise<LoginResponse> {
     try {
       const res = await api.post('/auth/login', request)
+      if (res.data.requiresTotp) {
+        return { requiresTotp: true, pendingToken: res.data.pendingToken }
+      }
       return {
         accessToken: res.data.accessToken,
         user: toAdminUser(res.data.admin),
@@ -41,12 +45,19 @@ export class ApiAdminAuthDataSource implements AdminAuthDataSource {
   }
 
   async logout(): Promise<void> {
-    // no-op for JWT-based auth
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // on ignore les erreurs réseau — le nettoyage local se fait quoi qu'il arrive
+    } finally {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+    }
   }
 
   async verifyPassword(email: string, password: string): Promise<boolean> {
     try {
-      await api.post('/auth/login', { email, password })
+      await api.post('/auth/verify-password', { email, password })
       return true
     } catch {
       return false

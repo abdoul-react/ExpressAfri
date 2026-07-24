@@ -71,7 +71,7 @@ export function AdminAuditPage() {
       cell: (entry) => (
         <div className="flex items-center gap-2.5">
           <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-            {entry.actorEmail[0].toUpperCase()}
+            {(entry.actorEmail ?? '?')[0].toUpperCase()}
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{entry.actorEmail}</p>

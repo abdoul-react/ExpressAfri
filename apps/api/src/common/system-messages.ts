@@ -4,15 +4,19 @@
  * Langue par défaut : 'fr'.
  */
 
-type Lang = 'fr' | 'en' | 'ar'
+type Lang = 'fr' | 'en' | 'ar';
 
 function lang(l: string | null | undefined): Lang {
-  if (l === 'en' || l === 'ar') return l
-  return 'fr'
+  if (l === 'en' || l === 'ar') return l;
+  return 'fr';
 }
 
-export function orderStatusMessage(status: string, orderNumber: string, language?: string | null): string | null {
-  const l = lang(language)
+export function orderStatusMessage(
+  status: string,
+  orderNumber: string,
+  language?: string | null,
+): string | null {
+  const l = lang(language);
   const maps: Record<Lang, Record<string, string>> = {
     fr: {
       confirmed: `Bonne nouvelle ! Votre commande ${orderNumber} a été confirmée. Nous préparons votre colis. 📦`,
@@ -35,40 +39,43 @@ export function orderStatusMessage(status: string, orderNumber: string, language
       cancelled: `تم إلغاء طلبك ${orderNumber}. تواصل معنا لأي استفسار.`,
       refunded: `تم بدء استرداد المبلغ لطلبك ${orderNumber}.`,
     },
-  }
-  return maps[l][status] ?? null
+  };
+  return maps[l][status] ?? null;
 }
 
 export function receiptMessage(
   r: { orderNumber: string; amount: string; currency: string },
   language?: string | null,
 ): string {
-  const l = lang(language)
-  const formatted = new Intl.NumberFormat('fr-FR').format(Number(r.amount))
+  const l = lang(language);
+  const formatted = new Intl.NumberFormat('fr-FR').format(Number(r.amount));
   const msgs: Record<Lang, string> = {
     fr: `🧾 Reçu ${r.orderNumber}\nMontant : ${formatted} ${r.currency}\nMerci pour votre achat !`,
     en: `🧾 Receipt ${r.orderNumber}\nAmount: ${formatted} ${r.currency}\nThank you for your purchase!`,
     ar: `🧾 إيصال ${r.orderNumber}\nالمبلغ: ${formatted} ${r.currency}\nشكراً لشرائك!`,
-  }
-  return msgs[l]
+  };
+  return msgs[l];
 }
 
-export function pushOrderTitle(orderNumber: string, language?: string | null): string {
-  const l = lang(language)
+export function pushOrderTitle(
+  orderNumber: string,
+  language?: string | null,
+): string {
+  const l = lang(language);
   const titles: Record<Lang, string> = {
     fr: `Commande ${orderNumber}`,
     en: `Order ${orderNumber}`,
     ar: `طلب ${orderNumber}`,
-  }
-  return titles[l]
+  };
+  return titles[l];
 }
 
 export function pushNewMessageTitle(language?: string | null): string {
-  const l = lang(language)
+  const l = lang(language);
   const titles: Record<Lang, string> = {
     fr: 'Nouveau message',
     en: 'New message',
     ar: 'رسالة جديدة',
-  }
-  return titles[l]
+  };
+  return titles[l];
 }

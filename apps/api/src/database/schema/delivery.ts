@@ -1,10 +1,20 @@
-import { pgTable, uuid, text, timestamp, decimal, integer, boolean, jsonb } from 'drizzle-orm/pg-core'
-import { stores } from './stores'
-import { orders } from './orders'
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  decimal,
+  integer,
+  boolean,
+  jsonb,
+} from 'drizzle-orm/pg-core';
+import { stores } from './stores';
+import { orders } from './orders';
 
 export const deliveryPersons = pgTable('delivery_persons', {
   id: uuid('id').primaryKey().defaultRandom(),
-  storeId: uuid('store_id').notNull().references(() => stores.id),
+  storeId: uuid('store_id')
+    .references(() => stores.id),
   name: text('name').notNull(),
   phone: text('phone').notNull(),
   email: text('email'),
@@ -24,13 +34,19 @@ export const deliveryPersons = pgTable('delivery_persons', {
   joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-})
+});
 
 export const deliveryAssignments = pgTable('delivery_assignments', {
   id: uuid('id').primaryKey().defaultRandom(),
-  deliveryPersonId: uuid('delivery_person_id').notNull().references(() => deliveryPersons.id),
-  orderId: uuid('order_id').notNull().references(() => orders.id),
-  storeId: uuid('store_id').notNull().references(() => stores.id),
+  deliveryPersonId: uuid('delivery_person_id')
+    .notNull()
+    .references(() => deliveryPersons.id),
+  orderId: uuid('order_id')
+    .notNull()
+    .references(() => orders.id),
+  storeId: uuid('store_id')
+    .notNull()
+    .references(() => stores.id),
   status: text('status').notNull().default('assigned'),
   notes: text('notes'),
   rating: integer('rating'),
@@ -39,4 +55,4 @@ export const deliveryAssignments = pgTable('delivery_assignments', {
   deliveredAt: timestamp('delivered_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-})
+});

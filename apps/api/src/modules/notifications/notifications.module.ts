@@ -1,14 +1,14 @@
-import { Module } from '@nestjs/common'
-import { NotificationsController } from './notifications.controller'
-import { NotificationsService } from './notifications.service'
-import { OutboxService } from './outbox.service'
-import { OutboxWorker } from './outbox.worker'
-import { ChatModule } from '../chat/chat.module'
-import { PushModule } from '../push/push.module'
+import { Module } from '@nestjs/common';
+import { NotificationsController } from './notifications.controller';
+import { NotificationsService } from './notifications.service';
+import { OutboxService } from './outbox.service';
+import { OutboxWorker } from './outbox.worker';
+import { ChatModule } from '../chat/chat.module';
+import { PushModule } from '../push/push.module';
 
-const providers: any[] = [NotificationsService, OutboxService]
+const providers: any[] = [NotificationsService, OutboxService];
 if (process.env.NODE_ENV !== 'test') {
-  providers.push(OutboxWorker)
+  providers.push(OutboxWorker);
 }
 
 @Module({

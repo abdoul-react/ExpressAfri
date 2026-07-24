@@ -26,6 +26,12 @@ function toOrder(raw: Record<string, unknown>): OrderDTO {
     notes: raw.notes as string | undefined,
     createdAt: raw.createdAt as string,
     updatedAt: raw.updatedAt as string,
+    statusLog: ((raw.statusLog ?? []) as any[]).map((entry) => ({
+      status: entry.toStatus,
+      timestamp: entry.createdAt,
+      note: entry.reason,
+      updatedBy: entry.changedBy,
+    })),
   }
 }
 
@@ -56,7 +62,18 @@ export class ApiAdminOrderDataSource implements AdminOrderDataSource {
     return toOrder(data as Record<string, unknown>)
   }
 
-  async refund(id: string, _amount?: number): Promise<OrderDTO> {
+  async refund(id: string, amount?: number, reason?: string): Promise<OrderDTO> {
+    // 1. Récupérer le paymentId associé à la commande
+    const { data: order } = await api.get(`/orders/${id}`)
+    const paymentId = order.paymentId ??
+      (Array.isArray(order.payments) && order.payments.length > 0 ? order.payments[0].id : null)
+
+    // 2. Initier le remboursement financier réel
+    if (paymentId) {
+      await api.post(`/payments/${paymentId}/refund`, { amount, reason })
+    }
+
+    // 3. Mettre à jour le statut de la commande
     const { data } = await api.put(`/orders/${id}/status`, { status: 'refunded' })
     return toOrder(data as Record<string, unknown>)
   }

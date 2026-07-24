@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminDisputeService } from '../services/adminDisputeService'
+import api from '@/lib/api'
 import type {
   DisputeQueryParams,
   UpdateDisputeStatusPayload,
@@ -16,6 +17,17 @@ const KEYS = {
 }
 
 // ─── Lecture ──────────────────────────────────────────────────────────────────
+
+export function useAdminDisputesSummary() {
+  return useQuery({
+    queryKey: ['admin', 'disputes', 'summary'],
+    queryFn: async () => {
+      const { data } = await api.get('/disputes/summary')
+      return data as { open: number; under_review: number; resolved: number; closed: number; total: number }
+    },
+    staleTime: 30_000,
+  })
+}
 
 export function useAdminDisputes(params: DisputeQueryParams) {
   return useQuery({
@@ -75,6 +87,17 @@ export function useDeleteDispute() {
   return useMutation({
     mutationFn: (id: string) => adminDisputeService.delete(id),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.all })
+    },
+  })
+}
+
+export function useAssignDispute(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (adminId: string) => api.put(`/disputes/${id}/assign`, { adminId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEYS.detail(id) })
       qc.invalidateQueries({ queryKey: KEYS.all })
     },
   })

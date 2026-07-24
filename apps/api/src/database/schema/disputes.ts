@@ -1,11 +1,22 @@
-import { pgTable, uuid, text, timestamp, decimal, jsonb } from 'drizzle-orm/pg-core'
-import { stores } from './stores'
-import { orders } from './orders'
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  decimal,
+  jsonb,
+} from 'drizzle-orm/pg-core';
+import { stores } from './stores';
+import { orders } from './orders';
 
 export const disputes = pgTable('disputes', {
   id: uuid('id').primaryKey().defaultRandom(),
-  storeId: uuid('store_id').notNull().references(() => stores.id),
-  orderId: uuid('order_id').notNull().references(() => orders.id),
+  storeId: uuid('store_id')
+    .notNull()
+    .references(() => stores.id),
+  orderId: uuid('order_id')
+    .notNull()
+    .references(() => orders.id),
   customerId: text('customer_id'),
   customerName: text('customer_name'),
   customerEmail: text('customer_email'),
@@ -27,25 +38,29 @@ export const disputes = pgTable('disputes', {
   dueDate: timestamp('due_date', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-})
+});
 
 export const disputeMessages = pgTable('dispute_messages', {
   id: uuid('id').primaryKey().defaultRandom(),
-  disputeId: uuid('dispute_id').notNull().references(() => disputes.id, { onDelete: 'cascade' }),
+  disputeId: uuid('dispute_id')
+    .notNull()
+    .references(() => disputes.id, { onDelete: 'cascade' }),
   authorId: text('author_id'),
   authorName: text('author_name'),
   authorRole: text('author_role').notNull().default('customer'),
   content: text('content').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-})
+});
 
 export const disputeTimeline = pgTable('dispute_timeline', {
   id: uuid('id').primaryKey().defaultRandom(),
-  disputeId: uuid('dispute_id').notNull().references(() => disputes.id, { onDelete: 'cascade' }),
+  disputeId: uuid('dispute_id')
+    .notNull()
+    .references(() => disputes.id, { onDelete: 'cascade' }),
   status: text('status').notNull(),
   note: text('note'),
   actorId: text('actor_id'),
   actorName: text('actor_name'),
   actorRole: text('actor_role').notNull().default('system'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
-})
+});

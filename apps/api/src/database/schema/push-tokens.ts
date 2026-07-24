@@ -1,5 +1,5 @@
-import { pgTable, uuid, text, timestamp } from 'drizzle-orm/pg-core'
-import { customers } from './customers'
+import { pgTable, uuid, text, timestamp } from 'drizzle-orm/pg-core';
+import { customers } from './customers';
 
 /**
  * Jetons Expo Push par appareil (multi-appareils par client). Le token est
@@ -16,4 +16,4 @@ export const pushTokens = pgTable('push_tokens', {
   platform: text('platform'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
-})
+});

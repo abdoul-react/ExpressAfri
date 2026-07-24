@@ -14,6 +14,7 @@ import {
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/cn'
 import { formatPrice } from '@/lib/format'
+import { WORLD_COUNTRIES } from '@/lib/countries'
 
 export function AdminShippingPage() {
   const [expandedZone, setExpandedZone] = useState<string | null>(null)
@@ -133,18 +134,6 @@ function CreateZoneModal({ onClose }: { onClose: () => void }) {
   const create = useCreateZone()
   const [error, setError] = useState('')
 
-  const ALL_COUNTRIES = [
-    { code: 'CI', name: "Côte d'Ivoire" }, { code: 'SN', name: 'Sénégal' }, { code: 'ML', name: 'Mali' },
-    { code: 'BF', name: 'Burkina Faso' }, { code: 'NE', name: 'Niger' }, { code: 'TG', name: 'Togo' },
-    { code: 'BJ', name: 'Bénin' }, { code: 'CM', name: 'Cameroun' }, { code: 'GA', name: 'Gabon' },
-    { code: 'CG', name: 'Congo' }, { code: 'CD', name: 'RDC' }, { code: 'KE', name: 'Kenya' },
-    { code: 'UG', name: 'Ouganda' }, { code: 'TZ', name: 'Tanzanie' }, { code: 'RW', name: 'Rwanda' },
-    { code: 'FR', name: 'France' }, { code: 'BE', name: 'Belgique' }, { code: 'CA', name: 'Canada' },
-    { code: 'US', name: 'États-Unis' }, { code: 'GH', name: 'Ghana' }, { code: 'NG', name: 'Nigeria' },
-    { code: 'MA', name: 'Maroc' }, { code: 'TN', name: 'Tunisie' }, { code: 'DZ', name: 'Algérie' },
-    { code: 'ZA', name: 'Afrique du Sud' }, { code: 'AO', name: 'Angola' }, { code: 'MZ', name: 'Mozambique' },
-  ]
-
   function toggleCountry(c: { code: string; name: string }) {
     setForm((f) => ({
       ...f,
@@ -192,13 +181,13 @@ function CreateZoneModal({ onClose }: { onClose: () => void }) {
           <Input type="number" size="sm" value={form.priority} onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value) || 99 })} />
         </FormField>
         <FormField label="Pays" required>
-          <div className="grid max-h-48 grid-cols-2 gap-1 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-gray-700 dark:bg-gray-800/40">
-            {ALL_COUNTRIES.map((c) => (
+          <div className="grid max-h-64 grid-cols-2 gap-1 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-gray-700 dark:bg-gray-800/40">
+            {WORLD_COUNTRIES.map((c) => (
               <Checkbox
                 key={c.code}
                 checked={!!form.countries.find((x) => x.code === c.code)}
                 onCheckedChange={() => toggleCountry(c)}
-                label={<span className="text-xs">{c.name}</span>}
+                label={<span className="text-xs">{c.flag} {c.name}</span>}
                 className="rounded px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800"
               />
             ))}

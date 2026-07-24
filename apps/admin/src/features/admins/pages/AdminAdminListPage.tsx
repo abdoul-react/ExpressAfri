@@ -1,11 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type React from 'react'
-import { UserCog, Plus, Pencil, KeyRound, Trash2, ShieldCheck } from 'lucide-react'
+
+function useDebounce<T>(value: T, delay = 400): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
+import { UserCog, Plus, Pencil, KeyRound, Trash2, ShieldCheck, Store } from 'lucide-react'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import { useAdminAdminList, useCreateAdmin, useUpdateAdmin, useUpdateAdminPassword, useDeleteAdmin } from '../hooks/useAdminAdminList'
 import { useAdminRoles } from '@/features/roles/hooks/useAdminRoles'
+import { useAdminStores } from '@/features/stores/hooks/useAdminStores'
 import type { AdminUser } from '@/types/AdminUser'
-import { ROLES } from '@/types/Role'
 import {
   PageHeader, Button, Badge, DataTable, type Column, Modal, ConfirmDialog,
   SearchInput, Select, Input, FormField,
@@ -14,9 +23,11 @@ import { toast } from '@/lib/toast'
 
 export function AdminAdminListPage() {
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search)
   const [roleFilter, setRoleFilter] = useState('')
   const [page, setPage] = useState(1)
-  const { data, isLoading } = useAdminAdminList({ page, search: search || undefined, role: roleFilter || undefined })
+  const { data: roles } = useAdminRoles()
+  const { data, isLoading } = useAdminAdminList({ page, search: debouncedSearch || undefined, role: roleFilter || undefined })
   const deleteAdmin = useDeleteAdmin()
   const [confirmDelete, setConfirmDelete] = useState<AdminUser | null>(null)
 
@@ -44,6 +55,19 @@ export function AdminAdminListPage() {
       key: 'role',
       header: 'Rôle',
       cell: (admin) => <Badge variant="neutral">{admin.role}</Badge>,
+    },
+    {
+      key: 'storeName',
+      header: 'Boutique',
+      hideBelow: 'lg',
+      cell: (admin) => admin.storeName
+        ? (
+          <div className="flex items-center gap-1.5">
+            <Store className="h-3.5 w-3.5 shrink-0 text-primary-500" />
+            <span className="text-sm font-medium text-primary-700 dark:text-primary-400">{admin.storeName}</span>
+          </div>
+        )
+        : <span className="text-xs text-gray-400">—</span>,
     },
     {
       key: 'actions',
@@ -97,7 +121,7 @@ export function AdminAdminListPage() {
           value={roleFilter}
           onChange={(v) => { setRoleFilter(v); setPage(1) }}
           placeholder="Tous les rôles"
-          options={Object.values(ROLES).map((role) => ({ value: role.id, label: role.label }))}
+          options={(roles ?? []).map((r) => ({ value: r.id, label: r.label }))}
         />
       </div>
 
@@ -142,17 +166,25 @@ export function AdminAdminListPage() {
 }
 
 function CreateAdminModal({ onCreated }: { onCreated: () => void }) {
+  const EMPTY_FORM = { email: '', name: '', password: '', role: '', storeId: '' }
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ email: '', name: '', password: '', role: 'product_admin' })
+  const [form, setForm] = useState(EMPTY_FORM)
   const { data: roles } = useAdminRoles()
+  const { data: storesData } = useAdminStores({ limit: 200, status: 'approved' })
   const createAdmin = useCreateAdmin()
+
+  const availableRoles = (roles ?? []).filter((r) => !r.isSuperAdmin)
+  const selectedRole = availableRoles.find((r) => r.id === form.role)
+  const isStoreManager = selectedRole?.label === 'Gérant de boutique'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!form.role) { toast.error('Veuillez choisir un rôle'); return }
+    if (isStoreManager && !form.storeId) { toast.error('Veuillez choisir la boutique à gérer'); return }
     try {
-      await createAdmin.mutateAsync(form)
+      await createAdmin.mutateAsync({ ...form, storeId: isStoreManager ? form.storeId : null })
       setOpen(false)
-      setForm({ email: '', name: '', password: '', role: 'product_admin' })
+      setForm(EMPTY_FORM)
       toast.success('Administrateur créé')
       onCreated()
     } catch {
@@ -167,7 +199,7 @@ function CreateAdminModal({ onCreated }: { onCreated: () => void }) {
       </Button>
       <Modal
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(o) => { if (!o) setForm(EMPTY_FORM); setOpen(o) }}
         title="Nouvel administrateur"
         description="Créez un compte avec un rôle et un mot de passe initial"
         size="sm"
@@ -188,15 +220,33 @@ function CreateAdminModal({ onCreated }: { onCreated: () => void }) {
           <FormField label="Mot de passe" required>
             <Input required type="password" size="sm" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </FormField>
-          <FormField label="Rôle">
+          <FormField label="Rôle" required>
             <Select
               size="sm"
               className="w-full"
               value={form.role}
-              onChange={(v) => setForm({ ...form, role: v })}
-              options={(roles ?? []).filter((r) => r.id !== 'super_admin').map((r) => ({ value: r.id, label: r.label }))}
+              onChange={(v) => setForm({ ...form, role: v, storeId: '' })}
+              placeholder="Choisir un rôle…"
+              options={availableRoles.map((r) => ({ value: r.id, label: r.label }))}
             />
           </FormField>
+
+          {isStoreManager && (
+            <FormField
+              label="Boutique à gérer"
+              required
+              hint="Le gérant n'aura accès qu'aux données de cette boutique"
+            >
+              <Select
+                size="sm"
+                className="w-full"
+                value={form.storeId}
+                onChange={(v) => setForm({ ...form, storeId: v })}
+                placeholder="Choisir une boutique…"
+                options={(storesData?.data ?? []).map((s) => ({ value: s.id, label: s.name }))}
+              />
+            </FormField>
+          )}
         </form>
       </Modal>
     </>
@@ -205,14 +255,23 @@ function CreateAdminModal({ onCreated }: { onCreated: () => void }) {
 
 function EditAdminModal({ admin }: { admin: AdminUser }) {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name: '', role: admin.role })
+  const [form, setForm] = useState({ name: admin.name, role: admin.role as string, storeId: admin.storeId ?? '' })
   const updateAdmin = useUpdateAdmin()
   const { data: roles } = useAdminRoles()
+  const { data: storesData } = useAdminStores({ limit: 200, status: 'approved' })
+
+  const availableRoles = (roles ?? []).filter((r) => !r.isSuperAdmin || admin.isSuperAdmin)
+  const selectedRole = availableRoles.find((r) => r.id === form.role)
+  const isStoreManager = selectedRole?.label === 'Gérant de boutique'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (isStoreManager && !form.storeId) { toast.error('Veuillez choisir la boutique à gérer'); return }
     try {
-      await updateAdmin.mutateAsync({ id: admin.id, data: { name: form.name, role: form.role } })
+      await updateAdmin.mutateAsync({
+        id: admin.id,
+        data: { name: form.name, role: form.role, storeId: isStoreManager ? form.storeId : null },
+      })
       setOpen(false)
       toast.success('Administrateur mis à jour')
     } catch {
@@ -224,7 +283,7 @@ function EditAdminModal({ admin }: { admin: AdminUser }) {
     <>
       <Button
         variant="ghost" size="sm" leftIcon={Pencil}
-        onClick={() => { setOpen(true); setForm({ name: admin.name, role: admin.role }) }}
+        onClick={() => { setOpen(true); setForm({ name: admin.name, role: admin.role as string, storeId: admin.storeId ?? '' }) }}
       >
         Modifier
       </Button>
@@ -244,17 +303,32 @@ function EditAdminModal({ admin }: { admin: AdminUser }) {
           <FormField label="Nom" required>
             <Input required size="sm" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </FormField>
-          <FormField label="Rôle">
+          <FormField label="Rôle" required>
             <Select
               size="sm"
               className="w-full"
               value={form.role}
-              onChange={(v) => setForm({ ...form, role: v as AdminUser['role'] })}
-              options={(roles ?? [])
-                .filter((r) => r.id !== 'super_admin' || admin.role === 'super_admin')
-                .map((r) => ({ value: r.id, label: r.label }))}
+              onChange={(v) => setForm({ ...form, role: v, storeId: '' })}
+              options={availableRoles.map((r) => ({ value: r.id, label: r.label }))}
             />
           </FormField>
+
+          {isStoreManager && (
+            <FormField
+              label="Boutique à gérer"
+              required
+              hint="Le gérant n'aura accès qu'aux données de cette boutique"
+            >
+              <Select
+                size="sm"
+                className="w-full"
+                value={form.storeId}
+                onChange={(v) => setForm({ ...form, storeId: v })}
+                placeholder="Choisir une boutique…"
+                options={(storesData?.data ?? []).map((s) => ({ value: s.id, label: s.name }))}
+              />
+            </FormField>
+          )}
         </form>
       </Modal>
     </>
@@ -264,14 +338,20 @@ function EditAdminModal({ admin }: { admin: AdminUser }) {
 function PasswordModal({ adminId }: { adminId: string }) {
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState('')
   const updatePassword = useUpdateAdminPassword()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (password.length < 8) { setError('Le mot de passe doit contenir au moins 8 caractères'); return }
+    if (password !== confirm) { setError('Les mots de passe ne correspondent pas'); return }
     try {
       await updatePassword.mutateAsync({ id: adminId, password })
       setOpen(false)
       setPassword('')
+      setConfirm('')
+      setError('')
       toast.success('Mot de passe mis à jour')
     } catch {
       toast.error('Erreur lors de la mise à jour du mot de passe')
@@ -280,7 +360,7 @@ function PasswordModal({ adminId }: { adminId: string }) {
 
   return (
     <>
-      <Button variant="ghost" size="sm" leftIcon={KeyRound} onClick={() => setOpen(true)}>
+      <Button variant="ghost" size="sm" leftIcon={KeyRound} onClick={() => { setPassword(''); setConfirm(''); setError(''); setOpen(true) }}>
         Mot de passe
       </Button>
       <Modal
@@ -296,8 +376,12 @@ function PasswordModal({ adminId }: { adminId: string }) {
         }
       >
         <form id={`password-form-${adminId}`} onSubmit={handleSubmit} className="space-y-4">
-          <FormField label="Nouveau mot de passe" required>
+          {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-400">{error}</div>}
+          <FormField label="Nouveau mot de passe" required hint="8 caractères minimum">
             <Input required type="password" size="sm" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </FormField>
+          <FormField label="Confirmer le mot de passe" required>
+            <Input required type="password" size="sm" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           </FormField>
         </form>
       </Modal>

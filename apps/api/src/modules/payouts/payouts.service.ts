@@ -115,6 +115,7 @@ export class PayoutsService {
       pending: byStatus['pending'] ?? 0,
       processing: byStatus['processing'] ?? 0,
       completed: byStatus['completed'] ?? 0,
+      paid: byStatus['paid'] ?? 0,
       failed: byStatus['failed'] ?? 0,
       total: rows.reduce((s, r) => s + Number(r.count), 0),
     };

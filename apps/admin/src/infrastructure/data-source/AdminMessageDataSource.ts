@@ -146,4 +146,5 @@ export interface AdminMessageDataSource {
   getChatConversationMedia(id: string): Promise<ChatConversationMedia>
   updateChatStatus(id: string, status: 'open' | 'closed'): Promise<void>
   setCustomerChatBlocked(customerId: string, blocked: boolean): Promise<{ customerId: string; blocked: boolean }>
+  getChatAwaitingCount(): Promise<{ count: number }>
 }

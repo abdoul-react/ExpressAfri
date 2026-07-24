@@ -100,4 +100,9 @@ export class ApiAdminMessageDataSource implements AdminMessageDataSource {
     const { data } = await api.patch(`/messages/chat/customers/${customerId}/block`, { blocked })
     return data as { customerId: string; blocked: boolean }
   }
+
+  async getChatAwaitingCount() {
+    const { data } = await api.get('/messages/chat/awaiting-count')
+    return data as { count: number }
+  }
 }

@@ -31,15 +31,16 @@ export function AdminOrderListPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
-  const [dateFilter, setDateFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   const params: OrderQueryParams = {
     page,
     limit: 10,
     search: search || undefined,
     status: statusFilter || undefined,
-    dateFrom: dateFilter || undefined,
-    dateTo: dateFilter || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
   }
 
   const { data, isLoading, isError, error, refetch } = useAdminOrders(params)
@@ -152,12 +153,23 @@ export function AdminOrderListPage() {
           options={STATUS_OPTIONS}
           placeholder="Tous statuts"
         />
-        <Input
-          type="date"
-          size="sm"
-          value={dateFilter}
-          onChange={(e) => { setDateFilter(e.target.value); setPage(1) }}
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            size="sm"
+            value={dateFrom}
+            onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+            aria-label="Date de début"
+          />
+          <span className="text-sm text-gray-400">→</span>
+          <Input
+            type="date"
+            size="sm"
+            value={dateTo}
+            onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+            aria-label="Date de fin"
+          />
+        </div>
       </div>
 
       {isError ? (

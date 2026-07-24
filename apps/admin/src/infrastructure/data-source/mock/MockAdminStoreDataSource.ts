@@ -6,10 +6,12 @@ import type {
   UpdateKycPayload,
   UpdateDocumentPayload,
   UpdateCommissionPayload,
+  UpdateStorePayload,
   StoreManager,
   CreateManagerPayload,
   SetManagerActivePayload,
   ResetManagerPasswordPayload,
+  CreateStorePayload,
 } from '../AdminStoreDataSource'
 import { MOCK_STORES } from './data/mockStores'
 
@@ -51,11 +53,47 @@ export class MockAdminStoreDataSource implements AdminStoreDataSource {
     return { data: filtered.slice(start, start + limit), total, page, limit, totalPages }
   }
 
+  async create(payload: CreateStorePayload): Promise<AdminStore> {
+    await this.delay(400)
+    const store: AdminStore = {
+      id: `mock-${Date.now()}`,
+      name: payload.name,
+      ownerName: '',
+      ownerEmail: payload.email,
+      phone: payload.phone ?? '',
+      city: '',
+      country: payload.country ?? 'Niger',
+      description: '',
+      status: 'pending',
+      commissionRate: payload.commissionRate ?? 0,
+      productCount: 0,
+      totalOrders: 0,
+      revenue: 0,
+      kyc: { status: 'not_submitted', documents: [], ownerFirstName: '', ownerLastName: '', ownerIdNumber: '' },
+      sanctions: [],
+      createdAt: new Date().toISOString(),
+    }
+    this.stores.push(store)
+    return { ...store }
+  }
+
   async getById(id: string): Promise<AdminStore> {
     await this.delay(300)
     const store = this.stores.find((s) => s.id === id)
     if (!store) throw new Error('Boutique introuvable')
     return { ...store }
+  }
+
+  async update(id: string, payload: UpdateStorePayload): Promise<AdminStore> {
+    await this.delay(400)
+    return this._update(id, payload)
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.delay(400)
+    const idx = this.stores.findIndex((s) => s.id === id)
+    if (idx === -1) throw new Error('Boutique introuvable')
+    this.stores.splice(idx, 1)
   }
 
   private _update(id: string, patch: Partial<AdminStore>): AdminStore {

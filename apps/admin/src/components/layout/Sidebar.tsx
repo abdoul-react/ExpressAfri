@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
+  Award,
   BarChart3,
   Bike,
   ChevronsLeft,
@@ -62,7 +63,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Commerce',
     items: [
       { label: 'Produits', path: '/products', icon: Package, permission: 'products.read' },
-      { label: 'Modération', path: '/products/moderation', icon: ShieldCheck, permission: 'products.update' as const },
+      { label: 'Modération', path: '/products/moderation', icon: ShieldCheck, permission: 'products.moderate' as const },
       { label: 'Import CSV', path: '/products/import', icon: Upload, permission: 'products.create' as const },
       { label: 'Catégories', path: '/categories', icon: Tags, permission: 'categories.read' },
       { label: 'Boutiques', path: '/stores', icon: Store, permission: 'stores.read' },
@@ -71,8 +72,8 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Paiements', path: '/payments', icon: CreditCard, permission: 'payments.read' },
       { label: 'Reçus', path: '/receipts', icon: ReceiptText, permission: 'payments.read' },
       { label: 'Clients', path: '/customers', icon: Users, permission: 'users.read' },
-      { label: 'Avis clients', path: '/reviews', icon: Star, permission: 'products.update' as const },
-      { label: 'Versements', path: '/payouts', icon: Wallet, permission: 'stores.read' as const },
+      { label: 'Avis clients', path: '/reviews', icon: Star, permission: 'content.moderate' as const },
+      { label: 'Versements', path: '/payouts', icon: Wallet, permission: 'commissions.read' as const },
     ],
   },
   {
@@ -81,7 +82,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'CMS', path: '/content', icon: FileText, permission: 'content.read' },
       { label: 'Coupons', path: '/coupons', icon: Gift, permission: 'coupons.read' },
       { label: 'Campagnes', path: '/campaigns', icon: Megaphone, permission: 'campaigns.read' },
-      { label: 'Fidélité', path: '/loyalty', icon: Star, permission: 'promotions.read' as const },
+      { label: 'Fidélité', path: '/loyalty', icon: Award, permission: 'promotions.read' as const },
       { label: 'Affiliation', path: '/affiliates', icon: Share2, permission: 'affiliates.read' as const },
     ],
   },
@@ -93,7 +94,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Support',
     items: [
       { label: 'Messages', path: '/messages', icon: MessagesSquare, permission: 'messages.read' },
-      { label: 'Notifications', path: '/notifications', icon: MessageSquareText, permission: 'messages.read' as const },
+      { label: 'Notifications', path: '/notifications', icon: MessageSquareText, permission: 'notifications.manage' as const },
       { label: 'Signalements', path: '/reports', icon: Flag, permission: 'reports.read' },
       { label: 'Litiges', path: '/disputes', icon: Scale, permission: 'disputes.read' as const },
     ],
@@ -127,11 +128,12 @@ function ItemBadge({ count, floating }: { count: number; floating?: boolean }) {
   )
 }
 
-function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+function SidebarItem({ item, collapsed, onClose }: { item: NavItem; collapsed: boolean; onClose?: () => void }) {
   const link = (
     <NavLink
       to={item.path}
       end={item.path === '/'}
+      onClick={() => onClose?.()}
       className={({ isActive }) =>
         cn(
           'group relative flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors',
@@ -171,9 +173,10 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
 interface SidebarProps {
   collapsed: boolean
   onToggleCollapse: () => void
+  onClose?: () => void
 }
 
-export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ collapsed, onToggleCollapse, onClose }: SidebarProps) {
   const { hasPermission, hasAnyPermission } = useAdminAuth()
   const unreadMessages = useUnreadMessageCount()
 
@@ -206,7 +209,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
         )}
         <button
           onClick={onToggleCollapse}
-          className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          className="hidden md:inline-flex rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
           title={collapsed ? 'Ouvrir le menu' : 'Réduire le menu'}
         >
           {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
@@ -232,7 +235,7 @@ export function Sidebar({ collapsed, onToggleCollapse }: SidebarProps) {
               )}
               <div className="space-y-0.5">
                 {visibleItems.map((item) => (
-                  <SidebarItem key={item.path} item={item} collapsed={collapsed} />
+                  <SidebarItem key={item.path} item={item} collapsed={collapsed} onClose={onClose} />
                 ))}
               </div>
             </div>

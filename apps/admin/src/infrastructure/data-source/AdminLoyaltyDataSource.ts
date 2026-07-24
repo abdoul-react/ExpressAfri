@@ -27,6 +27,7 @@ export interface CustomerPoints {
   customerName: string
   customerEmail: string
   points: number
+  balance?: number
   lifetimePoints: number
   tier: 'bronze' | 'silver' | 'gold' | 'platinum'
   lastActivity: string

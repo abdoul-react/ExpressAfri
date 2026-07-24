@@ -24,6 +24,7 @@ export const PERMISSIONS = {
   'products.update': 'Modifier un produit',
   'products.delete': 'Supprimer un produit',
   'products.export': 'Exporter les produits',
+  'products.moderate': 'Modérer les produits en attente (approuver/rejeter)',
 
   'categories.read': 'Voir les catégories',
   'categories.create': 'Créer une catégorie',
@@ -51,6 +52,7 @@ export const PERMISSIONS = {
   'content.create': 'Créer du contenu',
   'content.update': 'Modifier le contenu',
   'content.delete': 'Supprimer du contenu',
+  'content.moderate': 'Modérer les avis clients et signalements de contenu',
 
   'promotions.read': 'Voir les promotions',
   'promotions.create': 'Créer une promotion',
@@ -88,6 +90,7 @@ export const PERMISSIONS = {
   'notifications.read': 'Voir les notifications',
   'notifications.create': 'Envoyer une notification',
   'notifications.update': 'Modifier une notification',
+  'notifications.manage': 'Envoyer des SMS et notifications push en masse',
 
   'settings.read': 'Voir les paramètres',
   'settings.update': 'Modifier les paramètres',
@@ -99,6 +102,8 @@ export const PERMISSIONS = {
   'shipping.create': 'Créer une règle de livraison',
   'shipping.update': 'Modifier une règle de livraison',
   'shipping.delete': 'Supprimer une règle de livraison',
+
+  'delivery.manage': 'Gérer les livreurs et les assignations de livraison',
 
   'reports.read': 'Voir les signalements',
   'reports.update': 'Traiter un signalement',

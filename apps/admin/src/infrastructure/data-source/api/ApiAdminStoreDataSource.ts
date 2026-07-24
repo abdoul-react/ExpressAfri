@@ -1,15 +1,15 @@
-import type { AdminStoreDataSource, AdminStore, StoreQueryParams, PaginatedResult, UpdateKycPayload, UpdateDocumentPayload, UpdateCommissionPayload, StoreManager, CreateManagerPayload, SetManagerActivePayload, ResetManagerPasswordPayload } from '../AdminStoreDataSource'
+import type { AdminStoreDataSource, AdminStore, StoreQueryParams, PaginatedResult, UpdateKycPayload, UpdateDocumentPayload, UpdateCommissionPayload, UpdateStorePayload, StoreManager, CreateManagerPayload, SetManagerActivePayload, ResetManagerPasswordPayload } from '../AdminStoreDataSource'
 import api from '@/lib/api'
 
 function toStore(raw: any): AdminStore {
   return {
     id: raw.id,
     name: raw.name,
-    ownerName: raw.name,
-    ownerEmail: raw.email,
+    ownerName: raw.owner?.name ?? raw.ownerName ?? '',
+    ownerEmail: raw.owner?.email ?? raw.email,
     phone: raw.phone ?? '',
-    city: '',
-    country: raw.country,
+    city: raw.city ?? raw.owner?.city ?? raw.address?.city ?? raw.location?.city ?? '',
+    country: raw.owner?.country ?? raw.country,
     description: '',
     status: raw.status,
     logoUrl: null,
@@ -17,7 +17,7 @@ function toStore(raw: any): AdminStore {
     totalOrders: 0,
     revenue: 0,
     commissionRate: Number(raw.commissionRate),
-    kyc: { status: 'not_submitted', documents: [], ownerFirstName: '', ownerLastName: '', ownerIdNumber: '' },
+    kyc: (raw.kyc as any) ?? { status: 'not_submitted', documents: [], ownerFirstName: '', ownerLastName: '', ownerIdNumber: '' },
     sanctions: [],
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
@@ -30,13 +30,27 @@ export class ApiAdminStoreDataSource implements AdminStoreDataSource {
     return { ...data, data: data.data.map(toStore) }
   }
 
+  async create(payload: import('../AdminStoreDataSource').CreateStorePayload): Promise<AdminStore> {
+    const { data } = await api.post('/stores', payload)
+    return toStore(data)
+  }
+
   async getById(id: string): Promise<AdminStore> {
     const { data } = await api.get(`/stores/${id}`)
     return toStore(data)
   }
 
+  async update(id: string, payload: UpdateStorePayload): Promise<AdminStore> {
+    const { data } = await api.put(`/stores/${id}`, payload)
+    return toStore(data)
+  }
+
+  async delete(id: string): Promise<void> {
+    await api.delete(`/stores/${id}`)
+  }
+
   async approve(id: string): Promise<AdminStore> {
-    const { data } = await api.put(`/stores/${id}/kyc/approve`)
+    const { data } = await api.patch(`/stores/${id}/status`, { status: 'approved' })
     return toStore(data)
   }
 
@@ -46,17 +60,17 @@ export class ApiAdminStoreDataSource implements AdminStoreDataSource {
   }
 
   async suspend(id: string, reason?: string): Promise<AdminStore> {
-    const { data } = await api.put(`/stores/${id}`, { status: 'suspended' })
+    const { data } = await api.patch(`/stores/${id}/status`, { status: 'suspended' })
     return toStore(data)
   }
 
   async reactivate(id: string): Promise<AdminStore> {
-    const { data } = await api.put(`/stores/${id}`, { status: 'active' })
+    const { data } = await api.patch(`/stores/${id}/status`, { status: 'approved' })
     return toStore(data)
   }
 
   async updateKyc(id: string, _payload: UpdateKycPayload): Promise<AdminStore> {
-    const { data } = await api.get(`/stores/${id}`)
+    const { data } = await api.put(`/stores/${id}/kyc`, _payload)
     return toStore(data)
   }
 

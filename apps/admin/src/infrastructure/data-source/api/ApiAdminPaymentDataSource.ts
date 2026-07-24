@@ -18,6 +18,7 @@ function toPayment(raw: Record<string, unknown>): PaymentDTO {
     refundedAmount: raw.refundedAmount != null ? Number(raw.refundedAmount) : null,
     refundedAt: raw.refundedAt as string | undefined,
     transactionId: raw.transactionId as string | undefined,
+    failedAt: raw.failedAt as string | undefined,
     paidAt: raw.paidAt as string | undefined,
     createdAt: raw.createdAt as string,
     updatedAt: raw.updatedAt as string,

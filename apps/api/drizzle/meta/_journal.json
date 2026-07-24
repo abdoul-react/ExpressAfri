@@ -169,6 +169,83 @@
       "when": 1784900000000,
       "tag": "0024_otp_hash_and_ip",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784854032716,
+      "tag": "0025_dusty_luckman",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1784856813607,
+      "tag": "0026_sprint2_campaigns_loyalty",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1784858289694,
+      "tag": "0027_sprint3_shipping_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1784866649884,
+      "tag": "0028_panoramic_moondragon",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1784867006996,
+      "tag": "0029_dear_fallen_one",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1784870304817,
+      "tag": "0030_add_admin_reset_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1784871983507,
+      "tag": "0031_add_admin_totp",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784888000000,
+      "tag": "0032_delivery_persons_nullable_store",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784888100000,
+      "tag": "0033_shipping_nullable_store",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784890000000,
+      "tag": "0034_system_store",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784890100000,
+      "tag": "0035_stores_city_description",
+      "breakpoints": true
     }
   ]
 }

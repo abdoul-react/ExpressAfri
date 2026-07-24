@@ -1,10 +1,10 @@
-import { Module, OnModuleInit } from '@nestjs/common'
-import { PaymentsController } from './payments.controller'
-import { PaymentsService } from './payments.service'
-import { PaymentWebhookService } from './payment-webhook.service'
-import { MockPaymentProvider } from './providers/mock-payment.provider'
-import { ChatModule } from '../chat/chat.module'
-import { AuditModule } from '../audit/audit.module'
+import { Module, OnModuleInit } from '@nestjs/common';
+import { PaymentsController } from './payments.controller';
+import { PaymentsService } from './payments.service';
+import { PaymentWebhookService } from './payment-webhook.service';
+import { MockPaymentProvider } from './providers/mock-payment.provider';
+import { ChatModule } from '../chat/chat.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [ChatModule, AuditModule],
@@ -20,7 +20,7 @@ export class PaymentsModule implements OnModuleInit {
 
   onModuleInit() {
     if (process.env.NODE_ENV !== 'production') {
-      this.webhookService.registerProvider(this.mockProvider)
+      this.webhookService.registerProvider(this.mockProvider);
     }
   }
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import type React from 'react'
 import { Lock, MessageCircle, MessagesSquare, Plus, Send } from 'lucide-react'
 import {
@@ -280,12 +281,20 @@ function SupportDetailModal({ conversationId, onClose }: { conversationId: strin
 
 // ── Onglet Messages internes ──────────────────────────────────────────────────
 
-const ADMIN_LIST = [
-  { id: 'admin_002', name: 'Kofi Product Admin' },
-  { id: 'admin_003', name: 'Fatou Order Admin' },
-  { id: 'admin_004', name: 'Sékou Logistics Admin' },
-  { id: 'admin_005', name: 'Moussa Support Agent' },
-]
+function useAdminList() {
+  return useQuery({
+    queryKey: ['admin', 'admins', 'list'],
+    queryFn: async () => {
+      const { data } = await import('@/lib/api').then((m) => m.default.get('/admins', { params: { limit: 100 } }))
+      const items = (data.data ?? data) as { id: string; name?: string; firstName?: string; lastName?: string; email?: string }[]
+      return items.map((a) => ({
+        id: a.id,
+        name: (a.name ?? [a.firstName, a.lastName].filter(Boolean).join(' ')) || a.email || a.id,
+      }))
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+}
 
 function InternalTab() {
   const [search, setSearch] = useState('')
@@ -458,13 +467,14 @@ function InternalDetailModal({ msg, onClose }: { msg: InternalMessage; onClose: 
 
 function ComposeModal({ onClose }: { onClose: () => void }) {
   const sendMutation = useSendInternalMessage()
+  const { data: adminList = [] } = useAdminList()
   const [form, setForm] = useState<SendInternalMessageInput>({
-    toAdminId: ADMIN_LIST[0].id, toAdminName: ADMIN_LIST[0].name, subject: '', content: '',
+    toAdminId: '', toAdminName: '', subject: '', content: '',
   })
   const [error, setError] = useState('')
 
   function handleRecipientChange(id: string) {
-    const admin = ADMIN_LIST.find((a) => a.id === id)
+    const admin = adminList.find((a) => a.id === id)
     if (admin) setForm((f) => ({ ...f, toAdminId: admin.id, toAdminName: admin.name }))
   }
 
@@ -503,7 +513,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
             id="compose-recipient"
             value={form.toAdminId}
             onChange={handleRecipientChange}
-            options={ADMIN_LIST.map((a) => ({ value: a.id, label: a.name }))}
+            options={adminList.map((a) => ({ value: a.id, label: a.name }))}
             className="w-full"
           />
         </FormField>

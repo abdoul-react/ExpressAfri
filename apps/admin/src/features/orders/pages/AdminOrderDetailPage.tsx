@@ -34,12 +34,13 @@ import { formatPrice, formatDate } from '@/lib/format'
 // Logique métier : transitions de statut autorisées (à conserver).
 const STATUS_FLOW: Record<string, string[]> = {
   pending: ['confirmed', 'cancelled'],
-  confirmed: ['shipped', 'cancelled'],
+  confirmed: ['processing', 'cancelled'],
+  processing: ['shipped', 'cancelled'],
   shipped: ['delivered', 'cancelled'],
   delivered: ['refunded'],
   cancelled: [],
   refunded: [],
-  partially_shipped: ['shipped', 'delivered', 'cancelled'],
+  partially_shipped: ['shipped', 'cancelled'],
 }
 
 const TIMELINE_DOT: Record<string, string> = {

@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Ban, CalendarClock, CheckCircle2, ShoppingBag, Users, Wallet, XCircle } from 'lucide-react'
+import { Ban, CalendarClock, CheckCircle2, ShoppingBag, Star, Users, Wallet, XCircle } from 'lucide-react'
 import { useAdminCustomer, useAdminCustomerOrders } from '../hooks/useAdminCustomers'
 import { useBanCustomer, useUnbanCustomer } from '../hooks/useBanCustomer'
+import { useCustomerPoints, useAdjustPoints } from '@/features/loyalty/hooks/useAdminLoyalty'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import {
   PageHeader, Card, CardHeader, CardTitle, CardContent, Button, Badge, StatusBadge, StatCard,
-  DataTable, LoadingBlock, EmptyState, ConfirmDialog, type Column,
+  DataTable, LoadingBlock, EmptyState, ConfirmDialog, FormField, Input, Modal, type Column,
 } from '@/components/ui'
 import { ORDER_STATUS } from '@/lib/status'
 import { toast } from '@/lib/toast'
@@ -19,7 +20,12 @@ export function AdminCustomerDetailPage() {
   const { data: orders } = useAdminCustomerOrders(id!)
   const ban = useBanCustomer()
   const unban = useUnbanCustomer()
+  const adjustPoints = useAdjustPoints()
+  const { data: wallet } = useCustomerPoints(id!)
   const [confirmBan, setConfirmBan] = useState(false)
+  const [walletModal, setWalletModal] = useState(false)
+  const [newBalance, setNewBalance] = useState('')
+  const [walletReason, setWalletReason] = useState('')
 
   if (isLoading) return <LoadingBlock label="Chargement du client…" />
 
@@ -91,14 +97,15 @@ export function AdminCustomerDetailPage() {
         }
       />
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid gap-4 sm:grid-cols-4">
         <StatCard label="Commandes" value={c.totalOrders} icon={ShoppingBag} tone="primary" />
         <StatCard label="Total dépensé" value={formatPrice(c.totalSpent)} icon={Wallet} tone="success" />
+        <StatCard label="Points fidélité" value={(wallet?.balance ?? 0).toLocaleString('fr-FR')} icon={Star} tone="warning" />
         <StatCard label="Dernière commande" value={formatDate(c.lastOrderAt)} icon={CalendarClock} tone="neutral" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div>
+        <div className="space-y-4">
           <Card>
             <CardHeader><CardTitle>Informations</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
@@ -119,6 +126,30 @@ export function AdminCustomerDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Wallet fidélité */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle>Fidélité / Wallet</CardTitle>
+              <PermissionGuard permission="users.update">
+                <Button size="sm" variant="outline" onClick={() => { setNewBalance(String(wallet?.balance ?? 0)); setWalletReason(''); setWalletModal(true) }}>
+                  Ajuster
+                </Button>
+              </PermissionGuard>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              {[
+                { label: 'Solde actuel', value: `${(wallet?.balance ?? 0).toLocaleString('fr-FR')} pts` },
+                { label: 'Points cumulés', value: `${(wallet?.lifetimePoints ?? wallet?.balance ?? 0).toLocaleString('fr-FR')} pts` },
+                { label: 'Niveau', value: (wallet as any)?.tier ?? '—' },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex justify-between gap-3">
+                  <span className="text-gray-500 dark:text-gray-400">{label}</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{value}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="lg:col-span-2">
@@ -137,6 +168,42 @@ export function AdminCustomerDetailPage() {
           </Card>
         </div>
       </div>
+
+      <Modal
+        open={walletModal}
+        onOpenChange={setWalletModal}
+        title="Ajuster les points fidélité"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setWalletModal(false)}>Annuler</Button>
+            <Button
+              loading={adjustPoints.isPending}
+              onClick={async () => {
+                const balance = Number(newBalance)
+                if (isNaN(balance) || balance < 0) return toast.error('Solde invalide')
+                try {
+                  await adjustPoints.mutateAsync({ customerId: id!, balance, reason: walletReason })
+                  toast.success('Points mis à jour')
+                  setWalletModal(false)
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Erreur')
+                }
+              }}
+            >
+              Enregistrer
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <FormField label="Nouveau solde (points)" htmlFor="wallet-balance">
+            <Input id="wallet-balance" type="number" min="0" value={newBalance} onChange={(e) => setNewBalance(e.target.value)} />
+          </FormField>
+          <FormField label="Raison (optionnel)" htmlFor="wallet-reason">
+            <Input id="wallet-reason" value={walletReason} onChange={(e) => setWalletReason(e.target.value)} placeholder="Correction manuelle, bonus…" />
+          </FormField>
+        </div>
+      </Modal>
 
       {confirmBan && (
         <ConfirmDialog

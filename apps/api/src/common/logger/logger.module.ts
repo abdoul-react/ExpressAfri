@@ -1,8 +1,8 @@
-import { Module, Global } from '@nestjs/common'
-import { APP_INTERCEPTOR } from '@nestjs/core'
-import { AppLoggerService } from './logger.service'
-import { MetricsService } from './metrics.service'
-import { MetricsInterceptor } from '../interceptors/metrics.interceptor'
+import { Module, Global } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { AppLoggerService } from './logger.service';
+import { MetricsService } from './metrics.service';
+import { MetricsInterceptor } from '../interceptors/metrics.interceptor';
 
 @Global()
 @Module({

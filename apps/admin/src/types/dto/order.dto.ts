@@ -31,6 +31,12 @@ export interface OrderDTO {
   notes?: string
   createdAt: string
   updatedAt: string
+  statusLog?: Array<{
+    status: string
+    timestamp: string
+    note?: string
+    updatedBy?: string
+  }>
 }
 
 export type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded'

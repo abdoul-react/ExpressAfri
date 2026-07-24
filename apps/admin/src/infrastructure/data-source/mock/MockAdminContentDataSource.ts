@@ -385,4 +385,12 @@ export class MockAdminContentDataSource implements AdminContentDataSource {
     this.paymentMethods[idx].logoUrl = '/uploads/payment-logos/mock.png'
     return this.paymentMethods[idx]
   }
+  async listReviews(_params: Record<string, string>): Promise<any> {
+    await this.delay()
+    return { data: [], total: 0, page: 1 }
+  }
+  async moderateReview(_id: string, _isActive: boolean): Promise<any> {
+    await this.delay()
+    return {}
+  }
 }

@@ -7,6 +7,7 @@ import {
 import { useAdminDeliveryPerson, useUpdateDeliveryPerson, useAdminAssignments } from '../hooks/useAdminDelivery'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import { GEOGRAPHY } from '../services/geographyService'
+import { WORLD_COUNTRIES } from '@/lib/countries'
 import type { DeliveryAssignment } from '@/infrastructure/data-source/AdminDeliveryDataSource'
 import { resolveAdminMediaUrl } from '@/lib/resolveAdminMediaUrl'
 import {
@@ -32,7 +33,9 @@ export function AdminDeliveryDetailPage() {
   const { data: assignments = [] } = useAdminAssignments(id)
   const updatePerson = useUpdateDeliveryPerson()
 
-  const flag = GEOGRAPHY.find((c) => c.code === person?.country.code)?.flag ?? ''
+  const flag = WORLD_COUNTRIES.find((c) => c.code === (person?.country?.code ?? ''))?.flag
+    ?? GEOGRAPHY.find((c) => c.code === (person?.country?.code ?? ''))?.flag
+    ?? ''
 
   // Stats calculées depuis les assignations
   const delivered = assignments.filter((a) => a.status === 'delivered')
@@ -86,14 +89,14 @@ export function AdminDeliveryDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={person.name}
-        description={`${vehicle?.label ?? person.vehicleType} · ${flag} ${person.country.name} · ${person.region}`}
+        description={`${vehicle?.label ?? person.vehicleType} · ${flag} ${person.country?.name ?? ''} · ${person.region}`}
         backHref="/delivery"
         breadcrumbs={[
           { label: 'Livreurs', href: '/delivery' },
           { label: person.name },
         ]}
         actions={
-          <PermissionGuard permission="shipping.update">
+          <PermissionGuard permission="delivery.manage">
             <Button variant="outline" leftIcon={Pencil} onClick={() => navigate(`/delivery?edit=${person.id}`)}>
               Modifier
             </Button>
@@ -155,7 +158,7 @@ export function AdminDeliveryDetailPage() {
                 <VehicleIcon className="h-4 w-4" /> {vehicle?.label ?? person.vehicleType}
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <MapPin className="h-4 w-4" /> {flag} {person.country.name} · {person.region}
+                <MapPin className="h-4 w-4" /> {flag} {person.country?.name ?? ''} · {person.region}
               </span>
             </p>
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
@@ -194,7 +197,7 @@ export function AdminDeliveryDetailPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <InfoRow icon={Phone} label="Téléphone" value={person.phone} />
             <InfoRow icon={Mail} label="Email" value={person.email ?? '—'} />
-            <InfoRow icon={Globe} label="Pays" value={`${flag} ${person.country.name}`} />
+            <InfoRow icon={Globe} label="Pays" value={`${flag} ${person.country?.name ?? '—'}`} />
             <InfoRow icon={MapPin} label="Région" value={person.region} />
             {person.address && <InfoRow icon={Home} label="Adresse" value={person.address} />}
             {person.idCardNumber && <InfoRow icon={CreditCard} label="Pièce d'identité" value={person.idCardNumber} />}

@@ -5,10 +5,9 @@ export interface LoginRequest {
   password: string
 }
 
-export interface LoginResponse {
-  accessToken: string
-  user: AdminUser
-}
+export type LoginResponse =
+  | { accessToken: string; user: AdminUser; requiresTotp?: false }
+  | { requiresTotp: true; pendingToken: string }
 
 export interface AdminAuthDataSource {
   login(request: LoginRequest): Promise<LoginResponse>

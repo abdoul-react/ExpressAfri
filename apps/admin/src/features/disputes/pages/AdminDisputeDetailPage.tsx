@@ -6,6 +6,7 @@ import {
   useUpdateDisputeStatus,
   useResolveDispute,
   useAddDisputeMessage,
+  useAssignDispute,
 } from '../hooks/useAdminDisputes'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import type {
@@ -327,9 +328,11 @@ export function AdminDisputeDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: dispute, isLoading, isError, error } = useAdminDispute(id ?? '')
   const addMessage = useAddDisputeMessage(id ?? '')
+  const assignDispute = useAssignDispute(id ?? '')
   const [messageText, setMessageText] = useState('')
   const [showResolveModal, setShowResolveModal] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [assignAdminId, setAssignAdminId] = useState('')
 
   if (isLoading) {
     return <LoadingBlock label="Chargement du litige…" />
@@ -529,6 +532,30 @@ export function AdminDisputeDetailPage() {
                 <User className="h-4 w-4" />
                 Non assigné
               </p>
+            )}
+            {!isFinal && (
+              <div className="mt-3 flex gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                <Input
+                  size="sm"
+                  value={assignAdminId}
+                  onChange={(e) => setAssignAdminId(e.target.value)}
+                  placeholder="ID de l'admin…"
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  loading={assignDispute.isPending}
+                  disabled={!assignAdminId.trim()}
+                  onClick={() => {
+                    assignDispute.mutate(assignAdminId.trim(), {
+                      onSuccess: () => { toast.success('Litige assigné'); setAssignAdminId('') },
+                      onError: () => toast.error("Erreur lors de l'assignation"),
+                    })
+                  }}
+                >
+                  Assigner
+                </Button>
+              </div>
             )}
             {dispute.dueDate && (
               <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">

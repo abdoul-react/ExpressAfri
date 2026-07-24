@@ -8,6 +8,7 @@ import { eq, like, or, and, sql, lt, gt } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module';
 import { coupons, couponUsage } from '../../database/schema/coupons';
 import { orders } from '../../database/schema/orders';
+import { customers } from '../../database/schema/customers';
 import { AuditService } from '../audit/audit.service';
 
 @Injectable()
@@ -203,7 +204,8 @@ export class CouponsService {
       const [{ orderCount }] = await this.db
         .select({ orderCount: sql<number>`count(*)` })
         .from(orders)
-        .where(eq(orders.customerEmail, customerEmail));
+        .innerJoin(customers, eq(orders.customerId, customers.id))
+        .where(eq(customers.email, customerEmail));
       if (Number(orderCount) > 0)
         return {
           valid: false,

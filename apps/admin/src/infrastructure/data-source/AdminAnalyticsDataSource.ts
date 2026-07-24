@@ -70,6 +70,13 @@ export interface AbandonedCartData {
   rate: number
 }
 
+export interface StoreDashboardData {
+  orders: { total: number; pending: number }
+  revenue: { total: number; month: number; growth: number }
+  products: { active: number }
+  recentOrders: { id: string; reference: string; status: string; total: number; currency: string; createdAt: string }[]
+}
+
 export interface AdminAnalyticsDataSource {
   getAnalytics(period: string, from?: string, to?: string): Promise<AnalyticsData>
   getRevenueChart(period: string, from?: string, to?: string): Promise<AnalyticsChartDataPoint[]>
@@ -78,4 +85,5 @@ export interface AdminAnalyticsDataSource {
   getCohortData(): Promise<CohortRow[]>
   getAbandonedCartData(from?: string, to?: string): Promise<AbandonedCartData[]>
   exportReport(period: string, from?: string, to?: string): Promise<Blob>
+  getStoreDashboard(): Promise<StoreDashboardData>
 }

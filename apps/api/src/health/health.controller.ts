@@ -1,7 +1,9 @@
-import { Controller, Get } from '@nestjs/common'
-import { HealthService } from './health.service'
-import { MetricsService } from '../common/logger/metrics.service'
+import { Controller, Get } from '@nestjs/common';
+import { HealthService } from './health.service';
+import { MetricsService } from '../common/logger/metrics.service';
+import { Public } from '../common/decorators/public.decorator';
 
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(
@@ -11,16 +13,16 @@ export class HealthController {
 
   @Get()
   check() {
-    return this.healthService.liveness()
+    return this.healthService.liveness();
   }
 
   @Get('readiness')
   async readiness() {
-    return this.healthService.readiness()
+    return this.healthService.readiness();
   }
 
   @Get('metrics')
   getMetrics() {
-    return this.metricsService.getMetrics()
+    return this.metricsService.getMetrics();
   }
 }

@@ -1,46 +1,53 @@
-import { Type } from 'class-transformer'
+import { Type } from 'class-transformer';
 import {
-  ArrayMinSize, IsArray, IsInt, IsOptional, IsString, IsUUID,
-  IsIn, Min, MaxLength,
-} from 'class-validator'
+  ArrayMinSize,
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  IsIn,
+  Min,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateOrderItemDto {
   @IsUUID()
-  productId!: string
+  productId!: string;
 
   @IsOptional()
   @IsUUID()
-  variantId?: string
+  variantId?: string;
 
   @IsInt()
   @Min(1)
-  quantity!: number
+  quantity!: number;
 }
 
 export class CreateOrderDto {
   @IsArray()
   @ArrayMinSize(1)
   @Type(() => CreateOrderItemDto)
-  items!: CreateOrderItemDto[]
+  items!: CreateOrderItemDto[];
 
   @IsUUID()
-  shippingAddressId!: string
+  shippingAddressId!: string;
 
   @IsString()
   @IsIn(['orange_money', 'wave', 'mobile_money', 'card', 'cod', 'wallet'])
-  paymentMethod!: string
+  paymentMethod!: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  couponCode?: string
+  couponCode?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(1000)
-  notes?: string
+  notes?: string;
 
   @IsString()
   @IsUUID()
-  idempotencyKey!: string
+  idempotencyKey!: string;
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Download, Scale, Trash2 } from 'lucide-react'
-import { useAdminDisputes, useDeleteDispute } from '../hooks/useAdminDisputes'
+import { useAdminDisputes, useAdminDisputesSummary, useDeleteDispute } from '../hooks/useAdminDisputes'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import { exportToCSV } from '@/lib/exportCSV'
 import { resolveAdminMediaUrl } from '@/lib/resolveAdminMediaUrl'
@@ -52,13 +52,8 @@ export function AdminDisputeListPage() {
 
   const { data, isLoading, isError, error } = useAdminDisputes(params)
 
-  // Compteurs par statut pour les badges rapides
-  const allParams: DisputeQueryParams = { limit: 200 }
-  const { data: allData } = useAdminDisputes(allParams)
-  const countByStatus = (allData?.data ?? []).reduce<Record<string, number>>((acc, d) => {
-    acc[d.status] = (acc[d.status] ?? 0) + 1
-    return acc
-  }, {})
+  const { data: summary } = useAdminDisputesSummary()
+  const countByStatus: Record<string, number> = summary ?? {}
 
   const columns: Column<AdminDispute>[] = [
     {

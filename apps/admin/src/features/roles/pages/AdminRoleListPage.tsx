@@ -212,10 +212,10 @@ export function AdminRoleListPage() {
           try {
             await deleteRole.mutateAsync(confirmDelete.id)
             toast.success('Rôle supprimé')
+            setConfirmDelete(null)
           } catch (e: any) {
-            toast.error(e.message || 'Erreur lors de la suppression du rôle')
+            toast.error(e?.response?.data?.message ?? e.message ?? 'Erreur lors de la suppression du rôle')
           }
-          setConfirmDelete(null)
         }}
       />
     </div>
@@ -320,7 +320,15 @@ function EditRoleModal({ role }: { role: { id: string; label: string; descriptio
 
   return (
     <>
-      <Button variant="ghost" size="sm" leftIcon={Pencil} onClick={() => setOpen(true)}>
+      <Button variant="ghost" size="sm" leftIcon={Pencil} onClick={() => {
+        setForm({
+          label: role.label,
+          description: role.description,
+          permissions: role.permissions === '*' ? [] as Permission[] : [...role.permissions] as Permission[],
+        })
+        setError('')
+        setOpen(true)
+      }}>
         Modifier
       </Button>
       <Modal

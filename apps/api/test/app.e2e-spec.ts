@@ -17,7 +17,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('/ (GET) should return 404 or not implemented', () => {
-    return request(app.getHttpServer()).get('/').expect(404)
+    return request(app.getHttpServer()).get('/').expect(404);
   });
 
   afterEach(async () => {

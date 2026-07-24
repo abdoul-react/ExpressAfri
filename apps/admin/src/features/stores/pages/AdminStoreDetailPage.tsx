@@ -1,19 +1,20 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  AlertTriangle, Ban, CheckCircle2, ExternalLink, FileCheck, LayoutDashboard, ShieldAlert, Store, Users, XCircle,
+  AlertTriangle, Ban, CheckCircle2, ExternalLink, FileCheck, LayoutDashboard, Pencil, ShieldAlert, Store, Trash2, Users, XCircle,
 } from 'lucide-react'
-import { useAdminStore } from '../hooks/useAdminStores'
+import { useAdminStore, useUpdateStore, useDeleteStore } from '../hooks/useAdminStores'
 import { useApproveStore, useRejectStore, useSuspendStore, useReactivateStore, useUpdateKyc, useUpdateDocument, useUpdateCommission } from '../hooks/useStoreActions'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import { StoreManagersSection } from '../components/StoreManagersSection'
 import {
   PageHeader, Card, CardHeader, CardTitle, CardContent, Button, StatusBadge, Badge,
-  LoadingBlock, EmptyState, ConfirmDialog, Modal, Input, FormField, Tabs, TabsList, TabsTrigger, TabsContent,
+  LoadingBlock, EmptyState, ConfirmDialog, Modal, Input, FormField, Select, Tabs, TabsList, TabsTrigger, TabsContent,
 } from '@/components/ui'
 import { STORE_STATUS, KYC_STATUS, SANCTION_TYPE, statusMeta } from '@/lib/status'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/cn'
+import { WORLD_COUNTRIES } from '@/lib/countries'
 
 const DOC_TYPE_LABELS: Record<string, string> = { id_card: "Carte d'identité", passport: 'Passeport', business_registration: 'Registre de commerce (RCCM)', tax_certificate: 'Attestation fiscale (NIF)', bank_statement: 'Relevé bancaire', other: 'Autre' }
 
@@ -55,6 +56,9 @@ export function AdminStoreDetailPage() {
   const updateDocument = useUpdateDocument()
   const updateCommission = useUpdateCommission()
 
+  const updateStore = useUpdateStore()
+  const deleteStore = useDeleteStore()
+
   const [tab, setTab] = useState('overview')
   const [confirm, setConfirm] = useState<ConfirmState | null>(null)
   const [actionReason, setActionReason] = useState('')
@@ -63,6 +67,8 @@ export function AdminStoreDetailPage() {
   const [commissionValue, setCommissionValue] = useState(0)
   const [rejectingDoc, setRejectingDoc] = useState<string | null>(null)
   const [docReason, setDocReason] = useState('')
+  const [editOpen, setEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', city: '', country: '', description: '' })
 
   if (isLoading) return <LoadingBlock label="Chargement de la boutique…" />
   if (isError) {
@@ -238,9 +244,91 @@ export function AdminStoreDetailPage() {
                 </Button>
               </PermissionGuard>
             )}
+            <PermissionGuard permission="stores.update">
+              <Button variant="outline" leftIcon={Pencil}
+                onClick={() => {
+                  setEditForm({ name: s.name, email: s.ownerEmail, phone: s.phone, city: s.city, country: s.country, description: s.description ?? '' })
+                  setEditOpen(true)
+                }}>
+                Modifier
+              </Button>
+            </PermissionGuard>
+            <PermissionGuard permission="stores.delete">
+              <Button variant="danger" leftIcon={Trash2}
+                onClick={() => setConfirm({
+                  title: 'Supprimer la boutique',
+                  description: `La boutique « ${s.name} » et tous ses gérants associés seront supprimés définitivement. Cette action est irréversible.`,
+                  variant: 'danger',
+                  confirmLabel: 'Supprimer',
+                  onConfirm: async () => {
+                    try {
+                      await deleteStore.mutateAsync(s.id)
+                      toast.success(`Boutique « ${s.name} » supprimée`)
+                      navigate('/stores')
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : 'Erreur lors de la suppression')
+                    }
+                  },
+                })}>
+                Supprimer
+              </Button>
+            </PermissionGuard>
           </>
         }
       />
+
+      <Modal
+        open={editOpen}
+        onOpenChange={(o) => { if (!o) setEditOpen(false) }}
+        title="Modifier la boutique"
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Annuler</Button>
+            <Button
+              loading={updateStore.isPending}
+              onClick={async () => {
+                try {
+                  await updateStore.mutateAsync({ id: s.id, payload: editForm })
+                  toast.success('Boutique mise à jour')
+                  setEditOpen(false)
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : 'Erreur lors de la mise à jour')
+                }
+              }}
+            >
+              Enregistrer
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <FormField label="Nom de la boutique" required>
+            <Input size="sm" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+          </FormField>
+          <FormField label="Email de contact">
+            <Input type="email" size="sm" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+          </FormField>
+          <FormField label="Téléphone">
+            <Input size="sm" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+          </FormField>
+          <FormField label="Ville">
+            <Input size="sm" value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} />
+          </FormField>
+          <FormField label="Pays">
+            <Select
+              size="sm"
+              className="w-full"
+              value={editForm.country}
+              onChange={(v) => setEditForm({ ...editForm, country: v })}
+              options={WORLD_COUNTRIES.map((c) => ({ value: c.name, label: `${c.flag} ${c.name}` }))}
+            />
+          </FormField>
+          <FormField label="Description">
+            <Input size="sm" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+          </FormField>
+        </div>
+      </Modal>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList variant="underline">

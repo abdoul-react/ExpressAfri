@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Bell, LogOut, Moon, PanelLeft, Settings, Sun } from 'lucide-react'
+import { Bell, LogOut, Moon, PanelLeft, Search, Settings, Sun } from 'lucide-react'
 import { useAdminAuth } from '@/features/auth'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useUnreadMessageCount } from '@/features/messages/hooks/useAdminMessages'
@@ -14,9 +14,10 @@ import {
 
 interface TopNavbarProps {
   onToggleSidebar: () => void
+  onOpenPalette?: () => void
 }
 
-export function TopNavbar({ onToggleSidebar }: TopNavbarProps) {
+export function TopNavbar({ onToggleSidebar, onOpenPalette }: TopNavbarProps) {
   const { admin, logout } = useAdminAuth()
   const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
@@ -38,12 +39,23 @@ export function TopNavbar({ onToggleSidebar }: TopNavbarProps) {
             <PanelLeft className="h-5 w-5" />
           </button>
         </Tooltip>
-        <h2 className="truncate text-sm font-medium text-gray-700 dark:text-gray-300">
-          Bonjour, <span className="font-semibold text-gray-900 dark:text-gray-100">{admin?.name ?? 'Admin'}</span>
-        </h2>
+        <button
+          onClick={onOpenPalette}
+          className="hidden items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-400 transition-colors hover:border-gray-300 hover:text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600 dark:hover:text-gray-300 md:flex"
+          aria-label="Ouvrir la recherche"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span>Rechercher…</span>
+          <kbd className="ml-2 rounded border border-gray-200 px-1.5 py-0.5 text-[10px] dark:border-gray-700">⌘K</kbd>
+        </button>
       </div>
 
       <div className="flex items-center gap-1.5">
+        <Tooltip content="Recherche rapide (⌘K)">
+          <button onClick={onOpenPalette} className={`${iconButtonCls} md:hidden`} aria-label="Rechercher">
+            <Search className="h-5 w-5" />
+          </button>
+        </Tooltip>
         <Tooltip content={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}>
           <button onClick={toggleTheme} className={iconButtonCls} aria-label="Basculer le thème">
             {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}

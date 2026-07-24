@@ -367,6 +367,22 @@ class AdminContentService {
       throw toServiceError(err, 'Upload du logo de paiement')
     }
   }
+
+  // Reviews
+  async listReviews(params: Record<string, string>) {
+    try {
+      return await adminContentDataSource.listReviews(params)
+    } catch (err) {
+      throw toServiceError(err, 'Liste des avis')
+    }
+  }
+  async moderateReview(id: string, isActive: boolean) {
+    try {
+      return await adminContentDataSource.moderateReview(id, isActive)
+    } catch (err) {
+      throw toServiceError(err, 'Modération de l\'avis')
+    }
+  }
 }
 
 export const adminContentService = new AdminContentService()

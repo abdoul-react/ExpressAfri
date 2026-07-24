@@ -1,8 +1,9 @@
 import { useState, useCallback } from 'react'
+import type { LoginResponse } from '@/infrastructure/data-source/AdminAuthDataSource'
 import { useAdminAuth } from './useAdminAuth'
 
 interface UseAdminLoginReturn {
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<LoginResponse>
   isLoading: boolean
   error: string | null
 }
@@ -13,15 +14,12 @@ export function useAdminLogin(): UseAdminLoginReturn {
   const [error, setError] = useState<string | null>(null)
 
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string): Promise<LoginResponse> => {
       setIsLoading(true)
       setError(null)
       try {
-        console.log('[useAdminLogin] calling authLogin', email)
-        await authLogin(email, password)
-        console.log('[useAdminLogin] authLogin succeeded')
+        return await authLogin(email, password)
       } catch (err: any) {
-        console.log('[useAdminLogin] error', err?.message, err)
         setError(err instanceof Error ? err.message : 'Une erreur est survenue')
         throw err
       } finally {
