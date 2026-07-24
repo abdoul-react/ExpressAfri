@@ -60,4 +60,8 @@ export class MockOrderDataSource implements OrderDataSource {
   async getOrderById(id: string): Promise<Order | undefined> {
     return this.orders.find((o) => o.id === id);
   }
+
+  async submitReturn(_payload: import("../OrderDataSource").ReturnPayload): Promise<{ ok: boolean }> {
+    return { ok: true };
+  }
 }

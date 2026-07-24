@@ -39,4 +39,28 @@ export class MockContentDataSource implements ContentDataSource {
   async getShippingCountries(): Promise<string[]> {
     return [];
   }
+
+  async getFeedSectionProducts(_id: string): Promise<{ id: string; title: string; displayStyle: string; items: any[] }> {
+    return { id: _id, title: "", displayStyle: "horizontal-scroll", items: [] };
+  }
+
+  async listStaticPages(): Promise<{ slug: string; title: string; updatedAt: string }[]> {
+    return [];
+  }
+
+  async getStaticPageBySlug(_slug: string): Promise<{ slug: string; title: string; content: string; updatedAt?: string }> {
+    return { slug: _slug, title: "", content: "" };
+  }
+
+  async getAppSettings(): Promise<{ key: string; value: string }[]> {
+    return [];
+  }
+
+  async getAppLogos(): Promise<any[]> {
+    return [];
+  }
+
+  async getFeatureFlags(): Promise<any[]> {
+    return [];
+  }
 }

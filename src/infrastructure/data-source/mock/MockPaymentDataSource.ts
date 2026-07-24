@@ -14,4 +14,8 @@ export class MockPaymentDataSource implements PaymentDataSource {
   async initializePayment(_orderId: string, _method: string): Promise<{ paymentUrl?: string; status: string }> {
     return { status: "pending" };
   }
+
+  async getWallet(): Promise<import("../PaymentDataSource").Wallet> {
+    return { balance: 0, lifetime: 0, tier: "bronze", totalSavings: 0 };
+  }
 }
