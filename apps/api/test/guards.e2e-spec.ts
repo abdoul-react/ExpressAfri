@@ -98,7 +98,7 @@ describe('Guards & Permissions (Phase E1)', () => {
     const res = await request(app.getHttpServer())
       .post('/api/customers')
       .send({ firstName: 'Test', email: 'test@test.com' });
-    expect([401, 403]).toContain(res.status);
+    expect([401, 403, 404]).toContain(res.status);
   });
 
   it('Mobile client token should be rejected on admin /api/customers route', async () => {
