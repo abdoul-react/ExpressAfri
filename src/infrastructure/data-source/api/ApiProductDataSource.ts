@@ -1,10 +1,20 @@
-import type { ProductDataSource, ReviewPayload } from "../ProductDataSource";
+import type { ProductDataSource, ReviewPayload, ProductQuery } from "../ProductDataSource";
 import type { Product } from "@/types";
 import { apiAdapter } from "@/infrastructure/api/apiAdapter";
 
 export class ApiProductDataSource implements ProductDataSource {
-  async getProducts(): Promise<Product[]> {
-    return apiAdapter.get("/mobile/products");
+  async getProducts(query?: ProductQuery): Promise<Product[]> {
+    const params = new URLSearchParams();
+    if (query?.search) params.set('search', query.search);
+    if (query?.categoryId) params.set('categoryId', query.categoryId);
+    if (query?.limit != null) params.set('limit', String(query.limit));
+    if (query?.offset != null) params.set('offset', String(query.offset));
+    if (query?.minPrice != null) params.set('minPrice', String(query.minPrice));
+    if (query?.maxPrice != null) params.set('maxPrice', String(query.maxPrice));
+    if (query?.onSale) params.set('onSale', 'true');
+    if (query?.sort) params.set('sort', query.sort);
+    const qs = params.toString();
+    return apiAdapter.get(`/mobile/products${qs ? `?${qs}` : ''}`);
   }
 
   async getProductById(id: string): Promise<Product | undefined> {

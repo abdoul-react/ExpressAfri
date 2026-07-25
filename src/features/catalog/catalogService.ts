@@ -3,8 +3,8 @@ import type { ReviewPayload } from "@/infrastructure/data-source/ProductDataSour
 import { productDataSource, categoryDataSource } from "@/infrastructure/data-source";
 
 export const catalogService = {
-  async getProducts(): Promise<Product[]> {
-    return productDataSource.getProducts();
+  async getProducts(query?: import('@/infrastructure/data-source/ProductDataSource').ProductQuery): Promise<Product[]> {
+    return productDataSource.getProducts(query);
   },
 
   async getProductById(id: string): Promise<Product | undefined> {

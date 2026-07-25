@@ -42,8 +42,8 @@ export class ApiAdminUserDataSource implements AdminUserDataSource {
     return toCustomer(data as Record<string, unknown>)
   }
 
-  async getCustomerOrders(customerId: string): Promise<OrderDTO[]> {
-    const { data } = await api.get('/orders', { params: { customerId, limit: 50 } })
+  async getCustomerOrders(customerId: string, params?: { page?: number; limit?: number }): Promise<OrderDTO[]> {
+    const { data } = await api.get('/orders', { params: { customerId, limit: params?.limit ?? 50, page: params?.page ?? 1 } })
     const items = (data.data ?? data) as Record<string, unknown>[]
     return items.map((raw) => ({
       id: raw.id as string,

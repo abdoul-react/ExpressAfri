@@ -20,7 +20,7 @@ export interface PaginatedResult<T> {
 export interface AdminUserDataSource {
   listCustomers(params: CustomerQueryParams): Promise<PaginatedResult<CustomerDTO>>
   getCustomerById(id: string): Promise<CustomerDTO>
-  getCustomerOrders(customerId: string): Promise<OrderDTO[]>
+  getCustomerOrders(customerId: string, params?: { page?: number; limit?: number }): Promise<OrderDTO[]>
   updateCustomer(id: string, data: CustomerUpdateInput): Promise<CustomerDTO>
   deleteCustomer(id: string): Promise<void>
   banCustomer(id: string): Promise<void>

@@ -12,6 +12,7 @@ import {
   Share2,
   Globe,
   BookOpen,
+  MessageSquare,
 } from 'lucide-react'
 import { PageHeader, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui'
 import { useAdminContentSummary } from '../hooks/useAdminContentSummary'
@@ -26,6 +27,7 @@ import { ShortcutsTab } from './ShortcutsTab'
 import { SocialLinksTab } from './SocialLinksTab'
 import { SEOTab } from './SEOTab'
 import { PaymentMethodsTab } from './PaymentMethodsTab'
+import { SuggestionsTab } from './SuggestionsTab'
 
 const TABS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'branding', label: 'Branding', icon: Palette },
@@ -39,6 +41,7 @@ const TABS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'social', label: 'Réseaux sociaux', icon: Share2 },
   { id: 'seo', label: 'SEO', icon: Globe },
   { id: 'pages', label: 'Pages', icon: BookOpen },
+  { id: 'suggestions', label: 'Suggestions', icon: MessageSquare },
 ]
 
 export function AdminContentPage() {
@@ -107,6 +110,9 @@ export function AdminContentPage() {
         </TabsContent>
         <TabsContent value="pages">
           <StaticPagesTab />
+        </TabsContent>
+        <TabsContent value="suggestions">
+          <SuggestionsTab />
         </TabsContent>
       </Tabs>
     </div>

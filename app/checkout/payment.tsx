@@ -126,8 +126,12 @@ export default function PaymentScreen() {
       });
 
       // Pour les methodes non-COD, initialiser le parcours PSP
+      // Le panier n'est vidé et le succès n'est affiché QU'après confirmation PSP
       if (effectiveMethod !== "cod" && order?.id) {
-        await paymentService.initializePayment(order.id, effectiveMethod);
+        const pspResult = await paymentService.initializePayment(order.id, effectiveMethod);
+        if (!pspResult || pspResult.status === "failed") {
+          throw new Error(pspResult?.message ?? "Échec de l'initialisation du paiement PSP");
+        }
       }
 
       clearSelected();

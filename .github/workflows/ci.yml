@@ -104,6 +104,8 @@ jobs:
         run: cd apps/admin && npm ci
       - name: Build admin
         run: cd apps/admin && npm run build
+        env:
+          VITE_USE_MOCK: 'false'
       - name: Build Docker image
         run: docker build -t expressafri/api apps/api
 

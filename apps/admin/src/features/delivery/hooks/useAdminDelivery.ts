@@ -51,6 +51,7 @@ export function useAdminAssignments(deliveryPersonId?: string) {
   return useQuery({
     queryKey: ['admin', 'delivery', 'assignments', deliveryPersonId],
     queryFn: () => adminDeliveryService.fetchAssignments(deliveryPersonId),
+    staleTime: 0,
     enabled: deliveryPersonId !== undefined,
   })
 }
@@ -94,5 +95,6 @@ export function useAvailableOrders() {
   return useQuery({
     queryKey: ['admin', 'delivery', 'available-orders'],
     queryFn: () => adminDeliveryService.fetchAvailableOrders(),
+    staleTime: 0,
   })
 }

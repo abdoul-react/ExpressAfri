@@ -58,11 +58,17 @@ export function useSearchFilters() {
 
 export function useFilteredProducts(filters: SearchFilters) {
   const { data, isLoading } = useQuery<Product[]>({
-    queryKey: ['products'],
-    queryFn: () => catalogService.getProducts(),
+    queryKey: ['products', 'filtered', filters.query, filters.categoryId, filters.minPrice, filters.maxPrice, filters.onSaleOnly, filters.sort],
+    queryFn: () => catalogService.getProducts({
+      search: filters.query.trim() || undefined,
+      categoryId: filters.categoryId ?? undefined,
+      minPrice: filters.minPrice ?? undefined,
+      maxPrice: filters.maxPrice ?? undefined,
+      onSale: filters.onSaleOnly || undefined,
+      sort: filters.sort !== 'featured' ? filters.sort : undefined,
+      limit: 100,
+    }),
   });
-
-  const allProducts = useMemo(() => data ?? [], [data]);
 
   const categoriesQ = useQuery({
     queryKey: ['categories'],
@@ -71,61 +77,22 @@ export function useFilteredProducts(filters: SearchFilters) {
 
   const categories = categoriesQ.data ?? [];
 
+  // Filtres restants non supportés côté serveur (note, livraison gratuite)
   const results = useMemo(() => {
-    let filtered = [...allProducts];
-
-    // search by query
-    const q = filters.query.trim().toLowerCase();
-    if (q) {
-      filtered = filtered.filter((p) => p.title.toLowerCase().includes(q));
-    }
-
-    // category
-    if (filters.categoryId) {
-      filtered = filtered.filter((p) => p.categoryId === filters.categoryId);
-    }
-
-    // price range
-    if (filters.minPrice != null) {
-      filtered = filtered.filter((p) => p.priceUsd >= filters.minPrice!);
-    }
-    if (filters.maxPrice != null) {
-      filtered = filtered.filter((p) => p.priceUsd <= filters.maxPrice!);
-    }
-
-    // rating
+    let filtered = data ?? [];
     if (filters.minRating != null) {
       filtered = filtered.filter((p) => p.rating >= filters.minRating!);
     }
-
-    // free shipping
     if (filters.freeShippingOnly) {
       filtered = filtered.filter((p) => p.freeShipping);
     }
-
-    // on sale
-    if (filters.onSaleOnly) {
-      filtered = filtered.filter((p) => p.discountPercent != null && p.discountPercent > 0);
+    if (filters.sort === 'rating') {
+      filtered = [...filtered].sort((a, b) => b.rating - a.rating);
+    } else if (filters.sort === 'newest') {
+      filtered = [...filtered].sort((a, b) => (a.id > b.id ? -1 : 1));
     }
-
-    // sort
-    switch (filters.sort) {
-      case 'priceLow':
-        filtered.sort((a, b) => a.priceUsd - b.priceUsd);
-        break;
-      case 'priceHigh':
-        filtered.sort((a, b) => b.priceUsd - a.priceUsd);
-        break;
-      case 'rating':
-        filtered.sort((a, b) => b.rating - a.rating);
-        break;
-      case 'newest':
-        filtered.sort((a, b) => (a.id > b.id ? -1 : 1));
-        break;
-    }
-
     return filtered;
-  }, [allProducts, filters]);
+  }, [data, filters.minRating, filters.freeShippingOnly, filters.sort]);
 
-  return { results, isLoading, categories, totalCount: allProducts.length };
+  return { results, isLoading, categories, totalCount: data?.length ?? 0 };
 }

@@ -685,11 +685,27 @@ export class MobileService {
     search?: string;
     limit?: number;
     offset?: number;
+    minPrice?: number;
+    maxPrice?: number;
+    minRating?: number;
+    freeShipping?: boolean;
+    onSale?: boolean;
+    sort?: string;
   }) {
     const conditions = [eq(products.status, 'active')];
     if (query.categoryId)
       conditions.push(eq(products.categoryId, query.categoryId));
     if (query.search) conditions.push(like(products.name, `%${query.search}%`));
+    if (query.minPrice != null)
+      conditions.push(sql`${products.price} >= ${query.minPrice}`);
+    if (query.maxPrice != null)
+      conditions.push(sql`${products.price} <= ${query.maxPrice}`);
+    if (query.onSale)
+      conditions.push(sql`${products.comparePrice} IS NOT NULL AND ${products.comparePrice} > ${products.price}`);
+
+    let orderBy: any = desc(products.createdAt);
+    if (query.sort === 'priceLow') orderBy = products.price;
+    else if (query.sort === 'priceHigh') orderBy = desc(products.price as any);
 
     const rows = await this.db
       .select()
@@ -697,7 +713,7 @@ export class MobileService {
       .where(and(...conditions))
       .limit(query.limit ?? 50)
       .offset(query.offset ?? 0)
-      .orderBy(desc(products.createdAt));
+      .orderBy(orderBy);
 
     const productIds = rows.map((p) => p.id);
     const allImages = productIds.length

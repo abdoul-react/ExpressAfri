@@ -214,7 +214,14 @@ export class MobileController {
   @Get('products')
   @ApiOperation({ summary: 'Produits (format mobile)' })
   async products(@Query() query: any) {
-    return this.service.getProducts(query);
+    return this.service.getProducts({
+      ...query,
+      limit: query.limit ? Number(query.limit) : undefined,
+      offset: query.offset ? Number(query.offset) : undefined,
+      minPrice: query.minPrice ? Number(query.minPrice) : undefined,
+      maxPrice: query.maxPrice ? Number(query.maxPrice) : undefined,
+      onSale: query.onSale === 'true' || query.onSale === true,
+    });
   }
 
   @Public()

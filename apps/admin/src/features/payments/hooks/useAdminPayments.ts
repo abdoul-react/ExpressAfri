@@ -6,6 +6,7 @@ export function useAdminPayments(params: PaymentQueryParams) {
   return useQuery({
     queryKey: ['admin', 'payments', params],
     queryFn: () => adminPaymentService.list(params),
+    staleTime: 0,
     placeholderData: (prev) => prev,
   })
 }
@@ -14,6 +15,7 @@ export function useAdminPayment(id: string) {
   return useQuery({
     queryKey: ['admin', 'payment', id],
     queryFn: () => adminPaymentService.getById(id),
+    staleTime: 0,
     enabled: !!id,
   })
 }

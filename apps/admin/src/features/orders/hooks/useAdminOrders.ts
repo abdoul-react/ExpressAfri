@@ -6,6 +6,7 @@ export function useAdminOrders(params: OrderQueryParams) {
   return useQuery({
     queryKey: ['admin', 'orders', params],
     queryFn: () => adminOrderService.list(params),
+    staleTime: 0,
     placeholderData: (prev) => prev,
   })
 }
@@ -14,6 +15,7 @@ export function useAdminOrder(id: string) {
   return useQuery({
     queryKey: ['admin', 'order', id],
     queryFn: () => adminOrderService.getById(id),
+    staleTime: 0,
     enabled: !!id,
   })
 }
