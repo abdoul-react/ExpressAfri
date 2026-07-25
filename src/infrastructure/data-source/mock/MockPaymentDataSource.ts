@@ -11,7 +11,7 @@ export class MockPaymentDataSource implements PaymentDataSource {
     return ["VISA", "Mastercard", "UnionPay", "Amex", "JCB"];
   }
 
-  async initializePayment(_orderId: string, _method: string): Promise<{ paymentUrl?: string; status: string }> {
+  async initializePayment(_orderId: string, _method: string): Promise<{ paymentUrl?: string; status: string; message?: string }> {
     return { status: "pending" };
   }
 

@@ -23,6 +23,6 @@ export type Wallet = {
 export interface PaymentDataSource {
   getMethods(): Promise<PaymentMethod[]>;
   getCardBrands(): Promise<string[]>;
-  initializePayment(orderId: string, method: string): Promise<{ paymentUrl?: string; status: string }>;
+  initializePayment(orderId: string, method: string): Promise<{ paymentUrl?: string; status: string; message?: string }>;
   getWallet(): Promise<Wallet>;
 }
