@@ -1726,11 +1726,13 @@ export class MobileService {
     );
 
     // Score pondéré : chaque match vaut le score de confiance Vision du label
+    // Le score est converti en entier (x100) pour éviter l'erreur PostgreSQL
+    // "syntaxe invalide pour le type integer" avec les flottants dans CASE WHEN
     const scoreExpr = sql<number>`(
       ${terms
         .map((t) => {
-          const weight = Math.round((searchTerms.get(t) ?? 0.5) * 100) / 100;
-          return sql`(CASE WHEN lower(${products.name}) LIKE ${'%' + t + '%'} OR lower(coalesce(${products.description}, '')) LIKE ${'%' + t + '%'} THEN ${weight} ELSE 0 END)`;
+          const weight = Math.round((searchTerms.get(t) ?? 0.5) * 100);
+          return sql`(CASE WHEN lower(${products.name}) LIKE ${'%' + t + '%'} OR lower(coalesce(${products.description}, '')) LIKE ${'%' + t + '%'} THEN ${sql.raw(String(weight))} ELSE 0 END)`;
         })
         .reduce((a, b) => sql`${a} + ${b}`)}
     )`;
