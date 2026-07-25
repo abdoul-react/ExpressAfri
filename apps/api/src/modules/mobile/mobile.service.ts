@@ -50,6 +50,8 @@ import { payments } from '../../database/schema/payments';
 import { shippingZones, shippingMethods } from '../../database/schema/shipping';
 import { loyaltyPoints } from '../../database/schema/loyalty';
 
+import { ImageVisionService } from '../../common/vision/image-vision.service';
+
 // Boutique système (seedée) : les customers.storeId NOT NULL doivent référencer une boutique existante
 const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -116,6 +118,7 @@ export class MobileService {
   constructor(
     @Inject(DRIZZLE) private db: DrizzleDB,
     private jwt: JwtService,
+    private vision: ImageVisionService,
   ) {}
 
   private signToken(customer: { id: string; email: string | null }) {
@@ -1634,28 +1637,125 @@ export class MobileService {
   }
 
   /**
-   * Recherche par image — MVP heuristique.
-   * L'image est reçue, les produits populaires/actifs sont retournés.
-   * Interface ImageSearchProvider prête pour un service de vision externe.
+   * Recherche par image — analyse visuelle réelle des pixels.
+   *
+   * Stratégie :
+   * 1. Google Cloud Vision API analyse les pixels de l'image uploadée et
+   *    retourne des labels sémantiques (ex: "dress", "red", "woman", "cotton").
+   *    C'est la même approche qu'AliExpress/Taobao.
+   * 2. Ces labels sont traduits en termes de recherche FR/EN et matchés
+   *    contre name + description + categoryName des produits actifs.
+   * 3. Les résultats sont triés par score de pertinence (nombre de labels
+   *    matchés × confiance Vision API).
+   * 4. Si aucun label reconnu (image noire, floue, hors catalogue) → [] vide.
+   *
+   * Fallback sans clé API : heuristique sur le nom de fichier (développement).
    */
-  async searchByImage(_imagePath: string) {
-    // Heuristique : retourner les produits actifs les plus récents (MVP)
-    // À remplacer par un vrai service de vision (CLIP, Google Vision, etc.)
+  async searchByImage(imagePath: string) {
+    const filename = imagePath.split(/[\/\\]/).pop() ?? '';
+
+    // Étape 1 : extraire les labels depuis les pixels (ou le nom de fichier en fallback)
+    const visionLabels = await this.vision.extractLabels(imagePath, filename);
+    if (visionLabels.length === 0) return [];
+
+    // Étape 2 : traduire les labels anglais en termes français pour matcher
+    // les produits saisis en français par l'admin
+    const EN_TO_FR: Record<string, string[]> = {
+      dress: ['robe'], skirt: ['jupe'], shirt: ['chemise'], blouse: ['chemisier'],
+      'top': ['haut', 'top'], pants: ['pantalon'], trousers: ['pantalon'],
+      jeans: ['jean'], jacket: ['veste', 'blouson'], coat: ['manteau'],
+      suit: ['costume'], shoes: ['chaussure'], sneakers: ['sneaker', 'basket'],
+      boots: ['botte'], bag: ['sac'], handbag: ['sac'], purse: ['sac'],
+      watch: ['montre'], hat: ['chapeau', 'casquette'], scarf: ['écharpe'],
+      gloves: ['gants'], belt: ['ceinture'], sunglasses: ['lunettes'],
+      jewelry: ['bijou'], necklace: ['collier'], bracelet: ['bracelet'],
+      ring: ['bague'], earrings: ['boucles d\'oreilles'],
+      // Couleurs
+      red: ['rouge'], blue: ['bleu'], green: ['vert'], black: ['noir'],
+      white: ['blanc'], yellow: ['jaune'], pink: ['rose'], orange: ['orange'],
+      purple: ['violet'], brown: ['marron'], grey: ['gris'], gray: ['gris'],
+      gold: ['or', 'doré'], silver: ['argent', 'argenté'],
+      // Genre
+      woman: ['femme'], women: ['femme'], female: ['femme'], ladies: ['femme'],
+      man: ['homme'], men: ['homme'], male: ['homme'],
+      child: ['enfant'], children: ['enfant'], kids: ['enfant'],
+      // Électronique
+      phone: ['téléphone', 'smartphone'], smartphone: ['smartphone'],
+      laptop: ['ordinateur', 'laptop'], computer: ['ordinateur'],
+      tablet: ['tablette'], headphones: ['casque', 'écouteur'],
+      earphones: ['écouteur'], speaker: ['enceinte'],
+      // Beauté
+      lipstick: ['rouge à lèvres'], perfume: ['parfum'],
+      cream: ['crème'], makeup: ['maquillage'], cosmetics: ['cosmétique'],
+      // Maison
+      chair: ['chaise'], table: ['table'], lamp: ['lampe'],
+      sofa: ['canapé'], furniture: ['meuble'],
+      // Sport
+      sport: ['sport'], football: ['football'], gym: ['gym', 'fitness'],
+      // Matières
+      leather: ['cuir'], cotton: ['coton'], silk: ['soie'], wool: ['laine'],
+      denim: ['jean', 'denim'],
+      // Catégories générales
+      clothing: ['vêtement', 'habit'], fashion: ['mode'],
+      accessory: ['accessoire'], electronics: ['électronique'],
+      beauty: ['beauté'], home: ['maison'],
+    };
+
+    // Construire la liste finale de termes de recherche (labels + traductions)
+    const searchTerms = new Map<string, number>(); // terme → score max
+    for (const label of visionLabels) {
+      const term = label.description.toLowerCase();
+      // Ajouter le label original
+      const existing = searchTerms.get(term) ?? 0;
+      if (label.score > existing) searchTerms.set(term, label.score);
+      // Ajouter les traductions françaises
+      const translations = EN_TO_FR[term] ?? [];
+      for (const fr of translations) {
+        const existingFr = searchTerms.get(fr) ?? 0;
+        if (label.score > existingFr) searchTerms.set(fr, label.score);
+      }
+    }
+
+    if (searchTerms.size === 0) return [];
+
+    const terms = [...searchTerms.keys()];
+
+    // Étape 3 : requête SQL — chaque terme matche sur name OU description
+    const tokenConditions = terms.map((term) =>
+      sql`(lower(${products.name}) LIKE ${'%' + term + '%'} OR lower(coalesce(${products.description}, '')) LIKE ${'%' + term + '%'})`,
+    );
+
+    // Score pondéré : chaque match vaut le score de confiance Vision du label
+    const scoreExpr = sql<number>`(
+      ${terms
+        .map((t) => {
+          const weight = Math.round((searchTerms.get(t) ?? 0.5) * 100) / 100;
+          return sql`(CASE WHEN lower(${products.name}) LIKE ${'%' + t + '%'} OR lower(coalesce(${products.description}, '')) LIKE ${'%' + t + '%'} THEN ${weight} ELSE 0 END)`;
+        })
+        .reduce((a, b) => sql`${a} + ${b}`)}
+    )`;
+
     const rows = await this.db
       .select()
       .from(products)
-      .where(eq(products.status, 'active'))
-      .orderBy(products.createdAt)
-      .limit(12);
+      .where(
+        and(
+          eq(products.status, 'active'),
+          sql`(${tokenConditions.reduce((a, b) => sql`${a} OR ${b}`)})`,
+        ),
+      )
+      .orderBy(desc(scoreExpr), desc(products.createdAt))
+      .limit(24);
+
+    if (rows.length === 0) return [];
 
     const productIds = rows.map((p) => p.id);
-    const allImages = productIds.length
-      ? await this.db
-          .select()
-          .from(productImages)
-          .where(inArray(productImages.productId, productIds))
-          .orderBy(productImages.sortOrder)
-      : [];
+    const allImages = await this.db
+      .select()
+      .from(productImages)
+      .where(inArray(productImages.productId, productIds))
+      .orderBy(productImages.sortOrder);
+
     const imagesByProduct = new Map<string, string[]>();
     for (const img of allImages) {
       const list = imagesByProduct.get(img.productId) ?? [];
@@ -1666,6 +1766,103 @@ export class MobileService {
     return rows.map((p) =>
       this.toMobileProduct(p, imagesByProduct.get(p.id) ?? []),
     );
+  }
+
+  /**
+   * @deprecated Remplacé par ImageVisionService.extractFromFilename()
+   * Conservé uniquement pour compatibilité — ne plus appeler directement.
+   */
+  private extractImageTokens(filename: string): string[] {
+    return this.vision
+      .extractFromFilename(filename)
+      .map((l) => l.description);
+  }
+
+  async getCustomerOrders(customerId: string) {
+    const rows = await this.db
+      .select()
+      .from(orders)
+      .where(eq(orders.customerId, customerId))
+      .orderBy(desc(orders.createdAt))
+      .limit(50);
+
+    const orderIds = rows.map((o) => o.id);
+    const allItems = orderIds.length
+      ? await this.db
+          .select()
+          .from(orderItems)
+          .where(inArray(orderItems.orderId, orderIds))
+      : [];
+
+    const itemsByOrder = new Map<string, typeof allItems>();
+    for (const item of allItems) {
+      const list = itemsByOrder.get(item.orderId) ?? [];
+      list.push(item);
+      itemsByOrder.set(item.orderId, list);
+    }
+
+    return rows.map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      status: o.status,
+      total: o.total,
+      currency: o.currency,
+      createdAt: o.createdAt,
+      items: (itemsByOrder.get(o.id) ?? []).map((i) => ({
+        productId: i.productId,
+        label: i.label,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        imageUrl: i.imageUrl,
+      })),
+    }));
+  }
+
+  async getCustomerOrderById(customerId: string, orderId: string) {
+    const [order] = await this.db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.customerId, customerId)))
+      .limit(1);
+    if (!order) throw new NotFoundException('Commande introuvable');
+
+    const items = await this.db
+      .select()
+      .from(orderItems)
+      .where(eq(orderItems.orderId, orderId));
+
+    const statusLog = await this.db
+      .select()
+      .from(orderStatusLog)
+      .where(eq(orderStatusLog.orderId, orderId))
+      .orderBy(desc(orderStatusLog.createdAt));
+
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      subtotal: order.subtotal,
+      shippingCost: order.shippingCost,
+      discountAmount: order.discountAmount,
+      total: order.total,
+      currency: order.currency,
+      shippingAddress: order.shippingAddress,
+      notes: order.notes,
+      createdAt: order.createdAt,
+      items: items.map((i) => ({
+        productId: i.productId,
+        label: i.label,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        totalPrice: i.totalPrice,
+        imageUrl: i.imageUrl,
+      })),
+      statusLog: statusLog.map((s) => ({
+        toStatus: s.toStatus,
+        reason: s.reason,
+        createdAt: s.createdAt,
+      })),
+    };
   }
 
   async submitSuggestion(customerId: string | null, content: string) {

@@ -81,9 +81,10 @@ export const useAuthStore = create<AuthState>()(
         clearPrivateQueries();
         set({ isGuest: true, isAuthenticated: false, user: null });
         apiClearTokens().catch(() => {});
-        // Purger le panier et la wishlist de l'ancien compte
+        // Purger le panier, la wishlist et les adresses de l'ancien compte
         import('@/store/cartStore').then(({ useCartStore }) => useCartStore.getState().clear()).catch(() => {});
         import('@/store/wishlistStore').then(({ useWishlistStore }) => useWishlistStore.setState({ ids: [] })).catch(() => {});
+        import('@/store/addressStore').then(({ useAddressStore }) => useAddressStore.getState().hydrateFromServer([], null)).catch(() => {});
       },
       signOut: () => {
         clearPrivateQueries();
@@ -96,9 +97,10 @@ export const useAuthStore = create<AuthState>()(
             error,
           });
         });
-        // Purger le panier et la wishlist pour éviter toute fuite entre comptes
+        // Purger le panier, la wishlist et les adresses pour éviter toute fuite entre comptes
         import('@/store/cartStore').then(({ useCartStore }) => useCartStore.getState().clear()).catch(() => {});
         import('@/store/wishlistStore').then(({ useWishlistStore }) => useWishlistStore.setState({ ids: [] })).catch(() => {});
+        import('@/store/addressStore').then(({ useAddressStore }) => useAddressStore.getState().hydrateFromServer([], null)).catch(() => {});
       },
       setHydrated: () => set({ hydrated: true }),
       updateProfile: (patch) =>
@@ -128,21 +130,48 @@ export const useAuthStore = create<AuthState>()(
         // préchargements) partent sans jeton → 401 → session/avatar perdus.
         apiLoadTokens()
           .catch(() => {})
-          .finally(() => {
-            // Filet de sécurité : les jetons (30/90 j) sont stockés sous des
-            // clés séparées de l'état zustand. Si l'état persisté dit
-            // « déconnecté » alors que des jetons valides existent, on restaure
-            // la session à partir des jetons — refreshProfile() rechargera le
-            // profil serveur juste après.
+          .then(async () => {
             const hasToken = !!apiGetAccessToken();
             const s = useAuthStore.getState();
-            if (hasToken && !s.isAuthenticated && !s.isGuest) {
+
+            if (hasToken && s.isAuthenticated) {
+              // Token présent et état persisté = connecté : vérifier que le
+              // token est encore valide en tentant un refresh silencieux.
+              // Si le refresh échoue (401/réseau), on laisse l'apiAdapter
+              // gérer la déconnexion via onSessionExpired.
+              try {
+                const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? '';
+                const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+                const storedRefresh = await AsyncStorage.getItem('auth.refresh');
+                if (storedRefresh) {
+                  const r = await fetch(`${API_BASE.replace(/\/$/, '')}/mobile/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({ refreshToken: storedRefresh }),
+                  });
+                  if (r.ok) {
+                    const js = await r.json();
+                    await apiSetTokens({ access: js.accessToken, refresh: js.refreshToken });
+                    logger.info('[authStore] Token rafraîchi au démarrage');
+                  } else if (r.status === 401 || r.status === 403) {
+                    // Token définitivement expiré : déconnecter proprement
+                    logger.info('[authStore] Token expiré au démarrage — déconnexion');
+                    await apiClearTokens();
+                    useAuthStore.setState({ isAuthenticated: false, isGuest: false, user: null });
+                  }
+                  // 5xx / réseau : on garde l'état actuel, l'apiAdapter retentera
+                }
+              } catch {
+                // Erreur réseau au démarrage : on garde la session locale
+              }
+            } else if (hasToken && !s.isAuthenticated && !s.isGuest) {
               logger.info(
-                "[authStore] Session restaurée depuis les jetons (état persisté incohérent)",
+                '[authStore] Session restaurée depuis les jetons (état persisté incohérent)',
               );
               useAuthStore.setState({ isAuthenticated: true });
             }
-            logger.info("[authStore] Hydrated", {
+
+            logger.info('[authStore] Hydrated', {
               isAuthenticated: useAuthStore.getState().isAuthenticated,
               hasToken,
             });

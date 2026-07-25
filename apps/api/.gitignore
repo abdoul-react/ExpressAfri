@@ -1,0 +1,8 @@
+.env
+.env.local
+.env.*.local
+dist/
+node_modules/
+uploads/avatars/
+uploads/search/
+*.log

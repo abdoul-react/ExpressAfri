@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,8 @@ import { useFeatureFlags } from '@/features/content';
 import { useTranslation } from 'react-i18next';
 import { useCartStore } from '@/store/cartStore';
 import { useWishlistStore } from '@/store/wishlistStore';
+import { useAuthStore } from '@/store/authStore';
+import { apiAdapter } from '@/infrastructure/api/apiAdapter';
 import type { Product } from '@/types';
 
 type Phase = 'camera' | 'scanning' | 'results' | 'error';
@@ -57,13 +59,37 @@ export default function CameraScreen() {
   const [tab, setTab] = useState(0);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [orderedProductIds, setOrderedProductIds] = useState<Set<string>>(new Set());
+
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Charger les ids des produits déjà commandés pour l'onglet "Commandes"
+  const loadOrderedProducts = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const orders: any[] = await apiAdapter.get('/mobile/orders');
+      const ids = new Set<string>();
+      for (const order of orders) {
+        for (const item of order.items ?? []) {
+          if (item.productId) ids.add(item.productId);
+        }
+      }
+      setOrderedProductIds(ids);
+    } catch {
+      // Silencieux : l'onglet Commandes affichera tous les résultats en fallback
+    }
+  };
 
   const startScan = async (uri: string) => {
     setPhotoUri(uri);
     setPhase('scanning');
     setSearchError(null);
+    setOrderedProductIds(new Set());
     try {
-      const results = await uploadImageSearch(uri);
+      const [results] = await Promise.all([
+        uploadImageSearch(uri),
+        loadOrderedProducts(),
+      ]);
       if (results.length === 0) {
         setSearchResults([]);
         setSearchError(t('camera.noResults', 'Aucun produit similaire trouvé.'));
@@ -110,7 +136,17 @@ export default function CameraScreen() {
   };
 
   // Onglet Prix : tri par prix croissant
-  const results = tab === 2 ? [...searchResults].sort((a, b) => a.priceUsd - b.priceUsd) : searchResults;
+  // Onglet Commandes : produits déjà commandés en premier, sinon tous
+  const results = useMemo(() => {
+    if (tab === 1) {
+      // Commandes : produits déjà achetés en tête, puis les autres
+      const ordered = searchResults.filter((p) => orderedProductIds.has(p.id));
+      const rest = searchResults.filter((p) => !orderedProductIds.has(p.id));
+      return ordered.length > 0 ? [...ordered, ...rest] : searchResults;
+    }
+    if (tab === 2) return [...searchResults].sort((a, b) => a.priceUsd - b.priceUsd);
+    return searchResults;
+  }, [tab, searchResults, orderedProductIds]);
   const toggleWish = useWishlistStore((s) => s.toggle);
   const addToCart = useCartStore((s) => s.add);
   const wishedIds = useWishlistStore((s) => s.ids);

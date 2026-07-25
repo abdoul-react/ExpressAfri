@@ -35,6 +35,19 @@ type AddressState = {
 };
 
 /**
+ * Retourne la clé de persistence des adresses pour l'utilisateur courant.
+ */
+function addressStorageKey(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { useAuthStore } = require('@/store/authStore');
+    const userId = useAuthStore.getState().user?.email ?? null;
+    if (userId) return `afriexpress-addresses:${userId}`;
+  } catch {}
+  return 'afriexpress-addresses:guest';
+}
+
+/**
  * Adresses de livraison : le store local reste la source d'affichage (l'app
  * marche hors-ligne et en invité), et chaque opération est répliquée vers
  * l'API en arrière-plan quand une session cliente existe — voir
@@ -95,7 +108,7 @@ export const useAddressStore = create<AddressState>()(
       hydrateFromServer: (addresses, defaultId) => set({ addresses, defaultId }),
     }),
     {
-      name: 'afriexpress-addresses',
+      name: addressStorageKey(),
       storage: createJSONStorage(() => AsyncStorage),
     }
   )

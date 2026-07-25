@@ -8,6 +8,7 @@ import { MobileService } from './mobile.service';
 import { CustomerJwtStrategy } from './customer-jwt.strategy';
 import { CustomersModule } from '../customers/customers.module';
 import { PushModule } from '../push/push.module';
+import { ImageVisionService } from '../../common/vision/image-vision.service';
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { PushModule } from '../push/push.module';
     PushModule,
   ],
   controllers: [MobileController],
-  providers: [MobileService, CustomerJwtStrategy],
+  providers: [MobileService, CustomerJwtStrategy, ImageVisionService],
   exports: [MobileService],
 })
 export class MobileModule {}

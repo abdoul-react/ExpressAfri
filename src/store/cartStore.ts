@@ -24,6 +24,22 @@ type CartState = {
   subtotalUsd: () => number;
 };
 
+/**
+ * Retourne la clé de persistence du panier pour l'utilisateur courant.
+ * Invité / non connecté → clé générique (panier anonyme).
+ * Connecté → clé isolée par userId pour éviter toute fuite entre comptes.
+ */
+function cartStorageKey(): string {
+  try {
+    // Import synchrone du store auth (déjà initialisé avant le panier)
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { useAuthStore } = require('@/store/authStore');
+    const userId = useAuthStore.getState().user?.email ?? null;
+    if (userId) return `afriexpress-cart:${userId}`;
+  } catch {}
+  return 'afriexpress-cart:guest';
+}
+
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
@@ -91,7 +107,7 @@ export const useCartStore = create<CartState>()(
           .reduce((sum, i) => sum + i.priceUsd * i.quantity, 0),
     }),
     {
-      name: 'afriexpress-cart',
+      name: cartStorageKey(),
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({ items: state.items }),
     }

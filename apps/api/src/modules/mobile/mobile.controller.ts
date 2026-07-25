@@ -208,6 +208,22 @@ export class MobileController {
     return this.service.createOrder(user.id, body);
   }
 
+  @Get('orders')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Historique des commandes du client connecté' })
+  async getMyOrders(@CurrentUser() user: any) {
+    if (!user?.id) throw new UnauthorizedException('Connexion requise');
+    return this.service.getCustomerOrders(user.id);
+  }
+
+  @Get('orders/:id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Détail d’une commande' })
+  async getOrderById(@CurrentUser() user: any, @Param('id') id: string) {
+    if (!user?.id) throw new UnauthorizedException('Connexion requise');
+    return this.service.getCustomerOrderById(user.id, id);
+  }
+
   // ====== PRODUCTS & CATALOG (format mobile) ======
 
   @Public()

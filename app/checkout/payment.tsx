@@ -18,13 +18,14 @@ import { usePaymentMethods } from "@/features/payment";
 import { paymentService } from "@/features/payment/paymentService";
 import { createOrder } from "@/features/checkout/checkoutApiService";
 import { useAddressStore } from "@/store/addressStore";
+import { useAuthStore } from "@/store/authStore";
 import { Icon } from "@/icons";
 import { useCartStore } from "@/store/cartStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { resolveMediaUrl, isSvgUrl } from "@/utils/resolveMediaUrl";
 import type { PaymentMethodId } from "@/types";
 import { useRouter } from "expo-router";
-import { useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Image } from "expo-image";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -52,6 +53,17 @@ export default function PaymentScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Garde : un invité ne peut pas passer commande
+  React.useEffect(() => {
+    if (!isAuthenticated) {
+      router.replace('/auth/login');
+    }
+  }, [isAuthenticated, router]);
+
+  if (!isAuthenticated) return null;
+
   const countryCode = useSettingsStore((s) => s.country);
   const { methods, isLoading, error, refetch } = usePaymentMethods();
   const mobileMoneyMethods = methods.filter(

@@ -49,6 +49,6 @@ export class CreateOrderDto {
 
   @IsOptional()
   @IsString()
-  @IsUUID()
+  @MaxLength(128)
   idempotencyKey?: string;
 }

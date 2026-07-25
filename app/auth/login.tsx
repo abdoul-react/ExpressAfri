@@ -119,6 +119,7 @@ export default function LoginScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior="padding"
+      keyboardVerticalOffset={0}
     >
       <View style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={guest} hitSlop={8} style={styles.close}>
@@ -260,6 +261,7 @@ export default function LoginScreen() {
 
       <View
         style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}
+        pointerEvents="box-none"
       >
         <Pressable onPress={guest} hitSlop={8}>
           <Text style={styles.guestText}>{t("auth.continueAsGuest")}</Text>
@@ -310,7 +312,7 @@ const makeStyles = (colors: Colors) =>
     container: { flex: 1, backgroundColor: colors.surface },
     top: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
     close: { alignSelf: "flex-start", padding: 4 },
-    body: { flex: 1, paddingHorizontal: spacing.xl },
+    body: { flex: 1, paddingHorizontal: spacing.xl, paddingBottom: 80 },
     logoWrap: {
       alignItems: "center",
       marginTop: spacing.lg,
@@ -387,9 +389,14 @@ const makeStyles = (colors: Colors) =>
       fontWeight: "600",
     },
     footer: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
       paddingHorizontal: spacing.xl,
       alignItems: "center",
       gap: spacing.sm,
+      backgroundColor: colors.surface,
     },
     guestText: {
       fontSize: fontSize.md,
