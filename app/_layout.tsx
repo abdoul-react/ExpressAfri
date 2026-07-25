@@ -272,7 +272,7 @@ function AppShell() {
 
 export default function RootLayout() {
   useEffect(() => {
-    Settings.initializeSDK();
+    Settings?.initializeSDK?.();
   }, []);
 
   return (
