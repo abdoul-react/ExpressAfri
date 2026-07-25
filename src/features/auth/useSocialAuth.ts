@@ -1,8 +1,8 @@
 import type { AuthSessionResult } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
-import * as Facebook from 'expo-auth-session/providers/facebook';
 import { makeRedirectUri } from 'expo-auth-session';
+import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
 import { authDataSource } from '@/infrastructure/data-source';
 import type { AuthResult } from '@/infrastructure/data-source/AuthDataSource';
 
@@ -14,11 +14,6 @@ const GOOGLE_CLIENT_IDS = {
   androidClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID,
   iosClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS,
   webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB,
-  redirectUri,
-};
-
-const FACEBOOK_CONFIG = {
-  clientId: process.env.EXPO_PUBLIC_FACEBOOK_APP_ID!,
   redirectUri,
 };
 
@@ -64,22 +59,13 @@ export async function handleGoogleResponse(
   } as any);
 }
 
-// ── Facebook ──
-export function useFacebookAuth() {
-  const [request, response, promptAsync] = Facebook.useAuthRequest(FACEBOOK_CONFIG);
-  return {
-    promptFacebookLogin: () => { if (request) promptAsync(); },
-    facebookResponse: response,
-  };
-}
+// ── Facebook (SDK natif — pas de redirect_uri) ──
+export async function loginWithFacebook(): Promise<SocialAuthResult | null> {
+  const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
+  if (result.isCancelled) return null;
 
-export async function handleFacebookResponse(
-  response: AuthSessionResult | null,
-): Promise<SocialAuthResult | null> {
-  if (!response || response.type !== 'success') return null;
-  const { authentication, params } = response as any;
-  const accessToken = authentication?.accessToken ?? params?.access_token;
-  if (!accessToken) return null;
+  const data = await AccessToken.getCurrentAccessToken();
+  if (!data?.accessToken) throw new Error('Token Facebook introuvable');
 
-  return authDataSource.socialLogin('facebook', { accessToken } as any);
+  return authDataSource.socialLogin('facebook', { accessToken: data.accessToken } as any);
 }

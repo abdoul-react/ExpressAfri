@@ -62,6 +62,18 @@ module.exports = {
       'expo-status-bar',
       ['expo-notifications', { color: '#E8590C' }],
       'expo-asset',
+      [
+        'react-native-fbsdk-next',
+        {
+          appID: '1336424795271476',
+          clientToken: '28fd2d6aa345be0f56c34057cfdae453',
+          displayName: 'AfriExpress',
+          scheme: 'fb1336424795271476',
+          advertiserIDCollectionEnabled: false,
+          autoLogAppEventsEnabled: false,
+          isAutoInitEnabled: true,
+        },
+      ],
     ],
     extra: {
       USE_MOCK: true,

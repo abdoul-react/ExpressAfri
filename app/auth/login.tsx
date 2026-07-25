@@ -10,7 +10,7 @@ import {
 import { Icon, GoogleIcon, AppleIcon, FacebookIcon } from "@/icons";
 import { BrandMark } from "@/features/content";
 import { useAuth } from "@/features/auth";
-import { useGoogleAuth, handleGoogleResponse, useFacebookAuth, handleFacebookResponse } from "@/features/auth/useSocialAuth";
+import { useGoogleAuth, handleGoogleResponse, loginWithFacebook } from "@/features/auth/useSocialAuth";
 import { useAuthStore } from "@/store/authStore";
 import { COUNTRIES, useSettingsStore } from "@/store/settingsStore";
 import { useRouter } from "expo-router";
@@ -51,7 +51,6 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { promptGoogleLogin, googleResponse } = useGoogleAuth();
-  const { promptFacebookLogin, facebookResponse } = useFacebookAuth();
 
   const handleSocialResult = (result: any) => {
     if (!result) throw new Error('Connexion annulée');
@@ -72,16 +71,6 @@ export default function LoginScreen() {
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setIsSubmitting(false));
   }, [googleResponse]);
-
-  useEffect(() => {
-    if (!facebookResponse) return;
-    setIsSubmitting(true);
-    setError(null);
-    handleFacebookResponse(facebookResponse)
-      .then(handleSocialResult)
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setIsSubmitting(false));
-  }, [facebookResponse]);
 
   const isEmailValid = (email: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -131,7 +120,15 @@ export default function LoginScreen() {
 
   const socialSignIn = async (provider: string) => {
     if (provider === 'google') { promptGoogleLogin(); return; }
-    if (provider === 'facebook') { promptFacebookLogin(); return; }
+    if (provider === 'facebook') {
+      setIsSubmitting(true);
+      setError(null);
+      loginWithFacebook()
+        .then((result) => { if (result) handleSocialResult(result); })
+        .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+        .finally(() => setIsSubmitting(false));
+      return;
+    }
     setError(`Connexion ${provider} bientôt disponible`);
   };
 
