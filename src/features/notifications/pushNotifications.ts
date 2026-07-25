@@ -5,25 +5,23 @@ import { apiAdapter } from "@/infrastructure/api/apiAdapter";
 import { logger } from "@/infrastructure/logging";
 
 // SDK 53+ : expo-notifications push distants retirés d'Expo Go.
-// On détecte Expo Go via l'appName de l'exécutable pour ne jamais tenter
-// le require dans cet environnement.
+// isExpoGo détecté via executionEnvironment (SDK 45+) ou appOwnership (legacy).
 const isExpoGo =
-  Constants.executionEnvironment === 'storeClient' ||
-  (Constants as any).appOwnership === 'expo';
+  Constants.executionEnvironment === "storeClient" ||
+  (Constants as any).appOwnership === "expo";
 
-let Notifications: typeof import("expo-notifications") | null = null;
-let notificationsReady = false;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let N: any = null;
 
-function initNotifications() {
-  if (notificationsReady) return;
-  notificationsReady = true;
-  if (isExpoGo) {
-    logger.info("[push] Expo Go détecté — notifications push désactivées (SDK 53+)");
-    return;
-  }
+/** Charge expo-notifications uniquement hors Expo Go. */
+async function loadNotifications(): Promise<any> {
+  if (N) return N;
+  if (isExpoGo) return null;
   try {
-    Notifications = require("expo-notifications");
-    Notifications!.setNotificationHandler({
+    // Concaténation intentionnelle pour que Metro ne bundle pas statiquement
+    const pkg = "expo" + "-notifications";
+    N = await import(/* @vite-ignore */ pkg as any);
+    N.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowBanner: true,
         shouldShowList: true,
@@ -31,8 +29,10 @@ function initNotifications() {
         shouldSetBadge: false,
       }),
     });
+    return N;
   } catch {
     logger.info("[push] expo-notifications indisponible");
+    return null;
   }
 }
 
@@ -41,25 +41,22 @@ let currentToken: string | null = null;
 
 /**
  * Enregistre l'appareil pour les notifications push et envoie le jeton Expo au
- * serveur. Se dégrade proprement : simulateur, permission refusée ou
- * `projectId` EAS absent → no-op loggué, jamais d'erreur visible.
- *
- * Activation ops (hors code) : `eas init` (renseigne expo.extra.eas.projectId)
- * puis build de développement/production — Expo Go ne reçoit plus les push.
+ * serveur. Se dégrade proprement : Expo Go, simulateur, permission refusée ou
+ * projectId EAS absent → no-op loggué, jamais d'erreur visible.
  */
 export async function registerForPushNotifications(): Promise<void> {
-  initNotifications();
-  if (!Notifications) {
-    logger.info("[push] expo-notifications indisponible (Expo Go SDK 53+)");
+  if (isExpoGo) {
+    logger.info("[push] Expo Go — notifications push désactivées (SDK 53+)");
     return;
   }
+  const Notifications = await loadNotifications();
+  if (!Notifications) return;
   try {
     if (!Device.isDevice) {
       logger.info("[push] Simulateur/émulateur : pas de jeton push");
       return;
     }
 
-    // Android : canal requis pour afficher les notifications
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
         name: "Notifications",
@@ -79,29 +76,21 @@ export async function registerForPushNotifications(): Promise<void> {
       return;
     }
 
-    // projectId EAS requis pour un jeton Expo Push. Absent (pas encore de
-    // `eas init`) → dégradation propre : les notifs in-app restent seules.
     const projectId =
       (Constants.expoConfig?.extra as any)?.eas?.projectId ??
       (Constants as any).easConfig?.projectId;
     if (!projectId) {
-      logger.info(
-        "[push] projectId EAS absent (app.json extra.eas.projectId) — push distant désactivé",
-      );
+      logger.info("[push] projectId EAS absent — push distant désactivé");
       return;
     }
 
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
     if (!token) return;
 
-    await apiAdapter.post("/mobile/push-token", {
-      token,
-      platform: Platform.OS,
-    });
+    await apiAdapter.post("/mobile/push-token", { token, platform: Platform.OS });
     currentToken = token;
     logger.info("[push] Jeton push enregistré");
   } catch (error) {
-    // Best-effort : l'app fonctionne sans push
     logger.warn("[push] Échec d'enregistrement du jeton push", { error });
   }
 }
