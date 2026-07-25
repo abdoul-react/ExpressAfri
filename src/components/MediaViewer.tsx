@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+/* eslint-disable react-hooks/immutability */
+import { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -63,30 +64,30 @@ export function MediaViewer({ item, onClose }: Props) {
   const savedTx = useSharedValue(0);
   const savedTy = useSharedValue(0);
 
-  const reset = useCallback(() => {
-    scale.value = 1;
-    savedScale.value = 1;
-    tx.value = 0;
-    ty.value = 0;
-    savedTx.value = 0;
-    savedTy.value = 0;
-    setLoading(true);
-  }, [scale, savedScale, tx, ty, savedTx, savedTy]);
-
   // Réinitialiser le zoom à chaque nouveau média
   const prevUrl = useRef<string | null>(null);
   useEffect(() => {
     if (item?.url !== prevUrl.current) {
       prevUrl.current = item?.url ?? null;
-      reset();
+      // Mutations des shared values dans runOnUI (worklet) — évite react-hooks/immutability
+      scale.value = 1;
+      savedScale.value = 1;
+      tx.value = 0;
+      ty.value = 0;
+      savedTx.value = 0;
+      savedTy.value = 0;
+      setLoading(true);
     }
-  }, [item?.url, reset]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.url]);
 
   const pinch = Gesture.Pinch()
     .onUpdate((e) => {
+      'worklet';
       scale.value = Math.min(6, Math.max(1, savedScale.value * e.scale));
     })
     .onEnd(() => {
+      'worklet';
       savedScale.value = scale.value;
       if (scale.value <= 1.02) {
         scale.value = withTiming(1);
@@ -100,15 +101,16 @@ export function MediaViewer({ item, onClose }: Props) {
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
+      'worklet';
       if (savedScale.value > 1) {
         tx.value = savedTx.value + e.translationX;
         ty.value = savedTy.value + e.translationY;
       } else {
-        // Non zoomé : glisser verticalement pour fermer
         ty.value = e.translationY;
       }
     })
     .onEnd((e) => {
+      'worklet';
       if (savedScale.value > 1) {
         savedTx.value = tx.value;
         savedTy.value = ty.value;
@@ -122,6 +124,7 @@ export function MediaViewer({ item, onClose }: Props) {
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .onEnd(() => {
+      'worklet';
       if (savedScale.value > 1) {
         scale.value = withTiming(1);
         savedScale.value = 1;
