@@ -494,21 +494,60 @@ export class MobileController {
 
   // ====== STORES ======
 
-  @Public()
+  // PAS @Public : le garde résout le client si un jeton est fourni (likedByMe)
+  // et laisse passer sans jeton — liste publique avec likes corrects.
   @Get('stores')
-  @ApiOperation({ summary: 'Boutiques actives (format mobile)' })
-  async stores(@Query('limit') limit?: string) {
+  @ApiOperation({ summary: 'Boutiques approuvées (format mobile)' })
+  async stores(@CurrentUser() user: any, @Query() query: any) {
     return this.service.getStores({
-      limit: limit ? parseInt(limit, 10) : undefined,
+      limit: query.limit ? Number(query.limit) : undefined,
+      offset: query.offset ? Number(query.offset) : undefined,
+      search: query.search,
+      customerId: user?.id,
     });
   }
 
+  // Doit rester déclarée AVANT stores/:id, sinon Nest capture "followed" comme :id
   @Get('stores/followed')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Boutiques suivies par le client connecté' })
   async followedStores(@CurrentUser() user: any) {
     if (!user?.id) return [];
     return this.service.getFollowedStores(user.id);
+  }
+
+  @Get('stores/:id')
+  @ApiOperation({ summary: "Détail d'une boutique approuvée" })
+  async storeById(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.service.getStoreById(id, user?.id);
+  }
+
+  @Get('stores/:id/products')
+  @ApiOperation({ summary: "Produits d'une boutique" })
+  async storeProducts(@Param('id') id: string, @Query() query: any) {
+    return this.service.getStoreProducts(id, {
+      categoryId: query.categoryId,
+      search: query.search,
+      sort: query.sort,
+      limit: query.limit ? Number(query.limit) : undefined,
+      offset: query.offset ? Number(query.offset) : undefined,
+      minPrice: query.minPrice ? Number(query.minPrice) : undefined,
+      maxPrice: query.maxPrice ? Number(query.maxPrice) : undefined,
+    });
+  }
+
+  @Public()
+  @Get('stores/:id/categories')
+  @ApiOperation({ summary: "Catégories actives d'une boutique" })
+  async storeCategories(@Param('id') id: string) {
+    return this.service.getStoreCategories(id);
+  }
+
+  @Get('stores/:id/follow-status')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Le client connecté suit-il cette boutique ?' })
+  async storeFollowStatus(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.service.getStoreFollowStatus(id, user?.id);
   }
 
   @Post('stores/:id/follow')

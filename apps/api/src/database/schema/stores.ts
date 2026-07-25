@@ -6,6 +6,8 @@ import {
   decimal,
   date,
   boolean,
+  integer,
+  index,
 } from 'drizzle-orm/pg-core';
 import { admins } from './auth';
 
@@ -47,3 +49,24 @@ export const storeKyc = pgTable('store_kyc', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
+
+/** Médias de présentation d'une boutique. type = logo | cover | gallery */
+export const storeMedia = pgTable(
+  'store_media',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    url: text('url').notNull(),
+    alt: text('alt'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (t) => ({
+    storeIdx: index('store_media_store_idx').on(t.storeId, t.type, t.sortOrder),
+  }),
+);

@@ -30,6 +30,8 @@
   "tabs": {
     "home": "Home",
     "store": "Store",
+    "categories": "Categories",
+    "stores": "Stores",
     "feed": "Feed",
     "cart": "Cart",
     "account": "Account"

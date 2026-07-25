@@ -23,7 +23,7 @@ import {
   productImages,
   productVariants,
 } from '../../database/schema/products';
-import { stores } from '../../database/schema/stores';
+import { stores, storeMedia } from '../../database/schema/stores';
 import { coupons, couponUsage } from '../../database/schema/coupons';
 import { otpCodes } from '../../database/schema/otp';
 import { contentBlocks } from '../../database/schema/content';
@@ -54,6 +54,14 @@ import { ImageVisionService } from '../../common/vision/image-vision.service';
 
 // Boutique système (seedée) : les customers.storeId NOT NULL doivent référencer une boutique existante
 const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
+/** Seules les boutiques approuvées sont publiables : rien d'une boutique en attente, rejetée ou suspendue ne doit fuiter. */
+const APPROVED_STORE = 'approved';
+
+/** Condition réutilisable : la ligne appartient à une boutique approuvée. */
+function belongsToApprovedStore(storeIdColumn: any) {
+  return sql`exists (select 1 from ${stores} where ${stores.id} = ${storeIdColumn} and ${stores.status} = ${APPROVED_STORE})`;
+}
 
 /**
  * Pastilles couleur de la fiche produit : traduit le nom saisi par l'admin
@@ -727,6 +735,7 @@ export class MobileService {
 
   async getProducts(query: {
     categoryId?: string;
+    storeId?: string;
     search?: string;
     limit?: number;
     offset?: number;
@@ -737,9 +746,13 @@ export class MobileService {
     onSale?: boolean;
     sort?: string;
   }) {
-    const conditions = [eq(products.status, 'active')];
+    const conditions = [
+      eq(products.status, 'active'),
+      belongsToApprovedStore(products.storeId),
+    ];
     if (query.categoryId)
       conditions.push(eq(products.categoryId, query.categoryId));
+    if (query.storeId) conditions.push(eq(products.storeId, query.storeId));
     if (query.search) conditions.push(like(products.name, `%${query.search}%`));
     if (query.minPrice != null)
       conditions.push(sql`${products.price} >= ${query.minPrice}`);
@@ -807,7 +820,13 @@ export class MobileService {
     const [p] = await this.db
       .select()
       .from(products)
-      .where(eq(products.id, id))
+      .where(
+        and(
+          eq(products.id, id),
+          eq(products.status, 'active'),
+          belongsToApprovedStore(products.storeId),
+        ),
+      )
       .limit(1);
     if (!p) throw new NotFoundException('Produit introuvable');
 
@@ -967,7 +986,12 @@ export class MobileService {
     const rows = await this.db
       .select()
       .from(categories)
-      .where(eq(categories.isActive, true))
+      .where(
+        and(
+          eq(categories.isActive, true),
+          belongsToApprovedStore(categories.storeId),
+        ),
+      )
       .orderBy(categories.name);
     return rows.map((c) => ({
       id: c.id,
@@ -990,6 +1014,7 @@ export class MobileService {
         and(
           eq(categories.isActive, true),
           eq(categories.parentId as any, parentId),
+          belongsToApprovedStore(categories.storeId),
         ),
       )
       .orderBy(categories.name);
@@ -2010,60 +2035,179 @@ export class MobileService {
 
   // ====== STORES (boutiques publiques) ======
 
-  async getStores(params: { limit?: number } = {}) {
-    const limit = params.limit ?? 20;
-    const rows = await this.db
-      .select({
-        id: stores.id,
-        name: stores.name,
-        country: stores.country,
-        followers: sql<number>`(select count(*) from ${storeFollows} where ${storeFollows.storeId} = ${stores.id})`,
-      })
-      .from(stores)
-      .where(eq(stores.status, 'active'))
-      .limit(limit);
+  /** Colonnes calculées communes aux cartes et au détail boutique. */
+  private storeCardColumns(customerId?: string) {
+    return {
+      id: stores.id,
+      name: stores.name,
+      description: stores.description,
+      country: stores.country,
+      city: stores.city,
+      logoUrl: sql<
+        string | null
+      >`(select sm.url from store_media sm where sm.store_id = ${stores.id} and sm.type = 'logo' and sm.is_active = true limit 1)`,
+      coverUrl: sql<
+        string | null
+      >`(select sm.url from store_media sm where sm.store_id = ${stores.id} and sm.type = 'cover' and sm.is_active = true limit 1)`,
+      followersCount: sql<number>`(select count(*)::int from ${storeFollows} where ${storeFollows.storeId} = ${stores.id})`,
+      productCount: sql<number>`(select count(*)::int from ${products} where ${products.storeId} = ${stores.id} and ${products.status} = 'active')`,
+      likedByMe: customerId
+        ? sql<boolean>`exists (select 1 from ${storeFollows} where ${storeFollows.storeId} = ${stores.id} and ${storeFollows.customerId} = ${customerId})`
+        : sql<boolean>`false`,
+    };
+  }
 
-    return rows.map((store) => ({
-      id: store.id,
-      name: store.name,
-      country: store.country,
-      followers: String(store.followers ?? 0),
-      avatar: '',
+  private async storeGalleryPhotos(storeId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ url: storeMedia.url })
+      .from(storeMedia)
+      .where(
+        and(
+          eq(storeMedia.storeId, storeId),
+          eq(storeMedia.type, 'gallery'),
+          eq(storeMedia.isActive, true),
+        ),
+      )
+      .orderBy(storeMedia.sortOrder);
+    return rows.map((r) => r.url);
+  }
+
+  private toStoreCard(row: any, photos: string[] = []) {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description ?? null,
+      country: row.country,
+      city: row.city ?? null,
+      logoUrl: row.logoUrl ?? null,
+      coverUrl: row.coverUrl ?? null,
+      photos,
+      followersCount: Number(row.followersCount ?? 0),
+      productCount: Number(row.productCount ?? 0),
+      likedByMe: Boolean(row.likedByMe),
+      // Compatibilité avec les écrans mobile historiques (useHomeStores/useFollows)
+      followers: String(row.followersCount ?? 0),
+      avatar: row.logoUrl ?? '',
+    };
+  }
+
+  async getStores(
+    params: {
+      limit?: number;
+      offset?: number;
+      search?: string;
+      customerId?: string;
+    } = {},
+  ) {
+    const limit = Math.min(params.limit ?? 20, 50);
+    const offset = params.offset ?? 0;
+
+    const conditions = [eq(stores.status, APPROVED_STORE)];
+    if (params.search)
+      conditions.push(like(stores.name, `%${params.search}%`));
+
+    const rows = await this.db
+      .select(this.storeCardColumns(params.customerId))
+      .from(stores)
+      .where(and(...conditions))
+      .orderBy(desc(stores.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return rows.map((row) => this.toStoreCard(row));
+  }
+
+  /** Détail d'une boutique publique. 404 si elle n'est pas approuvée. */
+  async getStoreById(storeId: string, customerId?: string) {
+    const [row] = await this.db
+      .select(this.storeCardColumns(customerId))
+      .from(stores)
+      .where(and(eq(stores.id, storeId), eq(stores.status, APPROVED_STORE)))
+      .limit(1);
+    if (!row) throw new NotFoundException('Boutique introuvable');
+
+    return this.toStoreCard(row, await this.storeGalleryPhotos(storeId));
+  }
+
+  /** Garde-fou : refuse toute lecture sur une boutique non publiable. */
+  private async assertApprovedStore(storeId: string) {
+    const [row] = await this.db
+      .select({ id: stores.id })
+      .from(stores)
+      .where(and(eq(stores.id, storeId), eq(stores.status, APPROVED_STORE)))
+      .limit(1);
+    if (!row) throw new NotFoundException('Boutique introuvable');
+  }
+
+  async getStoreProducts(
+    storeId: string,
+    query: {
+      categoryId?: string;
+      search?: string;
+      minPrice?: number;
+      maxPrice?: number;
+      sort?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ) {
+    await this.assertApprovedStore(storeId);
+    return this.getProducts({ ...query, storeId });
+  }
+
+  async getStoreCategories(storeId: string) {
+    await this.assertApprovedStore(storeId);
+    const rows = await this.db
+      .select()
+      .from(categories)
+      .where(
+        and(eq(categories.storeId, storeId), eq(categories.isActive, true)),
+      )
+      .orderBy(categories.name);
+    return rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      parentId: c.parentId ?? null,
+      icon: this.categoryIcon(c.name),
+      image: c.imageUrl ?? undefined,
     }));
+  }
+
+  async getStoreFollowStatus(storeId: string, customerId?: string) {
+    if (!customerId) return { following: false };
+    const [row] = await this.db
+      .select({ id: storeFollows.id })
+      .from(storeFollows)
+      .where(
+        and(
+          eq(storeFollows.storeId, storeId),
+          eq(storeFollows.customerId, customerId),
+        ),
+      )
+      .limit(1);
+    return { following: !!row };
   }
 
   // ====== STORE FOLLOWS (boutiques suivies) ======
 
   async getFollowedStores(customerId: string) {
     const rows = await this.db
-      .select({
-        id: stores.id,
-        name: stores.name,
-        country: stores.country,
-        followedAt: storeFollows.createdAt,
-        followers: sql<number>`(select count(*) from ${storeFollows} sf2 where sf2.store_id = ${stores.id})`,
-      })
+      .select(this.storeCardColumns(customerId))
       .from(storeFollows)
       .innerJoin(stores, eq(storeFollows.storeId, stores.id))
-      .where(eq(storeFollows.customerId, customerId))
+      .where(
+        and(
+          eq(storeFollows.customerId, customerId),
+          eq(stores.status, APPROVED_STORE),
+        ),
+      )
       .orderBy(desc(storeFollows.createdAt));
 
-    return rows.map((s) => ({
-      id: s.id,
-      name: s.name,
-      country: s.country,
-      followers: String(s.followers ?? 0),
-      avatar: '',
-    }));
+    return rows.map((row) => this.toStoreCard(row));
   }
 
   async followStore(customerId: string, storeId: string) {
-    const [store] = await this.db
-      .select({ id: stores.id })
-      .from(stores)
-      .where(eq(stores.id, storeId))
-      .limit(1);
-    if (!store) throw new NotFoundException('Boutique introuvable');
+    await this.assertApprovedStore(storeId);
     // Idempotent : le doublon est ignoré grâce à la contrainte unique
     await this.db
       .insert(storeFollows)

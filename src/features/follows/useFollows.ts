@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiAdapter } from '@/infrastructure/api/apiAdapter';
+import { useQuery } from '@tanstack/react-query';
+import { storeService } from '@/features/stores/storeService';
+import { useToggleStoreLike } from '@/features/stores/useStores';
 import { useAuthStore } from '@/store/authStore';
 
 export type FollowedStore = {
@@ -12,13 +13,13 @@ export type FollowedStore = {
 
 /**
  * Boutiques suivies par le client connecté.
- * Endpoint : GET /mobile/stores/followed (auth ; renvoie [] si non connecté).
+ * Renvoie [] si non connecté (la requête n'est pas lancée).
  */
 export function useFollowedStores() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { data = [], isLoading } = useQuery<FollowedStore[]>({
     queryKey: ['stores', 'followed'],
-    queryFn: () => apiAdapter.get('/mobile/stores/followed'),
+    queryFn: () => storeService.getFollowedStores(),
     enabled: isAuthenticated,
     staleTime: 0,
     refetchOnWindowFocus: true,
@@ -28,17 +29,8 @@ export function useFollowedStores() {
 
 /**
  * Suivre / ne plus suivre une boutique.
- * Endpoints : POST /mobile/stores/:id/follow | /unfollow (auth).
- * Invalide la liste suivie et les listes de boutiques (compteur d'abonnés).
+ * Alias de useToggleStoreLike, conservé pour les écrans historiques.
  */
 export function useToggleFollow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ storeId, follow }: { storeId: string; follow: boolean }) =>
-      apiAdapter.post(`/mobile/stores/${storeId}/${follow ? 'follow' : 'unfollow'}`, {}),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['stores', 'followed'] });
-      qc.invalidateQueries({ queryKey: ['home', 'stores'] });
-    },
-  });
+  return useToggleStoreLike();
 }

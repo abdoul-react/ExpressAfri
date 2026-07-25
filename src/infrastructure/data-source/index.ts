@@ -7,6 +7,7 @@ import { ApiAuthDataSource } from "./api/ApiAuthDataSource";
 import { ApiAddressDataSource } from "./api/ApiAddressDataSource";
 import { ApiWishlistDataSource } from "./api/ApiWishlistDataSource";
 import { ApiChatDataSource } from "./api/ApiChatDataSource";
+import { ApiStoreDataSource } from "./api/ApiStoreDataSource";
 
 export type { DataSource } from "./DataSource";
 export type { ProductDataSource, ReviewPayload } from "./ProductDataSource";
@@ -18,6 +19,14 @@ export type { AuthDataSource, AuthResult, OtpResult } from "./AuthDataSource";
 export type { AddressDataSource, Address } from "./AddressDataSource";
 export type { WishlistDataSource } from "./WishlistDataSource";
 export type { ChatDataSource } from "./ChatDataSource";
+export type {
+  StoreDataSource,
+  StoreCard,
+  StoreDetail,
+  StoreQuery,
+  StoreProductQuery,
+  StoreCategory,
+} from "./StoreDataSource";
 
 export const productDataSource = new ApiProductDataSource();
 export const categoryDataSource = new ApiCategoryDataSource();
@@ -28,3 +37,4 @@ export const authDataSource = new ApiAuthDataSource();
 export const addressDataSource = new ApiAddressDataSource();
 export const wishlistDataSource = new ApiWishlistDataSource();
 export const chatDataSource = new ApiChatDataSource();
+export const storeDataSource = new ApiStoreDataSource();

@@ -78,6 +78,7 @@ export interface AdminStore {
   rejectionReason?: string
   suspensionReason?: string
   logoUrl?: string | null
+  coverUrl?: string | null
   productCount: number
   totalOrders: number
   revenue: number
@@ -133,6 +134,21 @@ export interface ResetManagerPasswordPayload {
   password: string
 }
 
+// ─── Médias ───────────────────────────────────────────────────────────────────
+
+export type StoreMediaType = 'logo' | 'cover' | 'gallery'
+
+export interface StoreMedia {
+  id: string
+  storeId: string
+  type: StoreMediaType
+  url: string
+  alt?: string | null
+  sortOrder: number
+  isActive: boolean
+  createdAt: string
+}
+
 // ─── DataSource ───────────────────────────────────────────────────────────────
 
 export interface CreateStorePayload {
@@ -169,4 +185,8 @@ export interface AdminStoreDataSource {
   createManager(storeId: string, payload: CreateManagerPayload): Promise<StoreManager>
   setManagerActive(storeId: string, managerId: string, payload: SetManagerActivePayload): Promise<StoreManager>
   resetManagerPassword(storeId: string, managerId: string, payload: ResetManagerPasswordPayload): Promise<StoreManager>
+  listMedia(storeId: string): Promise<StoreMedia[]>
+  uploadMedia(storeId: string, file: File, type: StoreMediaType, alt?: string): Promise<StoreMedia>
+  reorderMedia(storeId: string, ids: string[]): Promise<void>
+  deleteMedia(storeId: string, mediaId: string): Promise<void>
 }

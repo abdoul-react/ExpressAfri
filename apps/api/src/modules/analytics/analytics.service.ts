@@ -223,7 +223,7 @@ export class AnalyticsService {
     const [activeStores] = await this.db
       .select({ total: sql<number>`count(*)::int` })
       .from(stores)
-      .where(eq(stores.status, 'active'));
+      .where(eq(stores.status, 'approved'));
 
     const currentRevenue = Number(currentOrders.revenue);
     const prevRevenue = Number(prevOrders.revenue);

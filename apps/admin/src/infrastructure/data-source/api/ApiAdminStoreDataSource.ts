@@ -1,4 +1,4 @@
-import type { AdminStoreDataSource, AdminStore, StoreQueryParams, PaginatedResult, UpdateKycPayload, UpdateDocumentPayload, UpdateCommissionPayload, UpdateStorePayload, StoreManager, CreateManagerPayload, SetManagerActivePayload, ResetManagerPasswordPayload } from '../AdminStoreDataSource'
+import type { AdminStoreDataSource, AdminStore, StoreQueryParams, PaginatedResult, UpdateKycPayload, UpdateDocumentPayload, UpdateCommissionPayload, UpdateStorePayload, StoreManager, CreateManagerPayload, SetManagerActivePayload, ResetManagerPasswordPayload, StoreMedia, StoreMediaType } from '../AdminStoreDataSource'
 import api from '@/lib/api'
 
 function toStore(raw: any): AdminStore {
@@ -10,12 +10,13 @@ function toStore(raw: any): AdminStore {
     phone: raw.phone ?? '',
     city: raw.city ?? raw.owner?.city ?? raw.address?.city ?? raw.location?.city ?? '',
     country: raw.owner?.country ?? raw.country,
-    description: '',
+    description: raw.description ?? '',
     status: raw.status,
-    logoUrl: null,
-    productCount: 0,
-    totalOrders: 0,
-    revenue: 0,
+    logoUrl: raw.logoUrl ?? null,
+    coverUrl: raw.coverUrl ?? null,
+    productCount: Number(raw.productCount ?? 0),
+    totalOrders: Number(raw.totalOrders ?? 0),
+    revenue: Number(raw.revenue ?? 0),
     commissionRate: Number(raw.commissionRate),
     kyc: (raw.kyc as any) ?? { status: 'not_submitted', documents: [], ownerFirstName: '', ownerLastName: '', ownerIdNumber: '' },
     sanctions: [],
@@ -101,5 +102,29 @@ export class ApiAdminStoreDataSource implements AdminStoreDataSource {
   async resetManagerPassword(storeId: string, managerId: string, payload: ResetManagerPasswordPayload): Promise<StoreManager> {
     const { data } = await api.put(`/stores/${storeId}/managers/${managerId}/password`, payload)
     return data
+  }
+
+  async listMedia(storeId: string): Promise<StoreMedia[]> {
+    const { data } = await api.get(`/stores/${storeId}/media`)
+    return data
+  }
+
+  async uploadMedia(storeId: string, file: File, type: StoreMediaType, alt?: string): Promise<StoreMedia> {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('type', type)
+    if (alt) form.append('alt', alt)
+    const { data } = await api.post(`/stores/${storeId}/media`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data
+  }
+
+  async reorderMedia(storeId: string, ids: string[]): Promise<void> {
+    await api.put(`/stores/${storeId}/media/reorder`, { ids })
+  }
+
+  async deleteMedia(storeId: string, mediaId: string): Promise<void> {
+    await api.delete(`/stores/${storeId}/media/${mediaId}`)
   }
 }

@@ -4,6 +4,7 @@ export { Button } from "./Button";
 export { Countdown } from "./Countdown";
 export { EmptyState } from "./EmptyState";
 export { KeyboardScreen } from "./KeyboardScreen";
+export { MasonryGrid } from "./MasonryGrid";
 export { Price } from "./Price";
 export { ProductCard } from "./ProductCard";
 export { QuantityStepper } from "./QuantityStepper";

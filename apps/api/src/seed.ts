@@ -135,7 +135,7 @@ async function main() {
       name: 'ExpressAfri Système',
       email: 'system@expressafri.com',
       country: 'Niger',
-      status: 'active',
+      status: 'approved',
     })
     .onConflictDoNothing();
   console.log('  ✓ Boutique système créée');
@@ -1005,7 +1005,7 @@ async function main() {
       name: 'ExpressAfri Store',
       email: 'store@expressafri.com',
       country: 'Niger',
-      status: 'active',
+      status: 'approved',
     })
     .onConflictDoNothing();
 

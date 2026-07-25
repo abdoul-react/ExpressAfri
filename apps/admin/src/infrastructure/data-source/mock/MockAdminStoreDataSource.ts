@@ -12,6 +12,8 @@ import type {
   SetManagerActivePayload,
   ResetManagerPasswordPayload,
   CreateStorePayload,
+  StoreMedia,
+  StoreMediaType,
 } from '../AdminStoreDataSource'
 import { MOCK_STORES } from './data/mockStores'
 
@@ -219,5 +221,23 @@ export class MockAdminStoreDataSource implements AdminStoreDataSource {
   async resetManagerPassword(_storeId: string, _managerId: string, _payload: ResetManagerPasswordPayload): Promise<StoreManager> {
     await this.delay()
     throw new Error('Non implémenté en mode mock')
+  }
+
+  async listMedia(_storeId: string): Promise<StoreMedia[]> {
+    await this.delay()
+    return []
+  }
+
+  async uploadMedia(_storeId: string, _file: File, _type: StoreMediaType, _alt?: string): Promise<StoreMedia> {
+    await this.delay()
+    throw new Error('Non implémenté en mode mock')
+  }
+
+  async reorderMedia(_storeId: string, _ids: string[]): Promise<void> {
+    await this.delay()
+  }
+
+  async deleteMedia(_storeId: string, _mediaId: string): Promise<void> {
+    await this.delay()
   }
 }

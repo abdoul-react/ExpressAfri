@@ -9,13 +9,26 @@ import {
   Query,
   Body,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
   ForbiddenException,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import {
+  randomFilename,
+  validateFileContent,
+} from '../../common/upload/upload.helper';
 import {
   ApiTags,
   ApiOperation,
   ApiBearerAuth,
+  ApiConsumes,
   ApiQuery,
 } from '@nestjs/swagger';
 import { StoresService } from './stores.service';
@@ -154,6 +167,95 @@ export class StoresController {
     if (user?.storeId)
       throw new ForbiddenException("Réservé à l'équipe AfriExpress");
     return this.service.resetManagerPassword(id, managerId, body.password);
+  }
+
+  // ====== MÉDIAS (logo, cover, galerie) ======
+  // Le gérant gère les médias de SA boutique uniquement.
+
+  private assertOwnership(user: any, storeId: string) {
+    if (user?.storeId && user.storeId !== storeId) {
+      throw new ForbiddenException('Vous ne gérez pas cette boutique');
+    }
+  }
+
+  @Get(':id/media')
+  @ApiOperation({ summary: 'Médias de la boutique' })
+  async listMedia(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.listMedia(id);
+  }
+
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  @Post(':id/media')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          const dir = join(process.cwd(), 'uploads/stores');
+          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_req, file, cb) => {
+          cb(null, randomFilename(file.originalname));
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype.match(/^image\/(png|jpe?g|webp|gif)$/)) {
+          cb(
+            new BadRequestException(
+              'Format non accepté (png, jpg, webp, gif) — SVG interdit pour raison de sécurité',
+            ),
+            false,
+          );
+        } else {
+          cb(null, true);
+        }
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Uploader un média (logo | cover | gallery)' })
+  async uploadMedia(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { type?: string; alt?: string },
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    if (!file) throw new BadRequestException('Fichier requis');
+    validateFileContent(file.path, 'image/');
+    const url = `/uploads/stores/${file.filename}`;
+    return this.service.addMedia(id, {
+      type: body?.type ?? 'gallery',
+      url,
+      alt: body?.alt,
+    });
+  }
+
+  @Put(':id/media/reorder')
+  @ApiOperation({ summary: 'Réordonner la galerie' })
+  async reorderMedia(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { ids: string[] },
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.reorderMedia(id, body?.ids ?? []);
+  }
+
+  @Delete(':id/media/:mediaId')
+  @ApiOperation({ summary: 'Supprimer un média' })
+  async deleteMedia(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('mediaId', ParseUUIDPipe) mediaId: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.deleteMedia(id, mediaId);
   }
 
   @Get(':id/kyc')

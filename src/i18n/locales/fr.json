@@ -30,6 +30,8 @@
   "tabs": {
     "home": "Accueil",
     "store": "Boutique",
+    "categories": "Catégories",
+    "stores": "Boutiques",
     "feed": "Fil d'actualité",
     "cart": "Panier",
     "account": "Compte"

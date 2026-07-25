@@ -8,12 +8,41 @@ import {
 import { eq, like, or, and, sql } from 'drizzle-orm';
 import * as bcrypt from 'bcryptjs';
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module';
-import { stores, storeKyc } from '../../database/schema/stores';
+import { stores, storeKyc, storeMedia } from '../../database/schema/stores';
 import { admins, roles } from '../../database/schema/auth';
 
 @Injectable()
 export class StoresService {
   constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
+
+  /**
+   * Colonnes de boutique enrichies des agrégats attendus par l'Admin.
+   * Les compteurs sont calculés en SQL : jamais de valeur en dur côté client.
+   */
+  private storeColumns() {
+    return {
+      id: stores.id,
+      name: stores.name,
+      email: stores.email,
+      phone: stores.phone,
+      country: stores.country,
+      city: stores.city,
+      description: stores.description,
+      status: stores.status,
+      commissionRate: stores.commissionRate,
+      createdAt: stores.createdAt,
+      updatedAt: stores.updatedAt,
+      logoUrl: sql<
+        string | null
+      >`(select sm.url from store_media sm where sm.store_id = ${stores.id} and sm.type = 'logo' and sm.is_active = true limit 1)`,
+      coverUrl: sql<
+        string | null
+      >`(select sm.url from store_media sm where sm.store_id = ${stores.id} and sm.type = 'cover' and sm.is_active = true limit 1)`,
+      productCount: sql<number>`(select count(*)::int from products p where p.store_id = ${stores.id} and p.status = 'active')`,
+      totalOrders: sql<number>`(select count(*)::int from orders o where o.store_id = ${stores.id} and o.status not in ('cancelled', 'refunded'))`,
+      revenue: sql<number>`(select coalesce(sum(o.total::numeric), 0)::float8 from orders o where o.store_id = ${stores.id} and o.status not in ('cancelled', 'refunded'))`,
+    };
+  }
 
   async list(params: {
     page?: number;
@@ -38,7 +67,7 @@ export class StoresService {
     const where = conditions.length ? and(...conditions) : undefined;
     const [data, [{ count }]] = await Promise.all([
       this.db
-        .select()
+        .select(this.storeColumns())
         .from(stores)
         .where(where)
         .limit(limit)
@@ -54,7 +83,7 @@ export class StoresService {
 
   async getById(id: string) {
     const [store] = await this.db
-      .select()
+      .select(this.storeColumns())
       .from(stores)
       .where(eq(stores.id, id))
       .limit(1);
@@ -216,6 +245,89 @@ export class StoresService {
       .returning({ id: admins.id });
     if (!updated)
       throw new NotFoundException('Gérant introuvable pour cette boutique');
+    return { ok: true };
+  }
+
+  // ====== MÉDIAS ======
+
+  async listMedia(storeId: string) {
+    return this.db
+      .select()
+      .from(storeMedia)
+      .where(and(eq(storeMedia.storeId, storeId), eq(storeMedia.isActive, true)))
+      .orderBy(storeMedia.type, storeMedia.sortOrder, storeMedia.createdAt);
+  }
+
+  async addMedia(
+    storeId: string,
+    data: { type: string; url: string; alt?: string },
+  ) {
+    const type = data.type;
+    if (!['logo', 'cover', 'gallery'].includes(type)) {
+      throw new BadRequestException('Type attendu : logo, cover ou gallery');
+    }
+    const [store] = await this.db
+      .select({ id: stores.id })
+      .from(stores)
+      .where(eq(stores.id, storeId))
+      .limit(1);
+    if (!store) throw new NotFoundException('Boutique introuvable');
+
+    // L'index unique partiel n'autorise qu'un logo/cover actif : on désactive l'ancien
+    if (type === 'logo' || type === 'cover') {
+      await this.db
+        .update(storeMedia)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(
+          and(
+            eq(storeMedia.storeId, storeId),
+            eq(storeMedia.type, type),
+            eq(storeMedia.isActive, true),
+          ),
+        );
+    }
+
+    const [{ maxOrder }] = await this.db
+      .select({ maxOrder: sql<number>`coalesce(max(sort_order), -1)::int` })
+      .from(storeMedia)
+      .where(and(eq(storeMedia.storeId, storeId), eq(storeMedia.type, type)));
+
+    const [media] = await this.db
+      .insert(storeMedia)
+      .values({
+        storeId,
+        type,
+        url: data.url,
+        alt: data.alt ?? null,
+        sortOrder: Number(maxOrder ?? -1) + 1,
+      })
+      .returning();
+    return media;
+  }
+
+  async reorderMedia(storeId: string, ids: string[]) {
+    if (!ids.length) return { ok: true };
+    // Le where borne sur storeId : impossible de réordonner les médias d'une autre boutique
+    await Promise.all(
+      ids.map((id, index) =>
+        this.db
+          .update(storeMedia)
+          .set({ sortOrder: index, updatedAt: new Date() })
+          .where(
+            and(eq(storeMedia.id, id), eq(storeMedia.storeId, storeId)),
+          ),
+      ),
+    );
+    return { ok: true };
+  }
+
+  async deleteMedia(storeId: string, mediaId: string) {
+    const [deleted] = await this.db
+      .delete(storeMedia)
+      .where(and(eq(storeMedia.id, mediaId), eq(storeMedia.storeId, storeId)))
+      .returning({ id: storeMedia.id });
+    if (!deleted)
+      throw new NotFoundException('Média introuvable pour cette boutique');
     return { ok: true };
   }
 

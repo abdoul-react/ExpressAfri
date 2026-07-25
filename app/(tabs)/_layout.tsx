@@ -1,16 +1,19 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { spacing, fontSize, shadows, useColors, useThemedStyles, type Colors } from '@/design-system';
 import { Icon, IconName } from '@/icons';
 import { useCartStore } from '@/store/cartStore';
 
+// La route physique 'store' garde son nom (deep links historiques) mais présente
+// désormais les catégories. Le bouton central n'ouvre plus l'onglet 'feed' :
+// il pousse /stores. 'feed' reste déclaré pour ne pas casser ses deep links.
 const TAB_CONFIG: { name: string; icon: IconName; labelKey: string; center?: boolean }[] = [
   { name: 'index', icon: 'home', labelKey: 'tabs.home' },
-  { name: 'store', icon: 'store', labelKey: 'tabs.store' },
-  { name: 'feed', icon: 'plus', labelKey: 'tabs.feed', center: true },
+  { name: 'store', icon: 'grid', labelKey: 'tabs.categories' },
+  { name: 'feed', icon: 'plus', labelKey: 'tabs.stores', center: true },
   { name: 'cart', icon: 'cart', labelKey: 'tabs.cart' },
   { name: 'account', icon: 'account', labelKey: 'tabs.account' },
 ];
@@ -38,7 +41,13 @@ function CustomTabBar({ state, navigation }: { state: any; navigation: any }) {
 
         if (cfg.center) {
           return (
-            <Pressable key={route.key} style={styles.centerWrap} onPress={onPress}>
+            <Pressable
+              key={route.key}
+              style={styles.centerWrap}
+              accessibilityRole="button"
+              accessibilityLabel={t('tabs.stores')}
+              onPress={() => router.push('/stores')}
+            >
               <View style={styles.centerBtn}>
                 <Icon name="plus" size={26} color={colors.white} />
               </View>

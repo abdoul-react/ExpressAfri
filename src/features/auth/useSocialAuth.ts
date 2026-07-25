@@ -2,7 +2,6 @@ import type { AuthSessionResult } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { makeRedirectUri } from 'expo-auth-session';
-import { LoginManager, AccessToken } from 'react-native-fbsdk-next';
 import { authDataSource } from '@/infrastructure/data-source';
 import type { AuthResult } from '@/infrastructure/data-source/AuthDataSource';
 
@@ -59,8 +58,9 @@ export async function handleGoogleResponse(
   } as any);
 }
 
-// ── Facebook (SDK natif — pas de redirect_uri) ──
+// ── Facebook (SDK natif — import dynamique pour éviter le crash sans module natif) ──
 export async function loginWithFacebook(): Promise<SocialAuthResult | null> {
+  const { LoginManager, AccessToken } = await import('react-native-fbsdk-next');
   const result = await LoginManager.logInWithPermissions(['public_profile', 'email']);
   if (result.isCancelled) return null;
 

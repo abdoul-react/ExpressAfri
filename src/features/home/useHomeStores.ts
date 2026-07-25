@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiAdapter } from '@/infrastructure/api/apiAdapter';
+import { storeService } from '@/features/stores/storeService';
 
 export type HomeStore = {
   id: string;
@@ -10,14 +10,13 @@ export type HomeStore = {
 };
 
 /**
- * Charge la liste des boutiques actives pour la section "Boutiques à découvrir".
- * Endpoint : GET /mobile/stores
+ * Charge la liste des boutiques approuvées pour la section "Boutiques à découvrir".
  * staleTime=0 pour refléter les changements admin immédiatement.
  */
 export function useHomeStores(limit = 10) {
   const { data = [], isLoading } = useQuery<HomeStore[]>({
-    queryKey: ['home', 'stores'],
-    queryFn: () => apiAdapter.get(`/mobile/stores?limit=${limit}`),
+    queryKey: ['home', 'stores', limit],
+    queryFn: () => storeService.getStores({ limit }),
     staleTime: 0,
     refetchOnWindowFocus: true,
   });

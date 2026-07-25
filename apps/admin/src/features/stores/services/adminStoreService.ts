@@ -10,6 +10,8 @@ import type {
   SetManagerActivePayload,
   ResetManagerPasswordPayload,
   CreateStorePayload,
+  StoreMedia,
+  StoreMediaType,
 } from '@/infrastructure/data-source/AdminStoreDataSource'
 import { toServiceError } from '@/lib/service-error'
 
@@ -131,6 +133,38 @@ class AdminStoreService {
       return await adminStoreDataSource.resetManagerPassword(storeId, managerId, payload)
     } catch (err) {
       throw toServiceError(err, 'Réinitialisation du mot de passe du gestionnaire')
+    }
+  }
+
+  async listMedia(storeId: string): Promise<StoreMedia[]> {
+    try {
+      return await adminStoreDataSource.listMedia(storeId)
+    } catch (err) {
+      throw toServiceError(err, 'Liste des médias de la boutique')
+    }
+  }
+
+  async uploadMedia(storeId: string, file: File, type: StoreMediaType, alt?: string): Promise<StoreMedia> {
+    try {
+      return await adminStoreDataSource.uploadMedia(storeId, file, type, alt)
+    } catch (err) {
+      throw toServiceError(err, 'Envoi du média')
+    }
+  }
+
+  async reorderMedia(storeId: string, ids: string[]): Promise<void> {
+    try {
+      return await adminStoreDataSource.reorderMedia(storeId, ids)
+    } catch (err) {
+      throw toServiceError(err, 'Réordonnancement de la galerie')
+    }
+  }
+
+  async deleteMedia(storeId: string, mediaId: string): Promise<void> {
+    try {
+      return await adminStoreDataSource.deleteMedia(storeId, mediaId)
+    } catch (err) {
+      throw toServiceError(err, 'Suppression du média')
     }
   }
 }

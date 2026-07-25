@@ -10,7 +10,6 @@ import { focusManager, useQuery } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Settings } from 'react-native-fbsdk-next';
 import '@/i18n';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useAuthStore } from '@/store/authStore';
@@ -272,7 +271,9 @@ function AppShell() {
 
 export default function RootLayout() {
   useEffect(() => {
-    Settings?.initializeSDK?.();
+    import('react-native-fbsdk-next')
+      .then(({ Settings }) => Settings?.initializeSDK?.())
+      .catch(() => {});
   }, []);
 
   return (

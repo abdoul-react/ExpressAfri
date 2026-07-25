@@ -11,7 +11,7 @@ import { useFollowedStores, useToggleFollow } from "@/features/follows";
 import { useHomeStores } from "@/features/home/useHomeStores";
 import { useUnreadCount } from "@/features/messages";
 import { Icon } from "@/icons";
-import { BrandHeaderGradient, MediaViewer, type MediaViewerItem } from "@/components";
+import { BrandHeaderGradient, MasonryGrid, MediaViewer, type MediaViewerItem } from "@/components";
 import { useAuthStore } from "@/store/authStore";
 import type { FeedPost } from "@/types";
 import { Image } from "expo-image";
@@ -34,25 +34,10 @@ export default function FeedScreen() {
   const unreadCount = useUnreadCount();
   const [viewerItem, setViewerItem] = useState<MediaViewerItem | null>(null);
 
-  // Masonry 2 colonnes équilibré par hauteur estimée (ratio réel du média),
-  // pas par simple alternance : les colonnes restent de tailles proches.
-  const { left, right } = useMemo(() => {
-    const l: FeedPost[] = [];
-    const r: FeedPost[] = [];
-    let lh = 0;
-    let rh = 0;
-    for (const p of posts) {
-      const h = p.aspectRatio ?? (p.height ? p.height / 180 : 1);
-      if (lh <= rh) {
-        l.push(p);
-        lh += h;
-      } else {
-        r.push(p);
-        rh += h;
-      }
-    }
-    return { left: l, right: r };
-  }, [posts]);
+  const estimatePostHeight = useCallback(
+    (p: FeedPost) => p.aspectRatio ?? (p.height ? p.height / 180 : 1),
+    [],
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>

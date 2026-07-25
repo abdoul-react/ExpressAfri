@@ -13,6 +13,7 @@ import { STORE_STATUS } from '@/lib/status'
 import { toast } from '@/lib/toast'
 import type { StoreQueryParams } from '@/infrastructure/data-source/AdminStoreDataSource'
 import { formatPrice, formatDate } from '@/lib/format'
+import { resolveAdminMediaUrl } from '@/lib/resolveAdminMediaUrl'
 import { WORLD_COUNTRIES } from '@/lib/countries'
 
 interface ConfirmState {
@@ -86,7 +87,20 @@ export function AdminStoreListPage() {
       key: 'name',
       header: 'Boutique',
       cell: (store) => (
-        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{store.name}</p>
+        <div className="flex items-center gap-2.5">
+          {store.logoUrl ? (
+            <img
+              src={resolveAdminMediaUrl(store.logoUrl)}
+              alt=""
+              className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+              <Store className="h-4 w-4 text-gray-400" />
+            </div>
+          )}
+          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{store.name}</p>
+        </div>
       ),
     },
     {
