@@ -36,7 +36,7 @@ export class ApiAdminMessageDataSource implements AdminMessageDataSource {
 
   async getUnreadCount() {
     const { data } = await api.get('/messages/unread-count')
-    return data as number
+    return (data as { count: number }).count
   }
 
   async listInternalMessages(params?: { page?: number; limit?: number; search?: string }) {

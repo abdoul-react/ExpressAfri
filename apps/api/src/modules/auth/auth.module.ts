@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
@@ -6,7 +6,6 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { TokenBlacklistService } from './token-blacklist.service';
-import { MobileModule } from '../mobile/mobile.module';
 
 @Module({
   imports: [
@@ -24,7 +23,6 @@ import { MobileModule } from '../mobile/mobile.module';
         },
       }),
     }),
-    forwardRef(() => MobileModule),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, TokenBlacklistService],

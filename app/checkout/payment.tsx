@@ -127,11 +127,7 @@ export default function PaymentScreen() {
 
       // Pour les methodes non-COD, initialiser le parcours PSP
       if (effectiveMethod !== "cod" && order?.id) {
-        try {
-          await paymentService.initializePayment(order.id, effectiveMethod);
-        } catch {
-          // Echec PSP non bloquant : le webhook confirmera le statut reel
-        }
+        await paymentService.initializePayment(order.id, effectiveMethod);
       }
 
       clearSelected();

@@ -107,8 +107,10 @@ export class AuthService {
   private async buildAuthResponse(admin: typeof admins.$inferSelect) {
     const permissions = await this.resolvePermissions(admin);
     const payload = { sub: admin.id, email: admin.email, role: admin.role, jti: randomUUID() };
+    const refreshPayload = { sub: admin.id, type: 'admin_refresh', jti: randomUUID() };
     return {
       accessToken: this.jwt.sign(payload),
+      refreshToken: this.jwt.sign(refreshPayload, { expiresIn: '30d' }),
       admin: {
         id: admin.id,
         email: admin.email,
@@ -434,6 +436,26 @@ export class AuthService {
     if (!totpVerify(admin.totpSecret, code)) throw new UnauthorizedException('Code TOTP invalide');
     await this.db.update(admins).set({ totpSecret: null, totpEnabled: false }).where(eq(admins.id, adminId));
     return { disabled: true };
+  }
+
+  async refreshAdminToken(refreshToken: string) {
+    let payload: any;
+    try {
+      payload = this.jwt.verify(refreshToken);
+    } catch {
+      throw new UnauthorizedException('Token invalide ou expiré');
+    }
+    // Rejeter tout token qui n'est pas un refresh admin
+    if (payload.type !== 'admin_refresh') {
+      throw new UnauthorizedException('Token de type incorrect');
+    }
+    const [admin] = await this.db
+      .select()
+      .from(admins)
+      .where(eq(admins.id, payload.sub))
+      .limit(1);
+    if (!admin || !admin.isActive) throw new UnauthorizedException();
+    return this.buildAuthResponse(admin);
   }
 
   async totpLogin(pendingToken: string, code: string) {

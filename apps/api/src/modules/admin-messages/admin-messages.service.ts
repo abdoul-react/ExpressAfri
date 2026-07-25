@@ -548,12 +548,12 @@ export class AdminMessagesService {
     if (!ticket) throw new NotFoundException('Ticket introuvable');
   }
 
-  async getUnreadCount() {
+  async getUnreadCount(): Promise<{ count: number }> {
     const [result] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(adminTickets)
       .where(eq(adminTickets.unread, true));
-    return Number(result.count);
+    return { count: Number(result.count) };
   }
 
   // ── Internal Messages ──
