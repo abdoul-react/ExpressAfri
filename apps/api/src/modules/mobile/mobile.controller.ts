@@ -220,6 +220,8 @@ export class MobileController {
       offset: query.offset ? Number(query.offset) : undefined,
       minPrice: query.minPrice ? Number(query.minPrice) : undefined,
       maxPrice: query.maxPrice ? Number(query.maxPrice) : undefined,
+      minRating: query.minRating ? Number(query.minRating) : undefined,
+      freeShipping: query.freeShipping === 'true' || query.freeShipping === true,
       onSale: query.onSale === 'true' || query.onSale === true,
     });
   }

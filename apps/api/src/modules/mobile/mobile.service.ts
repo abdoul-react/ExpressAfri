@@ -702,6 +702,11 @@ export class MobileService {
       conditions.push(sql`${products.price} <= ${query.maxPrice}`);
     if (query.onSale)
       conditions.push(sql`${products.comparePrice} IS NOT NULL AND ${products.comparePrice} > ${products.price}`);
+    // freeShipping : produits dont le prix dépasse le seuil de livraison gratuite (10 000 XOF)
+    if (query.freeShipping)
+      conditions.push(sql`${products.price} >= 10000`);
+    if (query.minRating != null)
+      conditions.push(sql`coalesce((select avg(r.rating) from product_reviews r where r.product_id = ${products.id} and r.is_active = true), 0) >= ${query.minRating}`);
 
     let orderBy: any = desc(products.createdAt);
     if (query.sort === 'priceLow') orderBy = products.price;

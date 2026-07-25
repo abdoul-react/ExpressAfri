@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { catalogService } from '@/features/catalog';
 import { queryClient } from '@/infrastructure/query/queryClient';
@@ -60,13 +60,21 @@ export function useSearchFilters() {
 }
 
 export function useFilteredProducts(filters: SearchFilters) {
-  const { data, isLoading } = useQuery<Product[]>({
-    queryKey: ['products', 'filtered', filters.query, filters.categoryId, filters.minPrice, filters.maxPrice, filters.onSaleOnly, filters.sort],
+  const { data, isLoading, error } = useQuery<Product[]>({
+    queryKey: [
+      'products', 'filtered',
+      filters.query, filters.categoryId,
+      filters.minPrice, filters.maxPrice,
+      filters.minRating, filters.freeShippingOnly,
+      filters.onSaleOnly, filters.sort,
+    ],
     queryFn: () => catalogService.getProducts({
       search: filters.query.trim() || undefined,
       categoryId: filters.categoryId ?? undefined,
       minPrice: filters.minPrice ?? undefined,
       maxPrice: filters.maxPrice ?? undefined,
+      minRating: filters.minRating ?? undefined,
+      freeShipping: filters.freeShippingOnly || undefined,
       onSale: filters.onSaleOnly || undefined,
       sort: filters.sort !== 'featured' ? filters.sort : undefined,
       limit: 100,
@@ -79,23 +87,7 @@ export function useFilteredProducts(filters: SearchFilters) {
   });
 
   const categories = categoriesQ.data ?? [];
+  const results = data ?? [];
 
-  // Filtres restants non supportés côté serveur (note, livraison gratuite)
-  const results = useMemo(() => {
-    let filtered = data ?? [];
-    if (filters.minRating != null) {
-      filtered = filtered.filter((p) => p.rating >= filters.minRating!);
-    }
-    if (filters.freeShippingOnly) {
-      filtered = filtered.filter((p) => p.freeShipping);
-    }
-    if (filters.sort === 'rating') {
-      filtered = [...filtered].sort((a, b) => b.rating - a.rating);
-    } else if (filters.sort === 'newest') {
-      filtered = [...filtered].sort((a, b) => (a.id > b.id ? -1 : 1));
-    }
-    return filtered;
-  }, [data, filters.minRating, filters.freeShippingOnly, filters.sort]);
-
-  return { results, isLoading, categories, totalCount: data?.length ?? 0 };
+  return { results, isLoading, error, categories, totalCount: results.length };
 }

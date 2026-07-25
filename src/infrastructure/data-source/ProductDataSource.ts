@@ -9,6 +9,8 @@ export type ProductQuery = {
   offset?: number;
   minPrice?: number;
   maxPrice?: number;
+  minRating?: number;
+  freeShipping?: boolean;
   onSale?: boolean;
   sort?: string;
 };

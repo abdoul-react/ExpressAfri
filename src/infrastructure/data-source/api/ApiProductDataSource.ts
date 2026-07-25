@@ -11,6 +11,8 @@ export class ApiProductDataSource implements ProductDataSource {
     if (query?.offset != null) params.set('offset', String(query.offset));
     if (query?.minPrice != null) params.set('minPrice', String(query.minPrice));
     if (query?.maxPrice != null) params.set('maxPrice', String(query.maxPrice));
+    if (query?.minRating != null) params.set('minRating', String(query.minRating));
+    if (query?.freeShipping) params.set('freeShipping', 'true');
     if (query?.onSale) params.set('onSale', 'true');
     if (query?.sort) params.set('sort', query.sort);
     const qs = params.toString();

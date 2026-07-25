@@ -96,6 +96,15 @@ export default function CameraScreen() {
     setSearchError(null);
   };
 
+  const retry = () => {
+    if (photoUri) {
+      setSearchResults([]);
+      startScan(photoUri);
+    } else {
+      retake();
+    }
+  };
+
   // Onglet Prix : tri par prix croissant
   const results = tab === 2 ? [...searchResults].sort((a, b) => a.priceUsd - b.priceUsd) : searchResults;
   const toggleWish = useWishlistStore((s) => s.toggle);
@@ -198,6 +207,28 @@ export default function CameraScreen() {
         </View>
       )}
 
+      {/* PHASE ERREUR — panneau dédié */}
+      {phase === 'error' && (
+        <View style={styles.sheet}>
+          <View style={styles.sheetHandle} />
+          <View style={[styles.sheetHeader, { justifyContent: 'flex-end' }]}>
+            <Pressable style={styles.sheetClose} hitSlop={8} onPress={retake}>
+              <Icon name="close" size={20} color={colors.text} />
+            </Pressable>
+          </View>
+          <View style={styles.errorBlock}>
+            <Text style={styles.errorTitle}>{t('camera.errorTitle', 'Erreur de recherche')}</Text>
+            <Text style={styles.errorHint}>{searchError}</Text>
+            <Pressable onPress={retry} style={styles.retryBtn}>
+              <Text style={styles.retryText}>{t('common.retry', 'Réessayer')}</Text>
+            </Pressable>
+            <Pressable onPress={retake} style={{ marginTop: spacing.sm }}>
+              <Text style={styles.link}>{t('camera.newPhoto', 'Prendre une nouvelle photo')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       {/* PHASE RÉSULTATS — panneau bas */}
       {phase === 'results' && (
         <View style={styles.sheet}>
@@ -221,15 +252,14 @@ export default function CameraScreen() {
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.grid}>
-            {searchError ? (
+            {results.length === 0 ? (
               <View style={styles.errorBlock}>
-                <Text style={styles.errorHint}>{searchError}</Text>
+                <Text style={styles.errorHint}>{t('camera.noResults', 'Aucun produit similaire trouvé.')}</Text>
                 <Pressable onPress={retake} style={styles.retryBtn}>
-                  <Text style={styles.retryText}>{t('common.retry', 'Réessayer')}</Text>
+                  <Text style={styles.retryText}>{t('camera.newPhoto', 'Nouvelle photo')}</Text>
                 </Pressable>
               </View>
-            ) : null}
-            {results.map((p) => (
+            ) : results.map((p) => (
               <View key={p.id} style={styles.gridItem}>
                 <ProductCard product={p} isWished={wishedIds.includes(p.id)} onToggleWish={toggleWish} onAddToCart={addToCart} />
               </View>
@@ -268,6 +298,7 @@ const makeStyles = (colors: Colors) => StyleSheet.create({
   scanClose: { marginTop: spacing.xl, width: 52, height: 52, borderRadius: 26, borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)', alignItems: 'center', justifyContent: 'center' },
   // Résultats
   errorBlock: { width: '100%', alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.md },
+  errorTitle: { color: colors.text, fontSize: fontSize.md, fontWeight: '700', textAlign: 'center' },
   errorHint: { color: colors.danger, fontSize: fontSize.sm, textAlign: 'center', paddingHorizontal: spacing.lg },
   retryBtn: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.primary },
   retryText: { color: colors.primary, fontWeight: '700', fontSize: fontSize.sm },
