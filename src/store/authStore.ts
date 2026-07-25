@@ -12,6 +12,22 @@ import { isMock } from "@/infrastructure/mock";
 import { clearPrivateQueries } from "@/infrastructure/query/queryClient";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import {
+  loadCartForUser,
+  subscribeCartForUser,
+  unsubscribeCart,
+} from "@/store/cartStore";
+import {
+  loadAddressesForUser,
+  subscribeAddressesForUser,
+  unsubscribeAddresses,
+} from "@/store/addressStore";
+import { registerAuthGetter } from "@/features/address/addressSync";
+import {
+  loadWishlistForUser,
+  subscribeWishlistForUser,
+  unsubscribeWishlist,
+} from "@/store/wishlistStore";
 
 const apiGetAccessToken = () => apiAdapter.getAccessToken();
 
@@ -54,53 +70,62 @@ export const useAuthStore = create<AuthState>()(
 
       completeOnboarding: () => set({ hasOnboarded: true }),
       signIn: (user, tokens) => {
-        // Changement de compte : purger les données privées de l'ancien
-        // (conversations, commandes…) avant d'installer la nouvelle session
         clearPrivateQueries();
         set({ isAuthenticated: true, isGuest: false, user });
-        // set tokens if provided, or provide mock tokens in mock mode
+        const userId = user.email ?? user.name;
+        // Charger les données privées de l'utilisateur qui se connecte
+        void Promise.all([
+          loadCartForUser(userId),
+          loadAddressesForUser(userId),
+          loadWishlistForUser(userId),
+        ]).then(() => {
+          subscribeCartForUser(userId);
+          subscribeAddressesForUser(userId);
+          subscribeWishlistForUser(userId);
+        });
         if (tokens) {
           apiSetTokens(tokens).catch((error) => {
-            logger.warn("[authStore] Failed to persist tokens on signIn", {
-              error,
-            });
+            logger.warn("[authStore] Failed to persist tokens on signIn", { error });
           });
         } else if (isMock()) {
-          apiSetTokens({
-            access: "mock-access-token",
-            refresh: "mock-refresh-token",
-          }).catch((error) => {
-            logger.warn("[authStore] Failed to persist mock tokens on signIn", {
-              error,
-            });
-          });
+          apiSetTokens({ access: "mock-access-token", refresh: "mock-refresh-token" }).catch(
+            (error) => {
+              logger.warn("[authStore] Failed to persist mock tokens on signIn", { error });
+            },
+          );
         }
       },
       continueAsGuest: () => {
-        // L'invité ne doit voir AUCUNE donnée d'un compte précédent
         clearPrivateQueries();
+        const prevUser = useAuthStore.getState().user;
+        unsubscribeCart();
+        unsubscribeAddresses();
+        unsubscribeWishlist();
+        if (prevUser) {
+          // Garder les données persistées — ne pas les effacer
+        }
+        // Vider les stores en mémoire (l'invité ne voit rien)
+        import('@/store/cartStore').then(({ useCartStore }) => useCartStore.setState({ items: [] })).catch(() => {});
+        import('@/store/wishlistStore').then(({ useWishlistStore }) => useWishlistStore.setState({ ids: [] })).catch(() => {});
+        import('@/store/addressStore').then(({ useAddressStore }) => useAddressStore.setState({ addresses: [], defaultId: null })).catch(() => {});
         set({ isGuest: true, isAuthenticated: false, user: null });
         apiClearTokens().catch(() => {});
-        // Purger le panier, la wishlist et les adresses de l'ancien compte
-        import('@/store/cartStore').then(({ useCartStore }) => useCartStore.getState().clear()).catch(() => {});
-        import('@/store/wishlistStore').then(({ useWishlistStore }) => useWishlistStore.setState({ ids: [] })).catch(() => {});
-        import('@/store/addressStore').then(({ useAddressStore }) => useAddressStore.getState().hydrateFromServer([], null)).catch(() => {});
       },
       signOut: () => {
         clearPrivateQueries();
-        // Retirer le jeton push AVANT de purger les jetons d'auth : l'appel
-        // serveur a besoin d'une session valide. Best-effort.
         unregisterPushToken().catch(() => {});
+        const prevUser = useAuthStore.getState().user;
+        if (prevUser) {
+          const prevId = prevUser.email ?? prevUser.name;
+          unsubscribeCart();
+          unsubscribeAddresses();
+          unsubscribeWishlist();
+          // Ne pas effacer les données — elles doivent persister pour la prochaine connexion
+        }
         set({ isAuthenticated: false, isGuest: false, user: null });
         apiClearTokens().catch((error) => {
-          logger.warn("[authStore] Failed to clear tokens on signOut", {
-            error,
-          });
+          logger.warn("[authStore] Failed to clear tokens on signOut", { error });
         });
-        // Purger le panier, la wishlist et les adresses pour éviter toute fuite entre comptes
-        import('@/store/cartStore').then(({ useCartStore }) => useCartStore.getState().clear()).catch(() => {});
-        import('@/store/wishlistStore').then(({ useWishlistStore }) => useWishlistStore.setState({ ids: [] })).catch(() => {});
-        import('@/store/addressStore').then(({ useAddressStore }) => useAddressStore.getState().hydrateFromServer([], null)).catch(() => {});
       },
       setHydrated: () => set({ hydrated: true }),
       updateProfile: (patch) =>
@@ -153,6 +178,20 @@ export const useAuthStore = create<AuthState>()(
                     const js = await r.json();
                     await apiSetTokens({ access: js.accessToken, refresh: js.refreshToken });
                     logger.info('[authStore] Token rafraîchi au démarrage');
+                    // Recharger les données privées de l'utilisateur
+                    const currentUser = useAuthStore.getState().user;
+                    if (currentUser) {
+                      const uid = currentUser.email ?? currentUser.name;
+                      void Promise.all([
+                        loadCartForUser(uid),
+                        loadAddressesForUser(uid),
+                        loadWishlistForUser(uid),
+                      ]).then(() => {
+                        subscribeCartForUser(uid);
+                        subscribeAddressesForUser(uid);
+                        subscribeWishlistForUser(uid);
+                      });
+                    }
                   } else if (r.status === 401 || r.status === 403) {
                     // Token définitivement expiré : déconnecter proprement
                     logger.info('[authStore] Token expiré au démarrage — déconnexion');
@@ -181,6 +220,9 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 );
+
+// Injecter le getter d'authentification dans addressSync pour éviter le cycle d'import
+registerAuthGetter(() => useAuthStore.getState().isAuthenticated);
 
 // Session définitivement expirée (le serveur a rejeté le refresh token) :
 // basculer proprement en « déconnecté ». L'utilisateur garde l'app ouverte,

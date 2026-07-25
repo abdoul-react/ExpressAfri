@@ -1,9 +1,17 @@
 import { addressDataSource } from '@/infrastructure/data-source';
 import { isMock } from '@/infrastructure/mock';
 import { logger } from '@/infrastructure/logging';
-import { useAuthStore } from '@/store/authStore';
-import { COUNTRIES } from '@/store/settingsStore';
+import { COUNTRIES } from '@/data/countries';
 import type { Address } from '@/store/addressStore';
+
+/**
+ * Getter lazy vers authStore — injecté au démarrage par authStore lui-même
+ * pour éviter le cycle d'import statique addressSync → authStore → addressStore → addressSync.
+ */
+let _getIsAuthenticated: () => boolean = () => false;
+export function registerAuthGetter(fn: () => boolean): void {
+  _getIsAuthenticated = fn;
+}
 
 /**
  * Synchronisation des adresses avec le serveur.
@@ -24,8 +32,7 @@ export function isLocalId(id: string): boolean {
 }
 
 function canSync(): boolean {
-  const { isAuthenticated } = useAuthStore.getState();
-  return isAuthenticated && !isMock();
+  return _getIsAuthenticated() && !isMock();
 }
 
 /** Format local → payload serveur. Le téléphone part en international complet. */

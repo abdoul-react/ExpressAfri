@@ -363,6 +363,8 @@
     "otp": "Verification code",
     "continueWith": "Continue with",
     "forgotPassword": "Forgot password?",
+    "phonePlaceholder": "000 000 000",
+    "emailPlaceholder": "example@email.com",
     "invalidPhone": "Invalid phone number: at least 6 digits required.",
     "invalidEmail": "Invalid email: check the format.",
     "verificationError": "Verification error",

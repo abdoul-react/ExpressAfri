@@ -356,6 +356,8 @@
     "otp": "رمز التحقق",
     "continueWith": "المتابعة عبر",
     "forgotPassword": "نسيت كلمة المرور؟",
+    "phonePlaceholder": "000 000 000",
+    "emailPlaceholder": "example@email.com",
     "invalidPhone": "رقم هاتف غير صالح: 6 أرقام على الأقل.",
     "invalidEmail": "بريد إلكتروني غير صالح: تحقق من التنسيق.",
     "verificationError": "خطأ في التحقق",

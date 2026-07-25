@@ -346,8 +346,50 @@ export class MobileService {
 
   async socialLogin(
     provider: string,
-    data: { email?: string; name?: string; id?: string },
+    data: { email?: string; name?: string; id?: string; idToken?: string; accessToken?: string },
   ) {
+    if (provider === 'google') {
+      const token = data.idToken ?? data.accessToken;
+      if (!token) throw new BadRequestException('Token Google manquant');
+      try {
+        const url = data.idToken
+          ? `https://oauth2.googleapis.com/tokeninfo?id_token=${token}`
+          : `https://www.googleapis.com/oauth2/v1/userinfo?access_token=${token}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Token Google invalide');
+        const profile = await res.json();
+        if (profile.error) throw new Error('Token Google rejeté : ' + profile.error);
+        data.email = profile.email ?? data.email;
+        data.name = profile.name ?? data.name;
+        data.id = profile.sub ?? profile.id ?? data.id;
+      } catch (e: any) {
+        throw new BadRequestException('Authentification Google échouée : ' + e.message);
+      }
+    }
+
+    if (provider === 'facebook') {
+      const token = data.accessToken;
+      if (!token) throw new BadRequestException('Token Facebook manquant');
+      try {
+        const appId = process.env.FACEBOOK_APP_ID;
+        const appSecret = process.env.FACEBOOK_APP_SECRET;
+        const appToken = `${appId}|${appSecret}`;
+        const [inspectRes, profileRes] = await Promise.all([
+          fetch(`https://graph.facebook.com/debug_token?input_token=${token}&access_token=${appToken}`),
+          fetch(`https://graph.facebook.com/me?fields=id,name,email&access_token=${token}`),
+        ]);
+        if (!inspectRes.ok || !profileRes.ok) throw new Error('Token Facebook invalide');
+        const { data: inspect } = await inspectRes.json();
+        if (!inspect?.is_valid) throw new Error('Token Facebook rejeté');
+        const profile = await profileRes.json();
+        data.email = profile.email ?? data.email;
+        data.name = profile.name ?? data.name;
+        data.id = profile.id ?? data.id;
+      } catch (e: any) {
+        throw new BadRequestException('Authentification Facebook échouée : ' + e.message);
+      }
+    }
+
     let customer = data.email
       ? await this.db
           .select()

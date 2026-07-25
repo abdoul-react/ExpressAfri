@@ -116,7 +116,7 @@ export class MobileController {
   @Public()
   @Post('auth/social')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Connexion sociale' })
+  @ApiOperation({ summary: 'Connexion sociale (Google, Facebook, Apple)' })
   async socialLogin(
     @Body()
     body: {
@@ -124,6 +124,8 @@ export class MobileController {
       email?: string;
       name?: string;
       id?: string;
+      idToken?: string;
+      accessToken?: string;
     },
   ) {
     return this.service.socialLogin(body.provider, body);

@@ -65,9 +65,10 @@ export default function AddressFormScreen() {
         <Text style={styles.groupTitle}>{t("address.personalInfo")}</Text>
         <Field placeholder={t("address.contactName")} value={form.contactName} onChangeText={setField('contactName')} />
         <View style={styles.phoneRow}>
-          <View style={styles.dialBox}>
-            <Text style={styles.dialText}>{country.dial}</Text>
-          </View>
+          <Pressable style={styles.dialBox} onPress={() => setCountrySheet(true)}>
+            <Text style={styles.dialText}>{country.flag} {country.dial}</Text>
+            <Icon name="chevronDown" size={12} color={colors.textMuted} />
+          </Pressable>
           <TextInput
             style={[styles.input, { flex: 1, marginLeft: 0 }]}
             placeholder={t("address.phone")}
@@ -145,7 +146,7 @@ const makeStyles = (colors: Colors) => StyleSheet.create({
   countryName: { flex: 1, fontSize: fontSize.md, color: colors.text, fontWeight: '600' },
   input: { backgroundColor: colors.surface, marginHorizontal: spacing.lg, marginTop: spacing.sm, paddingHorizontal: spacing.md, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, fontSize: fontSize.md, color: colors.text },
   phoneRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginRight: spacing.lg },
-  dialBox: { marginLeft: spacing.lg, marginTop: spacing.sm, paddingHorizontal: spacing.md, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  dialBox: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: spacing.lg, marginTop: spacing.sm, paddingHorizontal: spacing.md, height: 52, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   dialText: { fontSize: fontSize.md, color: colors.text, fontWeight: '700' },
   defaultRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, backgroundColor: colors.surface, marginHorizontal: spacing.lg, marginTop: spacing.lg, padding: spacing.lg, borderRadius: radius.md },
   defaultLabel: { flex: 1, fontSize: fontSize.md, color: colors.text },

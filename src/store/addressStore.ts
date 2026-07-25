@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   fetchServerAddresses,
@@ -34,29 +33,47 @@ type AddressState = {
   hydrateFromServer: (addresses: Address[], defaultId: string | null) => void;
 };
 
-/**
- * Retourne la clé de persistence des adresses pour l'utilisateur courant.
- */
-function addressStorageKey(): string {
+const addressStorageKey = (userId: string) => `afriexpress-addresses:${userId}`;
+
+export async function loadAddressesForUser(userId: string): Promise<void> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { useAuthStore } = require('@/store/authStore');
-    const userId = useAuthStore.getState().user?.email ?? null;
-    if (userId) return `afriexpress-addresses:${userId}`;
-  } catch {}
-  return 'afriexpress-addresses:guest';
+    const raw = await AsyncStorage.getItem(addressStorageKey(userId));
+    if (raw) {
+      const { addresses, defaultId } = JSON.parse(raw);
+      useAddressStore.setState({ addresses: addresses ?? [], defaultId: defaultId ?? null });
+    } else {
+      useAddressStore.setState({ addresses: [], defaultId: null });
+    }
+  } catch {
+    useAddressStore.setState({ addresses: [], defaultId: null });
+  }
 }
 
-/**
- * Adresses de livraison : le store local reste la source d'affichage (l'app
- * marche hors-ligne et en invité), et chaque opération est répliquée vers
- * l'API en arrière-plan quand une session cliente existe — voir
- * `features/address/addressSync.ts`. À la connexion, le serveur fait foi
- * (`syncAddressesFromServer`).
- */
-export const useAddressStore = create<AddressState>()(
-  persist(
-    (set, get) => ({
+export async function clearAddressesForUser(userId: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(addressStorageKey(userId));
+  } catch {}
+  useAddressStore.setState({ addresses: [], defaultId: null });
+}
+
+let _unsubscribeAddr: (() => void) | null = null;
+
+export function subscribeAddressesForUser(userId: string): void {
+  _unsubscribeAddr?.();
+  _unsubscribeAddr = useAddressStore.subscribe((state) => {
+    AsyncStorage.setItem(
+      addressStorageKey(userId),
+      JSON.stringify({ addresses: state.addresses, defaultId: state.defaultId }),
+    ).catch(() => {});
+  });
+}
+
+export function unsubscribeAddresses(): void {
+  _unsubscribeAddr?.();
+  _unsubscribeAddr = null;
+}
+
+export const useAddressStore = create<AddressState>()((set, get) => ({
       addresses: [],
       defaultId: null,
 
@@ -106,13 +123,7 @@ export const useAddressStore = create<AddressState>()(
       },
 
       hydrateFromServer: (addresses, defaultId) => set({ addresses, defaultId }),
-    }),
-    {
-      name: addressStorageKey(),
-      storage: createJSONStorage(() => AsyncStorage),
-    }
-  )
-);
+    }));
 
 /** Sélecteur : l'adresse par défaut (ou la première, ou null). */
 export function getDefaultAddress(state: AddressState): Address | null {

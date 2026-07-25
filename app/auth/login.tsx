@@ -10,14 +10,17 @@ import {
 import { Icon, GoogleIcon, AppleIcon, FacebookIcon } from "@/icons";
 import { BrandMark } from "@/features/content";
 import { useAuth } from "@/features/auth";
+import { useGoogleAuth, handleGoogleResponse, useFacebookAuth, handleFacebookResponse } from "@/features/auth/useSocialAuth";
 import { useAuthStore } from "@/store/authStore";
 import { COUNTRIES, useSettingsStore } from "@/store/settingsStore";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   KeyboardAvoidingView,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -42,8 +45,43 @@ export default function LoginScreen() {
   const signIn = useAuthStore((s) => s.signIn);
   const continueAsGuest = useAuthStore((s) => s.continueAsGuest);
   const countryCode = useSettingsStore((s) => s.country);
-  const country = COUNTRIES.find((c) => c.code === countryCode)!;
+  const defaultCountry = COUNTRIES.find((c) => c.code === countryCode) ?? COUNTRIES[0];
+  const [dialCountry, setDialCountry] = useState(defaultCountry);
+  const [dialSheet, setDialSheet] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { promptGoogleLogin, googleResponse } = useGoogleAuth();
+  const { promptFacebookLogin, facebookResponse } = useFacebookAuth();
+
+  const handleSocialResult = (result: any) => {
+    if (!result) throw new Error('Connexion annulée');
+    const user = result.user ?? { name: 'Utilisateur', email: '' };
+    signIn(user, {
+      access: result.accessToken ?? result.access,
+      refresh: result.refreshToken ?? result.refresh,
+    });
+    router.replace('/');
+  };
+
+  useEffect(() => {
+    if (!googleResponse) return;
+    setIsSubmitting(true);
+    setError(null);
+    handleGoogleResponse(googleResponse)
+      .then(handleSocialResult)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setIsSubmitting(false));
+  }, [googleResponse]);
+
+  useEffect(() => {
+    if (!facebookResponse) return;
+    setIsSubmitting(true);
+    setError(null);
+    handleFacebookResponse(facebookResponse)
+      .then(handleSocialResult)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setIsSubmitting(false));
+  }, [facebookResponse]);
 
   const isEmailValid = (email: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -74,10 +112,10 @@ export default function LoginScreen() {
         return;
       }
 
-      await requestOtp(value.trim(), mode);
+      await requestOtp(`${dialCountry.dial}${value.trim()}`, mode);
       router.push({
         pathname: "/auth/otp-sent",
-        params: { contact: value.trim() },
+        params: { contact: `${dialCountry.dial}${value.trim()}` },
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -92,22 +130,9 @@ export default function LoginScreen() {
   };
 
   const socialSignIn = async (provider: string) => {
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      const response = await socialLogin(provider, {});
-      const user = response.user ?? { name: 'Utilisateur', email: '' };
-      const tokens = {
-        access: response.accessToken ?? response.access,
-        refresh: response.refreshToken ?? response.refresh,
-      };
-      signIn(user, tokens);
-      router.replace('/');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setIsSubmitting(false);
-    }
+    if (provider === 'google') { promptGoogleLogin(); return; }
+    if (provider === 'facebook') { promptFacebookLogin(); return; }
+    setError(`Connexion ${provider} bientôt disponible`);
   };
 
   const guest = () => {
@@ -158,15 +183,16 @@ export default function LoginScreen() {
         {/* Champ */}
         <View style={styles.field}>
           {mode === "phone" && (
-            <View style={styles.dial}>
-              <Text style={styles.dialText}>{country.dial}</Text>
-            </View>
+            <Pressable style={styles.dial} onPress={() => setDialSheet(true)} hitSlop={8}>
+              <Text style={styles.dialText}>{dialCountry.flag} {dialCountry.dial}</Text>
+              <Icon name="chevronDown" size={14} color={colors.textMuted} />
+            </Pressable>
           )}
           <TextInput
             style={styles.input}
             value={value}
             onChangeText={setValue}
-            placeholder={mode === "phone" ? "90 00 00 00" : "exemple@email.com"}
+            placeholder={mode === "phone" ? t("auth.phonePlaceholder") : t("auth.emailPlaceholder")}
             placeholderTextColor={colors.textMuted}
             keyboardType={mode === "phone" ? "phone-pad" : "email-address"}
             autoCapitalize="none"
@@ -259,6 +285,30 @@ export default function LoginScreen() {
         </View>
       </View>
 
+      {/* Sélecteur d'indicatif */}
+      {dialSheet && (
+        <Modal visible animationType="slide" transparent onRequestClose={() => setDialSheet(false)}>
+          <Pressable style={styles.backdrop} onPress={() => setDialSheet(false)}>
+            <Pressable style={styles.sheet}>
+              <Text style={styles.sheetTitle}>{t("address.country")}</Text>
+              <ScrollView keyboardShouldPersistTaps="handled">
+                {COUNTRIES.map((c) => (
+                  <Pressable
+                    key={c.code}
+                    style={styles.option}
+                    onPress={() => { setDialCountry(c); setDialSheet(false); }}
+                  >
+                    <Text style={styles.optionFlag}>{c.flag}</Text>
+                    <Text style={styles.optionName}>{c.name}</Text>
+                    <Text style={styles.optionDial}>{c.dial}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
       <View
         style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}
         pointerEvents="box-none"
@@ -340,11 +390,21 @@ const makeStyles = (colors: Colors) =>
       gap: spacing.sm,
     },
     dial: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
       borderRightWidth: 1,
       borderRightColor: colors.border,
       paddingRight: spacing.md,
     },
-    dialText: { fontSize: fontSize.lg, color: colors.text, fontWeight: "700" },
+    dialText: { fontSize: fontSize.md, color: colors.text, fontWeight: "700" },
+    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+    sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.md, borderTopRightRadius: radius.md, padding: spacing.lg, paddingBottom: spacing.xxxl, maxHeight: '70%' },
+    sheetTitle: { fontSize: fontSize.xl, fontWeight: '800', color: colors.text, marginBottom: spacing.md },
+    option: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+    optionFlag: { fontSize: 22 },
+    optionName: { flex: 1, fontSize: fontSize.md, color: colors.text },
+    optionDial: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '600' },
     input: { flex: 1, fontSize: fontSize.lg, color: colors.text },
     register: { marginTop: spacing.lg, alignItems: "center" },
     registerText: { fontSize: fontSize.sm, color: colors.textSecondary },
