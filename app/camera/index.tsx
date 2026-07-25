@@ -20,8 +20,8 @@ const RESULT_TABS_KEY: ('suggestions' | 'orders' | 'prices')[] = ['suggestions',
 
 /** Upload d'une image vers l'endpoint /mobile/search/by-image */
 async function uploadImageSearch(uri: string): Promise<Product[]> {
-  // EXPO_PUBLIC_API_URL inclut déjà le préfixe /api (ex: https://api.expressafri.com/api)
-  const apiBase = process.env.EXPO_PUBLIC_API_URL ?? '';
+  // Normaliser : retirer le /api trailing pour éviter le double préfixe
+  const raw = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/api\/?$/, '');
   const formData = new FormData();
   const filename = uri.split('/').pop() ?? 'photo.jpg';
   const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
@@ -29,7 +29,7 @@ async function uploadImageSearch(uri: string): Promise<Product[]> {
   const type = mimeTypes[ext] ?? 'image/jpeg';
   // @ts-ignore — React Native accepte un objet { uri, name, type } dans FormData
   formData.append('image', { uri, name: filename, type });
-  const response = await fetch(`${apiBase}/mobile/search/by-image`, {
+  const response = await fetch(`${raw}/api/mobile/search/by-image`, {
     method: 'POST',
     body: formData,
   });

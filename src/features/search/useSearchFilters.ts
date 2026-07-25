@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { catalogService } from '@/features/catalog';
+import { queryClient } from '@/infrastructure/query/queryClient';
 import type { Product } from '@/types';
 
 export type SortOption = 'featured' | 'priceLow' | 'priceHigh' | 'rating' | 'newest';
@@ -40,6 +41,8 @@ export function useSearchFilters() {
 
   const resetFilters = useCallback(() => {
     setFilters(defaultFilters);
+    setActiveCount(0);
+    queryClient.removeQueries({ queryKey: ['products', 'filtered'] });
   }, []);
 
   const applyFilters = useCallback(() => {

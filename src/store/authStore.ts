@@ -81,6 +81,9 @@ export const useAuthStore = create<AuthState>()(
         clearPrivateQueries();
         set({ isGuest: true, isAuthenticated: false, user: null });
         apiClearTokens().catch(() => {});
+        // Purger le panier et la wishlist de l'ancien compte
+        import('@/store/cartStore').then(({ useCartStore }) => useCartStore.getState().clear()).catch(() => {});
+        import('@/store/wishlistStore').then(({ useWishlistStore }) => useWishlistStore.setState({ ids: [] })).catch(() => {});
       },
       signOut: () => {
         clearPrivateQueries();
@@ -93,6 +96,9 @@ export const useAuthStore = create<AuthState>()(
             error,
           });
         });
+        // Purger le panier et la wishlist pour éviter toute fuite entre comptes
+        import('@/store/cartStore').then(({ useCartStore }) => useCartStore.getState().clear()).catch(() => {});
+        import('@/store/wishlistStore').then(({ useWishlistStore }) => useWishlistStore.setState({ ids: [] })).catch(() => {});
       },
       setHydrated: () => set({ hydrated: true }),
       updateProfile: (patch) =>
