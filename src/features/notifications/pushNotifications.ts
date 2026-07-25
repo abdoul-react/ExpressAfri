@@ -4,14 +4,23 @@ import { Platform } from "react-native";
 import { apiAdapter } from "@/infrastructure/api/apiAdapter";
 import { logger } from "@/infrastructure/logging";
 
-// SDK 53+ : expo-notifications rejette les push distants dans Expo Go.
-// On lazy-init le module pour que l'import ne casse pas au démarrage.
+// SDK 53+ : expo-notifications push distants retirés d'Expo Go.
+// On détecte Expo Go via l'appName de l'exécutable pour ne jamais tenter
+// le require dans cet environnement.
+const isExpoGo =
+  Constants.executionEnvironment === 'storeClient' ||
+  (Constants as any).appOwnership === 'expo';
+
 let Notifications: typeof import("expo-notifications") | null = null;
 let notificationsReady = false;
 
 function initNotifications() {
   if (notificationsReady) return;
   notificationsReady = true;
+  if (isExpoGo) {
+    logger.info("[push] Expo Go détecté — notifications push désactivées (SDK 53+)");
+    return;
+  }
   try {
     Notifications = require("expo-notifications");
     Notifications!.setNotificationHandler({
@@ -23,7 +32,7 @@ function initNotifications() {
       }),
     });
   } catch {
-    // Expo Go SDK 53+ : notifications push non disponibles
+    logger.info("[push] expo-notifications indisponible");
   }
 }
 
