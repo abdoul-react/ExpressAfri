@@ -19,22 +19,26 @@ type Phase = 'camera' | 'scanning' | 'results' | 'error';
 const RESULT_TABS_KEY: ('suggestions' | 'orders' | 'prices')[] = ['suggestions', 'orders', 'prices'];
 
 /** Upload d'une image vers l'endpoint /mobile/search/by-image */
-async function uploadImageSearch(uri: string): Promise<Product[]> {
-  // Normaliser : retirer le /api trailing pour éviter le double préfixe
+function uploadImageSearch(uri: string): Promise<Product[]> {
   const raw = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/api\/?$/, '');
-  const formData = new FormData();
   const filename = uri.split('/').pop() ?? 'photo.jpg';
   const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
   const mimeTypes: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
   const type = mimeTypes[ext] ?? 'image/jpeg';
-  // @ts-ignore — React Native accepte un objet { uri, name, type } dans FormData
-  formData.append('image', { uri, name: filename, type });
-  const response = await fetch(`${raw}/api/mobile/search/by-image`, {
-    method: 'POST',
-    body: formData,
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${raw}/api/mobile/search/by-image`);
+    xhr.responseType = 'json';
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.response);
+      else reject(new Error(`Erreur serveur ${xhr.status}`));
+    };
+    xhr.onerror = () => reject(new Error('Erreur réseau'));
+    const formData = new FormData();
+    // @ts-ignore — XHR FormData supporte { uri, name, type } dans React Native
+    formData.append('image', { uri, name: filename, type });
+    xhr.send(formData);
   });
-  if (!response.ok) throw new Error(`Erreur serveur ${response.status}`);
-  return response.json();
 }
 
 /** Recherche visuelle : caméra → scan → résultats similaires (façon AliExpress). */
