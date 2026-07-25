@@ -47,7 +47,8 @@ export class CreateOrderDto {
   @MaxLength(1000)
   notes?: string;
 
+  @IsOptional()
   @IsString()
   @IsUUID()
-  idempotencyKey!: string;
+  idempotencyKey?: string;
 }

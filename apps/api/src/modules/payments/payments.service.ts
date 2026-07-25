@@ -2,7 +2,6 @@ import {
   Injectable,
   Inject,
   NotFoundException,
-  BadRequestException,
 } from '@nestjs/common';
 import { eq, like, or, and, sql } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module';
@@ -155,24 +154,22 @@ export class PaymentsService {
     return refund;
   }
 
-  async initialize(orderId: string, method?: string, returnUrl?: string) {
+  async initialize(orderId: string, method?: string, returnUrl?: string): Promise<{ status: string; paymentUrl?: string; message?: string }> {
     const [payment] = await this.db
       .select()
       .from(payments)
       .where(eq(payments.orderId, orderId))
       .limit(1);
     if (!payment)
-      throw new NotFoundException('Aucun paiement trouvé pour cette commande');
+      return { status: 'failed', message: 'Aucun paiement trouvé pour cette commande' };
 
     if (payment.status !== 'pending') {
-      throw new BadRequestException(
-        `Paiement déjà initié (statut: ${payment.status})`,
-      );
+      return { status: payment.status, message: `Paiement déjà initié (statut: ${payment.status})` };
     }
 
     const provider = this.webhookService.getProvider('mock');
     if (!provider)
-      throw new BadRequestException('Aucun provider de paiement configuré');
+      return { status: 'failed', message: 'Aucun provider de paiement configuré' };
 
     const result = await provider.initialize({
       paymentId: payment.id,
@@ -193,28 +190,17 @@ export class PaymentsService {
       })
       .where(eq(payments.id, payment.id));
 
-    const [updated] = await this.db
-      .select()
-      .from(payments)
-      .where(eq(payments.id, payment.id))
-      .limit(1);
-
     await this.audit.create({
       action: 'INITIALIZE',
       resource: 'payments',
       resourceId: payment.id,
-      details: {
-        orderId,
-        method,
-        provider: provider.name,
-        providerPaymentId: result.providerPaymentId,
-      },
+      details: { orderId, method, provider: provider.name, providerPaymentId: result.providerPaymentId },
       status: 'success',
     });
 
     return {
-      payment: updated,
-      checkoutUrl: result.checkoutUrl ?? null,
+      status: result.status,
+      paymentUrl: result.checkoutUrl ?? undefined,
     };
   }
 

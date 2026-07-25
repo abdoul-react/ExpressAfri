@@ -13,7 +13,8 @@ export type CheckoutPayload = {
 };
 
 export async function createOrder(payload: CheckoutPayload) {
-  return apiAdapter.post("/mobile/orders", payload as any);
+  const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return apiAdapter.post("/mobile/orders", { ...payload, idempotencyKey } as any);
 }
 
 export async function submitSuggestion(content: string): Promise<{ ok: boolean }> {
