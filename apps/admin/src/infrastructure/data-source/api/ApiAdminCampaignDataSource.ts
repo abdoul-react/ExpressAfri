@@ -1,4 +1,4 @@
-import type { AdminCampaignDataSource, Campaign, CampaignQueryParams, PaginatedCampaigns, CreateCampaignInput, UpdateCampaignInput } from '../AdminCampaignDataSource'
+import type { AdminCampaignDataSource, Campaign, CampaignQueryParams, PaginatedCampaigns, CampaignSummary, CreateCampaignInput, UpdateCampaignInput } from '../AdminCampaignDataSource'
 import api from '@/lib/api'
 
 export class ApiAdminCampaignDataSource implements AdminCampaignDataSource {
@@ -24,5 +24,20 @@ export class ApiAdminCampaignDataSource implements AdminCampaignDataSource {
 
   async delete(id: string): Promise<void> {
     await api.delete(`/campaigns/${id}`)
+  }
+
+  async launch(id: string): Promise<Campaign> {
+    const { data } = await api.put(`/campaigns/${id}/launch`)
+    return data as Campaign
+  }
+
+  async pause(id: string): Promise<Campaign> {
+    const { data } = await api.put(`/campaigns/${id}/pause`)
+    return data as Campaign
+  }
+
+  async getSummary(): Promise<CampaignSummary> {
+    const { data } = await api.get('/campaigns/summary')
+    return data as CampaignSummary
   }
 }

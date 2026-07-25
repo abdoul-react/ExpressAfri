@@ -37,7 +37,10 @@ export function LoginPage() {
     try {
       const { data } = await api.post('/auth/totp/login', { pendingToken, code: totpCode })
       if (data.accessToken) {
-        localStorage.setItem('admin_token', data.accessToken)
+        const { TOKEN_KEY, REFRESH_TOKEN_KEY, USER_KEY } = await import('@/lib/api')
+        localStorage.setItem(TOKEN_KEY, data.accessToken)
+        if (data.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken)
+        if (data.admin) localStorage.setItem(USER_KEY, JSON.stringify(data.admin))
         navigate('/')
       }
     } catch (err: any) {

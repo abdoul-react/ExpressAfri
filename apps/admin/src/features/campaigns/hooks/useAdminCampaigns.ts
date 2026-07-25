@@ -10,6 +10,10 @@ export function useAdminCampaign(id: string) {
   return useQuery({ queryKey: ['admin', 'campaigns', id], queryFn: () => adminCampaignService.getById(id), enabled: !!id })
 }
 
+export function useAdminCampaignSummary() {
+  return useQuery({ queryKey: ['admin', 'campaigns', 'summary'], queryFn: () => adminCampaignService.getSummary() })
+}
+
 export function useCreateCampaign() {
   const qc = useQueryClient()
   return useMutation({ mutationFn: (data: CreateCampaignInput) => adminCampaignService.create(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'campaigns'] }) })
@@ -23,4 +27,26 @@ export function useUpdateCampaign(id: string) {
 export function useDeleteCampaign() {
   const qc = useQueryClient()
   return useMutation({ mutationFn: (id: string) => adminCampaignService.delete(id), onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'campaigns'] }) })
+}
+
+export function useLaunchCampaign() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => adminCampaignService.launch(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'campaigns'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'campaigns', id] })
+    },
+  })
+}
+
+export function usePauseCampaign() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => adminCampaignService.pause(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['admin', 'campaigns'] })
+      qc.invalidateQueries({ queryKey: ['admin', 'campaigns', id] })
+    },
+  })
 }

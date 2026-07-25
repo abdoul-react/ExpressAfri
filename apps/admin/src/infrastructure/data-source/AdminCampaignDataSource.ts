@@ -52,10 +52,22 @@ export interface PaginatedCampaigns {
   page: number
 }
 
+export interface CampaignSummary {
+  total: number
+  active: number
+  draft: number
+  ended: number
+  totalBudget: number
+  totalSpent: number
+}
+
 export interface AdminCampaignDataSource {
   list(params?: CampaignQueryParams): Promise<PaginatedCampaigns>
   getById(id: string): Promise<Campaign>
   create(data: CreateCampaignInput): Promise<Campaign>
   update(id: string, data: UpdateCampaignInput): Promise<Campaign>
   delete(id: string): Promise<void>
+  launch(id: string): Promise<Campaign>
+  pause(id: string): Promise<Campaign>
+  getSummary(): Promise<CampaignSummary>
 }

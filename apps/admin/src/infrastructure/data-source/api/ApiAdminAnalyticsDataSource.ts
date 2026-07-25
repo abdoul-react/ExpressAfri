@@ -57,7 +57,20 @@ export class ApiAdminAnalyticsDataSource implements AdminAnalyticsDataSource {
     return data
   }
 
-  async exportReport(_period: string, _from?: string, _to?: string): Promise<Blob> {
-    throw new Error('Export not yet available via API')
+  async exportReport(period: string, from?: string, to?: string): Promise<Blob> {
+    const params: any = { period }
+    if (from) params.from = from
+    if (to) params.to = to
+    const { data } = await api.get('/analytics/dashboard', { params })
+    const rows: Record<string, unknown>[] = [
+      ...(data.revenueChart ?? []).map((d: any) => ({ type: 'revenue', date: d.date ?? d.label, value: d.value })),
+      ...(data.ordersChart ?? []).map((d: any) => ({ type: 'orders', date: d.date ?? d.label, value: d.value })),
+      ...(data.customerChart ?? []).map((d: any) => ({ type: 'customers', date: d.date ?? d.label, value: d.value })),
+    ]
+    const SEP = ';'
+    const headers = ['type', 'date', 'value']
+    const escape = (v: unknown) => { const s = v == null ? '' : String(v); return s.includes(SEP) || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s }
+    const csv = [`sep=${SEP}`, headers.join(SEP), ...rows.map((r) => headers.map((h) => escape(r[h])).join(SEP))].join('\r\n')
+    return new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   }
 }

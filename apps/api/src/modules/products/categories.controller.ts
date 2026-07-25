@@ -104,7 +104,7 @@ export class CategoriesController {
   }
 
   @Post()
-  @Permissions('categories.manage')
+  @Permissions('categories.create')
   @ApiOperation({ summary: 'Créer une catégorie' })
   async create(@Body() body: any) {
     const imageUrl = body.imageUrl ? persistBase64Image(body.imageUrl) : body.imageUrl;
@@ -126,9 +126,27 @@ export class CategoriesController {
   }
 
   @Put(':id')
-  @Permissions('categories.manage')
+  @Permissions('categories.update')
   @ApiOperation({ summary: 'Modifier une catégorie' })
   async update(@Param('id') id: string, @Body() body: any) {
+    // Anti-cycle : interdire qu'une catégorie devienne son propre ancêtre
+    if (body.parentId && body.parentId !== null) {
+      let cursor: string | null = body.parentId;
+      const visited = new Set<string>();
+      while (cursor) {
+        if (cursor === id) {
+          return { error: 'Cycle détecté : une catégorie ne peut pas être son propre parent' };
+        }
+        if (visited.has(cursor)) break;
+        visited.add(cursor);
+        const [parent] = await this.db
+          .select({ parentId: categories.parentId })
+          .from(categories)
+          .where(eq(categories.id, cursor))
+          .limit(1);
+        cursor = parent?.parentId ?? null;
+      }
+    }
     const imageUrl = body.imageUrl ? persistBase64Image(body.imageUrl) : body.imageUrl;
     const [cat] = await this.db
       .update(categories)
@@ -139,7 +157,7 @@ export class CategoriesController {
   }
 
   @Delete(':id')
-  @Permissions('categories.manage')
+  @Permissions('categories.delete')
   @ApiOperation({ summary: 'Supprimer une catégorie' })
   async delete(@Param('id') id: string) {
     // Réassigne les sous-catégories orphelines au niveau racine avant suppression

@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { Eye, Megaphone, MousePointerClick, Pencil, ShoppingCart, Wallet } from 'lucide-react'
+import { Eye, Megaphone, MousePointerClick, Pause, Pencil, Play, ShoppingCart, Wallet } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -15,7 +15,8 @@ import {
 } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { CAMPAIGN_STATUS } from '@/lib/status'
-import { useAdminCampaign } from '../hooks/useAdminCampaigns'
+import { toast } from '@/lib/toast'
+import { useAdminCampaign, useLaunchCampaign, usePauseCampaign } from '../hooks/useAdminCampaigns'
 import { formatPrice, formatDate } from '@/lib/format'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -35,6 +36,30 @@ export function AdminCampaignDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { data: camp, isLoading } = useAdminCampaign(id!)
+  const launch = useLaunchCampaign()
+  const pause = usePauseCampaign()
+
+  const status = camp ? getStatus(camp) : 'inactive'
+  const canLaunch = status === 'inactive' || status === 'scheduled'
+  const canPause = status === 'active'
+
+  async function handleLaunch() {
+    try {
+      await launch.mutateAsync(id!)
+      toast.success('Campagne lancée')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur')
+    }
+  }
+
+  async function handlePause() {
+    try {
+      await pause.mutateAsync(id!)
+      toast.success('Campagne mise en pause')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur')
+    }
+  }
 
   if (isLoading) return <LoadingBlock label="Chargement de la campagne…" />
   if (!camp) {
@@ -65,9 +90,21 @@ export function AdminCampaignDetailPage() {
         }
         description={`Du ${formatDate(camp.startDate)} au ${formatDate(camp.endDate)}`}
         actions={
-          <Button leftIcon={Pencil} onClick={() => navigate(`/campaigns/${camp.id}/edit`)}>
-            Modifier
-          </Button>
+          <div className="flex gap-2">
+            {canLaunch && (
+              <Button leftIcon={Play} variant="outline" loading={launch.isPending} onClick={handleLaunch}>
+                Lancer
+              </Button>
+            )}
+            {canPause && (
+              <Button leftIcon={Pause} variant="outline" loading={pause.isPending} onClick={handlePause}>
+                Pause
+              </Button>
+            )}
+            <Button leftIcon={Pencil} onClick={() => navigate(`/campaigns/${camp.id}/edit`)}>
+              Modifier
+            </Button>
+          </div>
         }
       />
 

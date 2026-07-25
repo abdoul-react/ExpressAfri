@@ -148,8 +148,23 @@ export class ApiAdminProductDataSource implements AdminProductDataSource {
     await api.delete(`/products/${id}`)
   }
 
-  async export(_params: ProductQueryParams): Promise<Blob> {
-    throw new Error('Export not yet available via API')
+  async export(params: ProductQueryParams): Promise<Blob> {
+    const { data } = await api.get('/products', { params: { ...params, limit: 10000, page: 1 } })
+    const rows = (data.data as Record<string, unknown>[]).map((p) => ({
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      price: p.price,
+      stock: p.totalStock ?? p.stock ?? 0,
+      status: p.status,
+      category: p.categoryId,
+      createdAt: p.createdAt,
+    }))
+    const SEP = ';'
+    const headers = Object.keys(rows[0] ?? {})
+    const escape = (v: unknown) => { const s = v == null ? '' : String(v); return s.includes(SEP) || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s }
+    const csv = [`sep=${SEP}`, headers.join(SEP), ...rows.map((r) => headers.map((h) => escape(r[h as keyof typeof r])).join(SEP))].join('\r\n')
+    return new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
   }
 
   async moderateApprove(id: string): Promise<ModerationResult> {

@@ -1,4 +1,4 @@
-import type { AdminCampaignDataSource, Campaign, CampaignQueryParams, PaginatedCampaigns, CreateCampaignInput, UpdateCampaignInput } from '../AdminCampaignDataSource'
+import type { AdminCampaignDataSource, Campaign, CampaignQueryParams, PaginatedCampaigns, CampaignSummary, CreateCampaignInput, UpdateCampaignInput } from '../AdminCampaignDataSource'
 import { MOCK_CAMPAIGNS } from './data/mockCampaigns'
 
 let idCounter = MOCK_CAMPAIGNS.length + 1
@@ -70,5 +70,26 @@ export class MockAdminCampaignDataSource implements AdminCampaignDataSource {
     const idx = this.items.findIndex((x) => x.id === id)
     if (idx === -1) throw new Error('Campagne introuvable')
     this.items.splice(idx, 1)
+  }
+
+  async launch(id: string): Promise<Campaign> {
+    return this.update(id, { isActive: true })
+  }
+
+  async pause(id: string): Promise<Campaign> {
+    return this.update(id, { isActive: false })
+  }
+
+  async getSummary(): Promise<CampaignSummary> {
+    await this.delay()
+    const now = new Date()
+    return {
+      total: this.items.length,
+      active: this.items.filter((x) => x.isActive && new Date(x.startDate) <= now && new Date(x.endDate) >= now).length,
+      draft: this.items.filter((x) => !x.isActive).length,
+      ended: this.items.filter((x) => x.isActive && new Date(x.endDate) < now).length,
+      totalBudget: this.items.reduce((s, x) => s + (x.budget ?? 0), 0),
+      totalSpent: this.items.reduce((s, x) => s + (x.spent ?? 0), 0),
+    }
   }
 }

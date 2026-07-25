@@ -45,35 +45,35 @@ export class CampaignsController {
   }
 
   @Post()
-  @Permissions('campaigns.manage')
+  @Permissions('campaigns.create')
   @ApiOperation({ summary: 'Créer une campagne' })
   async create(@Body() body: any) {
     return this.service.create(body);
   }
 
   @Put(':id')
-  @Permissions('campaigns.manage')
+  @Permissions('campaigns.update')
   @ApiOperation({ summary: 'Modifier une campagne' })
   async update(@Param('id', ParseUUIDPipe) id: string, @Body() body: any) {
     return this.service.update(id, body);
   }
 
   @Put(':id/launch')
-  @Permissions('campaigns.manage')
+  @Permissions('campaigns.update')
   @ApiOperation({ summary: 'Lancer une campagne' })
   async launch(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.launch(id);
   }
 
   @Put(':id/pause')
-  @Permissions('campaigns.manage')
+  @Permissions('campaigns.update')
   @ApiOperation({ summary: 'Mettre en pause une campagne' })
   async pause(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.pause(id);
   }
 
   @Delete(':id')
-  @Permissions('campaigns.manage')
+  @Permissions('campaigns.delete')
   @ApiOperation({ summary: 'Supprimer une campagne' })
   async delete(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.delete(id);

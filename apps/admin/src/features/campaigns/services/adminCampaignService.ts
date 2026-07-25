@@ -38,6 +38,30 @@ class AdminCampaignService {
       throw toServiceError(err, 'Suppression de la campagne')
     }
   }
+
+  async launch(id: string) {
+    try {
+      return await adminCampaignDataSource.launch(id)
+    } catch (err) {
+      throw toServiceError(err, 'Lancement de la campagne')
+    }
+  }
+
+  async pause(id: string) {
+    try {
+      return await adminCampaignDataSource.pause(id)
+    } catch (err) {
+      throw toServiceError(err, 'Mise en pause de la campagne')
+    }
+  }
+
+  async getSummary() {
+    try {
+      return await adminCampaignDataSource.getSummary()
+    } catch (err) {
+      throw toServiceError(err, 'Résumé des campagnes')
+    }
+  }
 }
 
 export const adminCampaignService = new AdminCampaignService()
