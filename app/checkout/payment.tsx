@@ -24,7 +24,6 @@ import {
   usePaymentFlow,
   isChoiceValid,
   COD_PROVIDER,
-  PaymentProgress,
   StorePaymentHeader,
   PaymentMethodList,
   MobileMoneyForm,
@@ -39,10 +38,17 @@ import { useAuthStore } from "@/store/authStore";
 import { COUNTRIES } from "@/data/countries";
 import { Icon } from "@/icons";
 import { useCartStore } from "@/store/cartStore";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 
@@ -52,6 +58,7 @@ export default function PaymentScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t } = useTranslation();
+  const { width } = useWindowDimensions();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   // Garde : un invité ne peut pas passer commande. La redirection est posée
@@ -70,10 +77,14 @@ export default function PaymentScreen() {
   const queryClient = useQueryClient();
   const startConversation = useStartConversation();
 
+  // La machine ne sert plus qu'à porter les choix (et leur reset quand le
+  // panier change) : la navigation entre boutiques est un pager libre.
   const flow = usePaymentFlow(groups);
+  const [pageIndex, setPageIndex] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStore, setProcessingStore] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
+  const pagerRef = useRef<ScrollView>(null);
 
   // Clé d'idempotence stable pour TOUTE la tentative : un double-tap ou un
   // retry réseau rejoue la même clé et ne recrée pas les commandes.
@@ -131,31 +142,18 @@ export default function PaymentScreen() {
     return methodsFor(storeId).find((m) => m.provider === provider);
   };
 
-  // Retour matériel : détails → méthodes → boutique précédente → écran précédent
-  useFocusEffect(
-    React.useCallback(() => {
-      const sub = BackHandler.addEventListener("hardwareBackPress", () =>
-        flow.goBack(),
-      );
-      return () => sub.remove();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [flow.stepIndex, flow.subStep]),
-  );
+  const groupValid = (storeId: string | null) =>
+    isChoiceValid(methodOf(storeId), flow.choices[flow.keyOf(storeId)]);
 
-  const group = flow.currentGroup;
-  const currentMethod = group ? methodOf(group.storeId) : undefined;
-  const currentChoice = group
-    ? flow.choices[flow.keyOf(group.storeId)]
-    : undefined;
-  const currentValid = isChoiceValid(currentMethod, currentChoice);
-  const quote = group?.storeId ? quotesByStore.get(group.storeId) : undefined;
-  const groupSubtotal = group ? calculateSubtotal(group.items) : 0;
-  const onlyCod =
-    group != null &&
-    methodsFor(group.storeId).length === 1 &&
-    methodsFor(group.storeId)[0].provider === COD_PROVIDER;
+  const allValid = groups.every((g) => groupValid(g.storeId));
+  const canPay = groups.length > 0 && !!defaultAddressId && allValid;
 
   const total = items.reduce((sum, i) => sum + i.priceUsd * i.quantity, 0);
+
+  const goToPage = (i: number) => {
+    pagerRef.current?.scrollTo({ x: i * width, animated: true });
+    setPageIndex(i);
+  };
 
   const openStoreChat = async (storeId: string, storeName: string | null) => {
     try {
@@ -169,7 +167,7 @@ export default function PaymentScreen() {
     }
   };
 
-  /** Dernière boutique validée : créer les commandes puis initialiser chaque paiement. */
+  /** Toutes les boutiques validées : créer les commandes puis initialiser chaque paiement. */
   const handlePay = async () => {
     setIsProcessing(true);
     setPayError(null);
@@ -249,38 +247,6 @@ export default function PaymentScreen() {
     }
   };
 
-  const onContinue = () => {
-    if (flow.subStep === "method") {
-      // COD / wallet : rien à saisir, on passe directement à la suite
-      if (
-        currentMethod &&
-        currentMethod.type !== "mobile_money" &&
-        currentMethod.type !== "card"
-      ) {
-        // Sélection implicite si l'utilisateur n'a pas touché la liste
-        flow.patch(group?.storeId ?? null, { provider: currentMethod.provider });
-        flow.goToDetails();
-        return;
-      }
-      flow.patch(group?.storeId ?? null, {
-        provider: currentMethod?.provider ?? "",
-      });
-      flow.goToDetails();
-      return;
-    }
-    // Sous-étape détails validée
-    if (flow.isLastStep) {
-      void handlePay();
-    } else {
-      flow.goNext();
-    }
-  };
-
-  const continueDisabled =
-    !group ||
-    (flow.subStep === "method" ? !currentMethod : !currentValid) ||
-    (flow.isLastStep && flow.subStep === "details" && !defaultAddressId);
-
   if (!isAuthenticated) return null;
 
   if (isLoading) {
@@ -296,7 +262,7 @@ export default function PaymentScreen() {
     );
   }
 
-  if (!group) {
+  if (groups.length === 0) {
     return (
       <View style={styles.container}>
         <ScreenHeader title={t("checkout.paymentMethod")} />
@@ -327,117 +293,166 @@ export default function PaymentScreen() {
     );
   }
 
-  const storeName = group.storeName ?? t("cart.unknownStore");
-  const query = group.storeId ? byStore.get(group.storeId) : undefined;
-
   return (
     <KeyboardScreen style={styles.container}>
-      <ScreenHeader
-        title={t("checkout.paymentMethod")}
-        onBack={() => {
-          if (!flow.goBack()) router.back();
-        }}
-      />
-      <ScrollView
-        contentContainerStyle={{
-          padding: spacing.lg,
-          paddingBottom: 90 + insets.bottom,
-        }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <PaymentProgress
-          current={flow.stepIndex}
-          total={groups.length}
-          storeName={storeName}
-        />
+      <ScreenHeader title={t("checkout.paymentMethod")} />
 
-        <StorePaymentHeader
-          storeName={storeName}
-          subtotal={groupSubtotal}
-          shippingCost={quote?.shippingCost ?? null}
-          isFreeShipping={quote?.isFree ?? false}
-        />
-
-        {query?.isError ? (
-          <Text
-            style={styles.errorText}
-            onPress={() => query.refetch()}
-          >
-            {t("checkout.paymentError")}
+      {/* Indicateur : une pastille par boutique, tappable pour y sauter.
+          Verte = complète, contour = en cours, grise = à faire. */}
+      {groups.length > 1 && (
+        <View style={styles.progressRow}>
+          <Text style={styles.progressText}>
+            {t("checkout.paymentStep", {
+              current: pageIndex + 1,
+              total: groups.length,
+              store:
+                groups[pageIndex]?.storeName ?? t("cart.unknownStore"),
+            })}
           </Text>
-        ) : null}
-
-        {flow.subStep === "method" ? (
-          <>
-            {onlyCod && group.storeId ? (
-              <Text style={styles.storeNoticeText}>
-                {t("checkout.storeNoPaymentMethod")}
-              </Text>
-            ) : null}
-            <PaymentMethodList
-              methods={methodsFor(group.storeId)}
-              activeProvider={providerFor(group.storeId)}
-              onSelect={(provider) =>
-                flow.patch(group.storeId, { provider })
-              }
-            />
-            {onlyCod && group.storeId ? (
-              <Button
-                label={t("checkout.contactStore")}
-                variant="outline"
-                size="md"
-                fullWidth
-                loading={startConversation.isPending}
-                onPress={() => openStoreChat(group.storeId!, group.storeName)}
-              />
-            ) : null}
-          </>
-        ) : currentMethod?.type === "mobile_money" ? (
-          <MobileMoneyForm
-            method={currentMethod}
-            countryCode={
-              currentChoice?.phoneCountry ||
-              defaultAddress?.countryCode ||
-              null
-            }
-            onChangeCountry={(code) =>
-              flow.patch(group.storeId, { phoneCountry: code })
-            }
-            phone={currentChoice?.phone ?? ""}
-            onChangePhone={(v) => flow.patch(group.storeId, { phone: v })}
-          />
-        ) : currentMethod?.type === "card" ? (
-          <CardPaymentForm
-            choice={currentChoice}
-            onPatch={(values) => flow.patch(group.storeId, values)}
-          />
-        ) : (
-          <CodConfirmation />
-        )}
-
-        <View style={styles.secure}>
-          <Icon name="lock" size={16} color={colors.secondary} />
-          <Text style={styles.secureText}>
-            {t("product.buyerProtection")} · {t("checkout.securePayment")}
-          </Text>
-        </View>
-
-        {payError ? <Text style={styles.errorText}>{payError}</Text> : null}
-
-        {flow.isLastStep && flow.subStep === "details" ? (
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>
-              {t("checkout.confirmPayment")}
-            </Text>
-            <Text style={styles.confirmText}>
-              {t("checkout.ordersWillBeCreated", { count: groups.length })}
-            </Text>
-            <Text style={styles.confirmText}>
-              {t("checkout.afterValidation")}
-            </Text>
+          <View style={styles.dots}>
+            {groups.map((g, i) => {
+              const done = groupValid(g.storeId);
+              const current = i === pageIndex;
+              return (
+                <Pressable
+                  key={flow.keyOf(g.storeId)}
+                  hitSlop={8}
+                  onPress={() => goToPage(i)}
+                  style={[
+                    styles.dot,
+                    done && styles.dotDone,
+                    current && styles.dotCurrent,
+                  ]}
+                >
+                  {done && (
+                    <Icon name="check" size={9} color={colors.white} strokeWidth={3.5} />
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
-        ) : null}
+          <Text style={styles.swipeHint}>{t("checkout.swipeHint")}</Text>
+        </View>
+      )}
+
+      {/* Pager horizontal : une page par boutique, glissement libre —
+          l'utilisateur règle ses boutiques dans l'ordre qu'il veut. */}
+      <ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onMomentumScrollEnd={(e) =>
+          setPageIndex(
+            Math.round(e.nativeEvent.contentOffset.x / Math.max(1, width)),
+          )
+        }
+      >
+        {groups.map((group) => {
+          const storeName = group.storeName ?? t("cart.unknownStore");
+          const query = group.storeId ? byStore.get(group.storeId) : undefined;
+          const method = methodOf(group.storeId);
+          const choice = flow.choices[flow.keyOf(group.storeId)];
+          const quote = group.storeId
+            ? quotesByStore.get(group.storeId)
+            : undefined;
+          const groupSubtotal = calculateSubtotal(group.items);
+          const methods = methodsFor(group.storeId);
+          const onlyCod =
+            methods.length === 1 && methods[0].provider === COD_PROVIDER;
+
+          return (
+            <ScrollView
+              key={flow.keyOf(group.storeId)}
+              style={{ width }}
+              contentContainerStyle={{
+                padding: spacing.lg,
+                paddingBottom: 100 + insets.bottom,
+              }}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              <StorePaymentHeader
+                storeName={storeName}
+                subtotal={groupSubtotal}
+                shippingCost={quote?.shippingCost ?? null}
+                isFreeShipping={quote?.isFree ?? false}
+              />
+
+              {query?.isError ? (
+                <Text style={styles.errorText} onPress={() => query.refetch()}>
+                  {t("checkout.paymentError")}
+                </Text>
+              ) : null}
+
+              {onlyCod && group.storeId ? (
+                <Text style={styles.storeNoticeText}>
+                  {t("checkout.storeNoPaymentMethod")}
+                </Text>
+              ) : null}
+
+              <PaymentMethodList
+                methods={methods}
+                activeProvider={providerFor(group.storeId)}
+                onSelect={(provider) =>
+                  flow.patch(group.storeId, { provider })
+                }
+              />
+
+              {/* Formulaire dédié à la méthode retenue, sur la même page */}
+              {method?.type === "mobile_money" ? (
+                <MobileMoneyForm
+                  method={method}
+                  countryCode={
+                    choice?.phoneCountry ||
+                    defaultAddress?.countryCode ||
+                    null
+                  }
+                  onChangeCountry={(code) =>
+                    flow.patch(group.storeId, { phoneCountry: code })
+                  }
+                  phone={choice?.phone ?? ""}
+                  onChangePhone={(v) =>
+                    flow.patch(group.storeId, { phone: v })
+                  }
+                />
+              ) : method?.type === "card" ? (
+                <CardPaymentForm
+                  choice={choice}
+                  onPatch={(values) => flow.patch(group.storeId, values)}
+                />
+              ) : method ? (
+                <CodConfirmation />
+              ) : null}
+
+              {onlyCod && group.storeId ? (
+                <View style={{ marginTop: spacing.md }}>
+                  <Button
+                    label={t("checkout.contactStore")}
+                    variant="outline"
+                    size="md"
+                    fullWidth
+                    loading={startConversation.isPending}
+                    onPress={() =>
+                      openStoreChat(group.storeId!, group.storeName)
+                    }
+                  />
+                </View>
+              ) : null}
+
+              <View style={styles.secure}>
+                <Icon name="lock" size={16} color={colors.secondary} />
+                <Text style={styles.secureText}>
+                  {t("product.buyerProtection")} · {t("checkout.securePayment")}
+                </Text>
+              </View>
+            </ScrollView>
+          );
+        })}
       </ScrollView>
+
+      {payError ? <Text style={styles.errorText}>{payError}</Text> : null}
 
       <View style={[styles.bar, { paddingBottom: insets.bottom + spacing.sm }]}>
         <View>
@@ -448,15 +463,16 @@ export default function PaymentScreen() {
           label={
             isProcessing
               ? t("common.loading")
-              : flow.subStep === "method"
-                ? t("common.continue")
-                : flow.isLastStep
-                  ? t("checkout.confirmAndPay")
-                  : t("checkout.continueToNext")
+              : allValid
+                ? t("checkout.confirmAndPay")
+                : t("checkout.completeAllStores", {
+                    remaining: groups.filter((g) => !groupValid(g.storeId))
+                      .length,
+                  })
           }
           size="lg"
-          onPress={onContinue}
-          disabled={continueDisabled || isProcessing}
+          onPress={handlePay}
+          disabled={!canPay || isProcessing}
           loading={isProcessing}
           style={{ flex: 1, marginLeft: spacing.lg }}
         />
@@ -468,6 +484,33 @@ export default function PaymentScreen() {
 const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    progressRow: {
+      alignItems: "center",
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.sm,
+      gap: 6,
+    },
+    progressText: {
+      fontSize: fontSize.md,
+      fontWeight: "800",
+      color: colors.text,
+      textAlign: "center",
+    },
+    dots: { flexDirection: "row", gap: spacing.sm },
+    dot: {
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    dotDone: { backgroundColor: colors.secondary },
+    dotCurrent: {
+      borderWidth: 2,
+      borderColor: colors.primary,
+    },
+    swipeHint: { fontSize: fontSize.xs, color: colors.textMuted },
     storeNoticeText: {
       fontSize: fontSize.xs,
       color: colors.textMuted,
@@ -481,19 +524,6 @@ const makeStyles = (colors: Colors) =>
       justifyContent: "center",
     },
     secureText: { fontSize: fontSize.sm, color: colors.textSecondary },
-    confirmCard: {
-      marginTop: spacing.md,
-      backgroundColor: colors.surface,
-      borderRadius: radius.lg,
-      padding: spacing.lg,
-      gap: spacing.xs,
-    },
-    confirmTitle: {
-      fontSize: fontSize.md,
-      fontWeight: "800",
-      color: colors.text,
-    },
-    confirmText: { fontSize: fontSize.sm, color: colors.textSecondary },
     errorText: {
       marginTop: spacing.sm,
       color: colors.danger,

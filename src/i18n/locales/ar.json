@@ -189,7 +189,9 @@
     "processingStorePayment": "جارٍ معالجة دفع {{store}}…",
     "mobileMoneyHint": "الرقم الذي سيقوم بالدفع",
     "cardPayment": "بطاقة بنكية",
-    "selectCountry": "اختر البلد"
+    "selectCountry": "اختر البلد",
+    "swipeHint": "اسحب للتنقل بين المتاجر",
+    "completeAllStores": "أكمل {{remaining}} متجرًا"
   },
   "payment": {
     "mobileMoney": "المحفظة الجوّالة",

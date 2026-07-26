@@ -101,7 +101,6 @@ export function MobileMoneyForm({
           placeholderTextColor={colors.textMuted}
           keyboardType="phone-pad"
           maxLength={15}
-          autoFocus
         />
       </View>
       <Text style={styles.phoneHint}>{t("checkout.mobileMoneyHint")}</Text>

@@ -183,7 +183,9 @@
     "processingStorePayment": "Paiement de {{store}} en cours…",
     "mobileMoneyHint": "Le numéro qui effectuera le paiement",
     "cardPayment": "Carte bancaire",
-    "selectCountry": "Choisir le pays"
+    "selectCountry": "Choisir le pays",
+    "swipeHint": "Glissez pour passer d'une boutique à l'autre",
+    "completeAllStores": "Complétez {{remaining}} boutique(s)"
   },
   "payment": {
     "mobileMoney": "Mobile Money",

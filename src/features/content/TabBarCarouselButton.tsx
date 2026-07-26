@@ -93,6 +93,9 @@ const makeStyles = (colors: Colors) =>
       width: 66,
       height: 44,
       borderRadius: radius.lg,
+      // Légèrement remonté au-dessus de la ligne des onglets, comme un bouton
+      // d'action central — sans libellé, il flotterait trop bas sinon.
+      marginTop: -12,
       overflow: 'hidden',
       backgroundColor: colors.primary,
       borderWidth: 2,

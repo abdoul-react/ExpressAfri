@@ -62,7 +62,6 @@ export function CardPaymentForm({
         placeholderTextColor={colors.textMuted}
         keyboardType="number-pad"
         maxLength={CARD_NUMBER_LENGTH}
-        autoFocus
       />
 
       <View style={styles.row}>
