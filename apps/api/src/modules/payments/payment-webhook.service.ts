@@ -1,56 +1,61 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module';
 import { payments } from '../../database/schema/payments';
 import { orders } from '../../database/schema/orders';
-import { PaymentProvider } from './providers/payment-provider';
 import { ChatService } from '../chat/chat.service';
 import { AppLoggerService } from '../../common/logger/logger.service';
 import { setLogContext } from '../../common/interceptors/request-id.interceptor';
+import { GatewayRegistryService } from './gateway-registry.service';
 
+/**
+ * Traitement des webhooks PSP. La passerelle est résolue par le registre
+ * (adaptateur + secrets déchiffrés) : signature vérifiée sur les octets
+ * bruts, idempotence par eventId, transition du paiement et de la commande
+ * dans une transaction verrouillée.
+ */
 @Injectable()
 export class PaymentWebhookService {
-  private providerMap = new Map<string, PaymentProvider>();
-
   constructor(
     @Inject(DRIZZLE) private db: DrizzleDB,
     private chat: ChatService,
     private logger: AppLoggerService,
+    private registry: GatewayRegistryService,
   ) {}
 
-  registerProvider(provider: PaymentProvider) {
-    this.providerMap.set(provider.name, provider);
-  }
-
-  getProvider(name: string): PaymentProvider | undefined {
-    return this.providerMap.get(name);
-  }
-
   async processWebhook(
-    providerName: string,
+    gatewayCode: string,
     rawBody: Buffer,
-    signature: string,
+    headers: Record<string, string | string[] | undefined>,
   ): Promise<{ status: string; message: string }> {
-    const provider = this.getProvider(providerName);
-    if (!provider) {
+    let resolved;
+    try {
+      resolved = await this.registry.resolveGateway(gatewayCode);
+    } catch (e) {
       return {
         status: 'error',
-        message: `Provider ${providerName} non supporté`,
+        message:
+          e instanceof Error
+            ? e.message
+            : `Passerelle ${gatewayCode} indisponible`,
       };
     }
+    const { adapter, creds, webhookSecret } = resolved;
 
-    if (!provider.verifyWebhook(rawBody, signature)) {
+    if (!adapter.verifyWebhook(creds, webhookSecret, rawBody, headers)) {
       return { status: 'error', message: 'Signature webhook invalide' };
     }
 
-    const event = provider.parseWebhook(rawBody);
+    let event;
+    try {
+      event = adapter.parseWebhook(rawBody);
+    } catch {
+      return { status: 'error', message: 'Corps de webhook illisible' };
+    }
 
-    setLogContext(
-      'paymentId',
-      (event as any).paymentId || event.providerPaymentId,
-    );
+    setLogContext('paymentId', event.providerPaymentId);
     this.logger.debug(
-      `Received webhook event for provider=${providerName} parsed=${JSON.stringify(event)}`,
+      `Received webhook event for gateway=${gatewayCode} parsed=${JSON.stringify(event)}`,
     );
 
     // Prepare a holder to send a system message after the DB transaction commits
@@ -58,19 +63,12 @@ export class PaymentWebhookService {
 
     const result = await this.db.transaction(async (tx) => {
       // Verrouiller la ligne paiement
-      this.logger.debug(
-        `Searching payment with providerPaymentId=${event.providerPaymentId}`,
-      );
       const [payment] = await tx
         .select()
         .from(payments)
         .where(eq(payments.providerPaymentId, event.providerPaymentId))
         .limit(1)
         .for('update');
-
-      this.logger.debug(
-        `Payment lookup result: ${payment ? 'found id=' + (payment as any).id : 'not found'}`,
-      );
 
       if (!payment) {
         return { status: 'error', message: 'Paiement introuvable' };
@@ -84,9 +82,7 @@ export class PaymentWebhookService {
       // Vérifier montant/devise (le webhook peut renvoyer un montant différent
       // pour les refunds partiels — on vérifie uniquement pour les captures)
       if (event.status === 'captured' || event.status === 'authorized') {
-        const providerAmount = payment.amount;
-        const providerCurrency = payment.currency;
-        if (!providerAmount || !providerCurrency) {
+        if (!payment.amount || !payment.currency) {
           return {
             status: 'error',
             message: 'Montant ou devise du paiement manquant',
@@ -111,18 +107,7 @@ export class PaymentWebhookService {
         patch.status = 'authorized';
       }
 
-      this.logger.debug(`Applying payment patch: ${JSON.stringify(patch)}`);
       await tx.update(payments).set(patch).where(eq(payments.id, payment.id));
-
-      // re-fetch payment inside tx to verify update
-      const [updatedPayment] = await tx
-        .select()
-        .from(payments)
-        .where(eq(payments.id, payment.id))
-        .limit(1);
-      this.logger.debug(
-        `Updated payment in tx: ${JSON.stringify(updatedPayment)}`,
-      );
 
       // Pour un paiement capturé, mettre à jour la commande associée
       if (event.status === 'captured') {

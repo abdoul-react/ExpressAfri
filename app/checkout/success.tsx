@@ -12,18 +12,26 @@ export default function SuccessScreen() {
   const colors = useColors();
   const router = useRouter();
   const { t } = useTranslation();
-  const { orderNumbers } = useLocalSearchParams<{ orderNumbers?: string }>();
+  const { orderNumbers, pending } = useLocalSearchParams<{
+    orderNumbers?: string;
+    pending?: string;
+  }>();
 
   // Un panier multi-boutiques produit une commande par boutique : le client
   // doit voir tous ses numéros, pas seulement le premier.
   const numbers = (orderNumbers ?? '').split(',').filter(Boolean);
+  // Un paiement encore en confirmation (webhook PSP en cours) n'est pas un
+  // échec : la commande existe, le statut se mettra à jour tout seul.
+  const hasPending = pending === '1';
 
   return (
     <View style={styles.container}>
       <LinearGradient colors={[colors.primarySun, colors.primary]} style={styles.circle}>
-        <Icon name="check" size={56} color={colors.white} strokeWidth={3} />
+        <Icon name={hasPending ? 'clock' : 'check'} size={56} color={colors.white} strokeWidth={3} />
       </LinearGradient>
-      <Text style={styles.title}>{t('checkout.success')}</Text>
+      <Text style={styles.title}>
+        {hasPending ? t('checkout.pendingTitle') : t('checkout.success')}
+      </Text>
       {numbers.length > 1 ? (
         <Text style={styles.ordersCount}>
           {t('checkout.ordersCreated', { count: numbers.length })}
@@ -34,7 +42,9 @@ export default function SuccessScreen() {
           N° {n}
         </Text>
       ))}
-      <Text style={styles.hint}>{t('checkout.successHint')}</Text>
+      <Text style={styles.hint}>
+        {hasPending ? t('checkout.pendingHint') : t('checkout.successHint')}
+      </Text>
 
       <View style={styles.actions}>
         <Button

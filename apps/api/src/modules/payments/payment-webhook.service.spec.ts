@@ -1,9 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentWebhookService } from './payment-webhook.service';
+import { GatewayRegistryService } from './gateway-registry.service';
+import { MockAdapter } from './providers/adapters/mock.adapter';
 import { DRIZZLE } from '../../database/database.module';
 import { ChatService } from '../chat/chat.service';
-import { MockPaymentProvider } from './providers/mock-payment.provider';
 import { AppLoggerService } from '../../common/logger/logger.service';
+import { CryptoService } from '../../common/crypto/crypto.service';
+import { ConfigService } from '@nestjs/config';
 
 const MOCK_SECRET = 'test-secret-123';
 
@@ -21,8 +24,16 @@ function makeChain(rows: any[] = []) {
   return chain;
 }
 
+function sign(raw: Buffer): Record<string, string> {
+  const crypto = require('crypto');
+  const hmac = crypto.createHmac('sha256', MOCK_SECRET);
+  hmac.update(raw);
+  return { 'x-webhook-signature': hmac.digest('hex') };
+}
+
 describe('PaymentWebhookService', () => {
   let service: PaymentWebhookService;
+  let registry: GatewayRegistryService;
   let mockDb: any;
   let mockTx: any;
 
@@ -42,8 +53,13 @@ describe('PaymentWebhookService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentWebhookService,
-        MockPaymentProvider,
+        GatewayRegistryService,
+        CryptoService,
         { provide: DRIZZLE, useValue: mockDb },
+        {
+          provide: ConfigService,
+          useValue: { get: (k: string) => (k === 'JWT_SECRET' ? 'test-jwt' : undefined) },
+        },
         {
           provide: ChatService,
           useValue: {
@@ -55,8 +71,21 @@ describe('PaymentWebhookService', () => {
     }).compile();
 
     service = module.get<PaymentWebhookService>(PaymentWebhookService);
-    const provider = module.get<MockPaymentProvider>(MockPaymentProvider);
-    service.registerProvider(provider);
+    registry = module.get<GatewayRegistryService>(GatewayRegistryService);
+    registry.register(new MockAdapter());
+    // La passerelle mock est activée en base (ligne seedée) : simulée ici
+    mockDb.select = jest.fn(() =>
+      makeChain([
+        {
+          code: 'mock',
+          isEnabled: true,
+          isSandbox: true,
+          credentialsEncrypted: null,
+          webhookSecretEncrypted: null,
+          apiEndpoint: null,
+        },
+      ]),
+    );
   });
 
   afterEach(() => {
@@ -64,22 +93,19 @@ describe('PaymentWebhookService', () => {
   });
 
   describe('processWebhook', () => {
-    it('returns error for unsupported provider', async () => {
+    it('returns error for unsupported gateway', async () => {
       const result = await service.processWebhook(
         'unknown',
         Buffer.from('{}'),
-        'sig',
+        {},
       );
       expect(result.status).toBe('error');
-      expect(result.message).toContain('non supporté');
     });
 
     it('returns error for invalid signature', async () => {
-      const result = await service.processWebhook(
-        'mock',
-        Buffer.from('{}'),
-        'wrong-sig',
-      );
+      const result = await service.processWebhook('mock', Buffer.from('{}'), {
+        'x-webhook-signature': 'wrong-sig',
+      });
       expect(result.status).toBe('error');
       expect(result.message).toContain('invalide');
     });
@@ -95,12 +121,9 @@ describe('PaymentWebhookService', () => {
           status: 'captured',
         }),
       );
-      const result = await service.processWebhook(
-        'mock',
-        raw,
-        'any-signature-will-fail-here',
-      );
+      const result = await service.processWebhook('mock', raw, sign(raw));
       expect(result.status).toBe('error');
+      expect(result.message).toContain('introuvable');
     });
 
     it('processes valid webhook', async () => {
@@ -117,18 +140,16 @@ describe('PaymentWebhookService', () => {
       mockTx.update = jest.fn(() => makeChain());
       mockDb.transaction.mockImplementation(async (cb: any) => cb(mockTx));
 
-      const crypto = require('crypto');
-      const payload = {
-        eventId: 'e-valid',
-        providerPaymentId: 'pp-1',
-        status: 'captured',
-      };
-      const raw = Buffer.from(JSON.stringify(payload), 'utf8');
-      const hmac = crypto.createHmac('sha256', MOCK_SECRET);
-      hmac.update(raw);
-      const sig = hmac.digest('hex');
+      const raw = Buffer.from(
+        JSON.stringify({
+          eventId: 'e-valid',
+          providerPaymentId: 'pp-1',
+          status: 'captured',
+        }),
+        'utf8',
+      );
 
-      const result = await service.processWebhook('mock', raw, sig);
+      const result = await service.processWebhook('mock', raw, sign(raw));
       expect(result.status).toBe('processed');
     });
 
@@ -145,32 +166,28 @@ describe('PaymentWebhookService', () => {
       mockTx.select = jest.fn(() => makeChain([payment]));
       mockDb.transaction.mockImplementation(async (cb: any) => cb(mockTx));
 
-      const crypto = require('crypto');
-      const payload = {
-        eventId: 'e-dup',
-        providerPaymentId: 'pp-2',
-        status: 'captured',
-      };
-      const raw = Buffer.from(JSON.stringify(payload), 'utf8');
-      const hmac = crypto.createHmac('sha256', MOCK_SECRET);
-      hmac.update(raw);
-      const sig = hmac.digest('hex');
+      const raw = Buffer.from(
+        JSON.stringify({
+          eventId: 'e-dup',
+          providerPaymentId: 'pp-2',
+          status: 'captured',
+        }),
+        'utf8',
+      );
 
-      const result = await service.processWebhook('mock', raw, sig);
+      const result = await service.processWebhook('mock', raw, sign(raw));
       expect(result.status).toBe('ignored');
     });
   });
 
-  describe('registerProvider / getProvider', () => {
-    it('returns registered provider by name', () => {
-      const p = service.getProvider('mock');
-      expect(p).toBeDefined();
-      expect(p!.name).toBe('mock');
+  describe('GatewayRegistryService', () => {
+    it('returns registered adapter by code', () => {
+      expect(registry.getAdapter('mock')).toBeDefined();
+      expect(registry.getAdapter('mock')!.code).toBe('mock');
     });
 
-    it('returns undefined for unregistered provider', () => {
-      const p = service.getProvider('stripe');
-      expect(p).toBeUndefined();
+    it('returns undefined for unregistered adapter', () => {
+      expect(registry.getAdapter('stripe')).toBeUndefined();
     });
   });
 });

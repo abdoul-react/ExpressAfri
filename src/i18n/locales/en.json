@@ -185,7 +185,9 @@
     "cardPayment": "Bank card",
     "selectCountry": "Select country",
     "swipeHint": "Swipe to switch between stores",
-    "completeAllStores": "Complete {{remaining}} store(s)"
+    "completeAllStores": "Complete {{remaining}} store(s)",
+    "pendingTitle": "Payment being confirmed",
+    "pendingHint": "Your order is saved. Payment confirmation may take a few moments — you'll be notified once it's validated."
   },
   "payment": {
     "mobileMoney": "Mobile Money",

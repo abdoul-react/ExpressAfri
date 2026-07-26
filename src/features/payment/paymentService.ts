@@ -10,8 +10,12 @@ export const paymentService = {
     return paymentDataSource.getCardBrands();
   },
 
-  async initializePayment(orderId: string, method: string): Promise<{ paymentUrl?: string; status: string; message?: string }> {
-    return paymentDataSource.initializePayment(orderId, method);
+  async initializePayment(orderId: string, method: string, returnUrl?: string): Promise<{ paymentUrl?: string; status: string; message?: string }> {
+    return paymentDataSource.initializePayment(orderId, method, returnUrl);
+  },
+
+  async getOrderPaymentStatus(orderId: string) {
+    return paymentDataSource.getOrderPaymentStatus(orderId);
   },
 
   async getWallet(): Promise<Wallet> {

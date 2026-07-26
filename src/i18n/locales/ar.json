@@ -191,7 +191,9 @@
     "cardPayment": "بطاقة بنكية",
     "selectCountry": "اختر البلد",
     "swipeHint": "اسحب للتنقل بين المتاجر",
-    "completeAllStores": "أكمل {{remaining}} متجرًا"
+    "completeAllStores": "أكمل {{remaining}} متجرًا",
+    "pendingTitle": "جارٍ تأكيد الدفع",
+    "pendingHint": "تم تسجيل طلبك. قد يستغرق تأكيد الدفع بضع لحظات — سيتم إشعارك فور التحقق منه."
   },
   "payment": {
     "mobileMoney": "المحفظة الجوّالة",

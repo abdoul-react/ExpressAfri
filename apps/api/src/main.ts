@@ -9,7 +9,12 @@ import { RequestIdInterceptor } from './common/interceptors/request-id.intercept
 import { AppLoggerService } from './common/logger/logger.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody : les PSP signent les octets bruts de leurs webhooks — sans
+  // req.rawBody, la signature serait recalculée sur du JSON re-sérialisé et
+  // ne correspondrait jamais. N'affecte pas les limites posées plus bas.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
 
   app.use(
     helmet({

@@ -209,10 +209,13 @@ export interface PaymentMethod {
   minAmount?: number
   maxAmount?: number
   supportedCountries: string[]
+  /** DÉPRÉCIÉ : les clés vivent désormais dans les passerelles (chiffrées). */
   apiKey?: string
   apiSecret?: string
   apiEndpoint?: string
   isSandbox: boolean
+  /** Passerelle qui traite cette méthode (payment_gateways.code) ; null = non routée. */
+  gatewayCode?: string | null
   createdAt: string
   updatedAt: string
 }

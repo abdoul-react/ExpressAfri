@@ -11,6 +11,7 @@ import {
 } from '../hooks/useAdminPaymentMethods'
 import type { PaymentMethod } from '@/infrastructure/data-source/AdminContentDataSource'
 import { SensitiveActionGuard } from '@/components/guards/SensitiveActionGuard'
+import { useAdminGateways, useRouteMethod } from '../hooks/useAdminGateways'
 import { resolveAdminMediaUrl, isSvgUrl } from '@/lib/resolveAdminMediaUrl'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -232,6 +233,8 @@ function PaymentMethodFormModal({ initial, onClose }: { initial?: PaymentMethod 
 
 function PaymentMethodsContent() {
   const { data: methods, isLoading, isError } = useAdminPaymentMethods()
+  const { data: gateways } = useAdminGateways()
+  const routeMethod = useRouteMethod()
   const deleteMethod = useDeletePaymentMethod()
   const [showForm, setShowForm] = useState(false)
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null)
@@ -331,6 +334,44 @@ function PaymentMethodsContent() {
                       {method.feeFixed > 0 && <span>+ {method.feeFixed} FCFA</span>}
                       <span>Pays : {method.supportedCountries.includes('*') ? 'Tous' : method.supportedCountries.join(', ')}</span>
                     </div>
+
+                    {/* Passerelle de traitement : le tuyau qui encaisse pour
+                        cette méthode. Sans routage, le paiement échoue avec un
+                        message explicite côté client. */}
+                    {method.type !== 'cod' && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                          Passerelle :
+                        </span>
+                        <div className="w-64">
+                          <Select
+                            value={method.gatewayCode ?? ''}
+                            onChange={(value) =>
+                              routeMethod.mutate(
+                                { methodCode: method.code, gatewayCode: value || null },
+                                {
+                                  onSuccess: () => toast.success('Routage enregistré'),
+                                  onError: (err) =>
+                                    toast.error(err instanceof Error ? err.message : 'Erreur'),
+                                },
+                              )
+                            }
+                            options={[
+                              { value: '', label: 'Non routée' },
+                              ...(gateways ?? []).map((g) => ({
+                                value: g.code,
+                                label: g.isEnabled ? g.label : `${g.label} (désactivée)`,
+                              })),
+                            ]}
+                          />
+                        </div>
+                        {method.isActive && !method.gatewayCode && (
+                          <Badge size="sm" variant="warning">
+                            Aucune passerelle : paiement impossible
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                     <div className="mt-2">
                       <button
                         type="button"

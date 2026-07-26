@@ -166,10 +166,14 @@ export const paymentMethods = pgTable('payment_methods', {
   minAmount: doublePrecision('min_amount'),
   maxAmount: doublePrecision('max_amount'),
   supportedCountries: text('supported_countries').array().default([]),
+  // DÉPRÉCIÉ : les clés API vivent désormais dans payment_gateways (chiffrées).
+  // Colonnes conservées pour la transition, plus lues par le code de paiement.
   apiKey: text('api_key'),
   apiSecret: text('api_secret'),
   apiEndpoint: text('api_endpoint'),
   isSandbox: boolean('is_sandbox').default(true),
+  /** Passerelle qui TRAITE cette méthode (payment_gateways.code) ; NULL = non routée. */
+  gatewayCode: text('gateway_code'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

@@ -39,6 +39,8 @@ import { COUNTRIES } from "@/data/countries";
 import { Icon } from "@/icons";
 import { useCartStore } from "@/store/cartStore";
 import { useRouter } from "expo-router";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import React, { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -51,6 +53,29 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
+
+/**
+ * Réconciliation post-navigateur : le webhook PSP peut mettre quelques
+ * secondes — on interroge le statut serveur (qui interroge lui-même le PSP
+ * quand l'adaptateur le permet) avant de conclure. `pending` n'est pas un
+ * échec : la commande reste, le webhook la confirmera.
+ */
+async function pollPaymentStatus(
+  orderId: string,
+): Promise<"captured" | "pending" | "failed"> {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      const res = await paymentService.getOrderPaymentStatus(orderId);
+      if (res.status === "captured" || res.status === "authorized")
+        return "captured";
+      if (res.status === "failed") return "failed";
+    } catch {
+      // Réseau instable au retour du navigateur : on réessaie
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return "pending";
+}
 
 export default function PaymentScreen() {
   const styles = useThemedStyles(makeStyles);
@@ -213,15 +238,48 @@ export default function PaymentScreen() {
 
       // Une commande par boutique : chaque paiement s'initialise séparément.
       // En cas d'échec on ne vide pas le panier et on nomme la boutique fautive.
+      // Deep link de retour : le PSP renvoie le client dans l'app après le
+      // paiement sur sa page hébergée.
+      const returnUrl = Linking.createURL("payment-return");
+      let anyPending = false;
       for (const order of result.orders) {
         const method = order.paymentMethod ?? COD_PROVIDER;
         if (method === COD_PROVIDER || method === "cod") continue;
         setProcessingStore(order.storeName ?? t("cart.unknownStore"));
-        const psp = await paymentService.initializePayment(order.id, method);
+        const psp = await paymentService.initializePayment(
+          order.id,
+          method,
+          returnUrl,
+        );
         if (!psp || psp.status === "failed") {
           throw new Error(
             `${order.storeName ?? t("cart.unknownStore")} : ${psp?.message ?? t("checkout.paymentError")}`,
           );
+        }
+
+        // Page de paiement hébergée (CinetPay, Wave, Stripe…) : on l'ouvre et
+        // on attend le retour du client dans l'app.
+        if (psp.paymentUrl) {
+          await WebBrowser.openAuthSessionAsync(psp.paymentUrl, returnUrl);
+          // Retour (ou fermeture manuelle) : réconcilier le statut côté
+          // serveur — le webhook peut prendre quelques secondes.
+          const status = await pollPaymentStatus(order.id);
+          if (status === "failed") {
+            throw new Error(
+              `${order.storeName ?? t("cart.unknownStore")} : ${t("checkout.paymentError")}`,
+            );
+          }
+          if (status === "pending") anyPending = true;
+        } else if (psp.status === "pending") {
+          // Pas de page web (MTN MoMo : validation sur le téléphone) — le
+          // statut se confirme par polling, la commande reste en attente.
+          const status = await pollPaymentStatus(order.id);
+          if (status === "failed") {
+            throw new Error(
+              `${order.storeName ?? t("cart.unknownStore")} : ${t("checkout.paymentError")}`,
+            );
+          }
+          if (status === "pending") anyPending = true;
         }
       }
 
@@ -231,6 +289,7 @@ export default function PaymentScreen() {
         pathname: "/checkout/success",
         params: {
           orderNumbers: result.orders.map((o) => o.orderNumber).join(","),
+          ...(anyPending ? { pending: "1" } : {}),
         },
       });
     } catch (e) {

@@ -7,7 +7,6 @@ import {
   Body,
   UseGuards,
   Req,
-  Headers,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -90,19 +89,34 @@ export class PaymentsController {
     return this.service.initialize(orderId, body.method, body.returnUrl);
   }
 
+  @CustomerRoute()
+  @UseGuards(CustomerAuthGuard)
+  @Get('order/:orderId/status')
+  @ApiOperation({
+    summary:
+      'Statut du paiement d\'une commande (réconciliation PSP si pending)',
+  })
+  async orderPaymentStatus(@Param('orderId') orderId: string) {
+    return this.service.getOrderPaymentStatus(orderId);
+  }
+
   @Public()
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('webhooks/:provider')
   @ApiOperation({ summary: 'Webhook PSP (signature vérifiée, idempotent)' })
-  async webhook(
-    @Param('provider') provider: string,
-    @Req() req: Request,
-    @Headers('x-webhook-signature') signature: string,
-  ) {
+  async webhook(@Param('provider') provider: string, @Req() req: Request) {
+    // Les PSP signent les OCTETS BRUTS : req.rawBody vient de
+    // NestFactory.create({ rawBody: true }) — le JSON re-sérialisé ne
+    // reproduirait pas la signature. Chaque adaptateur lit SON header.
     const rawBody =
-      req.body instanceof Buffer
+      (req as Request & { rawBody?: Buffer }).rawBody ??
+      (req.body instanceof Buffer
         ? req.body
-        : Buffer.from(JSON.stringify(req.body));
-    return this.service.handleWebhook(provider, rawBody, signature ?? '');
+        : Buffer.from(JSON.stringify(req.body)));
+    return this.service.handleWebhook(
+      provider,
+      rawBody,
+      req.headers as Record<string, string | string[] | undefined>,
+    );
   }
 }

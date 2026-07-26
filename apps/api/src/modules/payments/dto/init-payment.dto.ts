@@ -1,9 +1,11 @@
-import { IsString, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsOptional, MaxLength } from 'class-validator';
 
 export class InitPaymentDto {
+  // Pas de liste figée : le catalogue payment_methods est la source de vérité
+  // (une méthode inconnue échoue proprement au routage vers sa passerelle).
   @IsString()
   @IsOptional()
-  @IsIn(['orange_money', 'wave', 'mobile_money', 'card', 'cod', 'wallet'])
+  @MaxLength(50)
   method?: string;
 
   @IsString()

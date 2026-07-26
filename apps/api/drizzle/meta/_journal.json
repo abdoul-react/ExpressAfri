@@ -288,6 +288,13 @@
       "when": 1784890700000,
       "tag": "0041_marketing_read_scopes",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1784890800000,
+      "tag": "0042_payment_gateways",
+      "breakpoints": true
     }
   ]
 }
