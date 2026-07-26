@@ -61,31 +61,35 @@ export class ReturnsController {
   // ── Routes admin ──
 
   @Get('summary')
+  @Permissions('orders.read')
   @ApiOperation({ summary: 'Résumé des retours' })
   async getSummary() {
     return this.service.getSummary();
   }
 
   @Get()
+  @Permissions('orders.read')
   @ApiOperation({ summary: 'Liste des retours' })
   async list(@Query() query: any) {
     return this.service.list(query);
   }
 
   @Get(':id')
+  @Permissions('orders.read')
   @ApiOperation({ summary: 'Détail retour' })
   async getById(@Param('id') id: string) {
     return this.service.getById(id);
   }
 
   @Post()
+  @Permissions('orders.update')
   @ApiOperation({ summary: 'Créer un retour' })
   async create(@Body() body: any) {
     return this.service.create(body);
   }
 
   @Put(':id/status')
-  @Permissions('returns.update')
+  @Permissions('orders.update')
   @ApiOperation({ summary: 'Changer le statut du retour' })
   async updateStatus(@Param('id') id: string, @Body() body: any) {
     return this.service.updateStatus(id, body.status, body);

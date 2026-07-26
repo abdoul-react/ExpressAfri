@@ -8,12 +8,14 @@ import {
   Body,
   UseGuards,
   Req,
+  ForbiddenException,
   UnauthorizedException,
   NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ReceiptsService } from './receipts.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { userHasPermission } from '../../common/guards/permissions.guard';
 import { CustomerRoute } from '../../common/decorators/customer-route.decorator';
 import { CustomerAuthGuard } from '../mobile/customer-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -33,15 +35,39 @@ export class ReceiptsController {
   ) {}
 
   private resolveStoreId(storeId: string | undefined, req: Request): string {
-    return storeId || (req.user as any)?.storeId || SYSTEM_STORE_ID;
+    // Le storeId du jeton PRIME sur celui du corps/query : un gérant ne
+    // consulte et ne configure que les reçus de SA boutique.
+    const own = (req.user as any)?.storeId;
+    if (own) return own;
+    return storeId || SYSTEM_STORE_ID;
+  }
+
+  // Un gérant opère sur les reçus de sa boutique ; un admin plateforme doit
+  // détenir la permission payments.* (mêmes clés que la sidebar Reçus).
+  private assertReceiptAccess(user: any, permission: string) {
+    if (user?.storeId) return;
+    if (!userHasPermission(user, permission)) {
+      throw new ForbiddenException('Permission insuffisante');
+    }
+  }
+
+  private async assertReceiptOwnership(id: string, user: any) {
+    if (!user?.storeId) return;
+    const receipt = await this.service.getById(id);
+    if (receipt.storeId !== user.storeId) {
+      throw new ForbiddenException('Ce reçu appartient à une autre boutique');
+    }
   }
 
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Liste des reçus (paginated)' })
-  async list(@Query() query: any) {
-    return this.service.list(query);
+  async list(@Query() query: any, @CurrentUser() user: any) {
+    this.assertReceiptAccess(user, 'payments.read');
+    // Gérant : liste bornée à sa boutique, quel que soit le filtre demandé
+    const params = user?.storeId ? { ...query, storeId: user.storeId } : query;
+    return this.service.list(params);
   }
 
   @Get('settings')
@@ -51,7 +77,9 @@ export class ReceiptsController {
   async getSettings(
     @Query('storeId') storeId: string | undefined,
     @Req() req: Request,
+    @CurrentUser() user: any,
   ) {
+    this.assertReceiptAccess(user, 'payments.read');
     return this.service.getSettings(this.resolveStoreId(storeId, req));
   }
 
@@ -59,7 +87,9 @@ export class ReceiptsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Détail d'un reçu" })
-  async getById(@Param('id') id: string) {
+  async getById(@Param('id') id: string, @CurrentUser() user: any) {
+    this.assertReceiptAccess(user, 'payments.read');
+    await this.assertReceiptOwnership(id, user);
     return this.service.getById(id);
   }
 
@@ -67,7 +97,9 @@ export class ReceiptsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Télécharger le PDF du reçu (admin)' })
-  async download(@Param('id') id: string) {
+  async download(@Param('id') id: string, @CurrentUser() user: any) {
+    this.assertReceiptAccess(user, 'payments.read');
+    await this.assertReceiptOwnership(id, user);
     const receipt = await this.service.getById(id);
     if (!receipt.downloadUrl) throw new NotFoundException('PDF non disponible');
     const url = await this.storage.getUrl(
@@ -83,7 +115,9 @@ export class ReceiptsController {
   async create(
     @Body() body: { orderId: string; storeId?: string },
     @Req() req: Request,
+    @CurrentUser() user: any,
   ) {
+    this.assertReceiptAccess(user, 'payments.update');
     return this.service.create({
       orderId: body.orderId,
       storeId: this.resolveStoreId(body.storeId, req),
@@ -94,7 +128,9 @@ export class ReceiptsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Envoyer un reçu' })
-  async send(@Param('id') id: string) {
+  async send(@Param('id') id: string, @CurrentUser() user: any) {
+    this.assertReceiptAccess(user, 'payments.update');
+    await this.assertReceiptOwnership(id, user);
     return this.service.send(id);
   }
 
@@ -102,7 +138,14 @@ export class ReceiptsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Envoi groupé de reçus' })
-  async sendBulk(@Body() body: { ids: string[] }) {
+  async sendBulk(@Body() body: { ids: string[] }, @CurrentUser() user: any) {
+    this.assertReceiptAccess(user, 'payments.update');
+    if (user?.storeId) {
+      // Chaque reçu du lot doit appartenir à la boutique du gérant
+      for (const id of body.ids ?? []) {
+        await this.assertReceiptOwnership(id, user);
+      }
+    }
     return this.service.sendBulk(body.ids);
   }
 
@@ -113,7 +156,9 @@ export class ReceiptsController {
   async updateSettings(
     @Body() body: { storeId?: string } & any,
     @Req() req: Request,
+    @CurrentUser() user: any,
   ) {
+    this.assertReceiptAccess(user, 'payments.update');
     const storeId = this.resolveStoreId(body.storeId, req);
     const { storeId: _, ...data } = body;
     return this.service.updateSettings(storeId, data);

@@ -12,6 +12,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 
 @ApiTags('Reports')
 @Controller('reports')
@@ -19,7 +21,8 @@ export class ReportsController {
   constructor(private service: ReportsService) {}
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('reports.read')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Liste des signalements (admin)' })
   async list(@Query() query: any) {
@@ -27,7 +30,8 @@ export class ReportsController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('reports.read')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Détail signalement' })
   async getById(@Param('id') id: string) {
@@ -42,7 +46,8 @@ export class ReportsController {
   }
 
   @Put(':id/status')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('reports.update')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Mettre à jour le statut' })
   async updateStatus(
@@ -53,7 +58,8 @@ export class ReportsController {
   }
 
   @Put(':id/assign')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('reports.update')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Assigner un signalement' })
   async assign(@Param('id') id: string, @Body() body: { adminId: string }) {

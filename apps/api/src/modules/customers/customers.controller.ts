@@ -25,39 +25,42 @@ export class CustomersController {
   constructor(private service: CustomersService) {}
 
   @Get()
+  @Permissions('users.read')
   @ApiOperation({ summary: 'Liste des clients' })
   async list(@Query() query: any) {
     return this.service.list(query);
   }
 
   @Get('stats')
+  @Permissions('users.read')
   @ApiOperation({ summary: 'Statistiques clients' })
   async stats() {
     return this.service.getStats();
   }
 
   @Get(':id')
+  @Permissions('users.read')
   @ApiOperation({ summary: 'Détail client' })
   async getById(@Param('id') id: string) {
     return this.service.getById(id);
   }
 
   @Post()
-  @Permissions('customers.create')
+  @Permissions('users.create')
   @ApiOperation({ summary: 'Créer un client' })
   async create(@Body() body: any) {
     return this.service.create(body);
   }
 
   @Put(':id')
-  @Permissions('customers.update')
+  @Permissions('users.update')
   @ApiOperation({ summary: 'Modifier un client' })
   async update(@Param('id') id: string, @Body() body: any) {
     return this.service.update(id, body);
   }
 
   @Delete(':id')
-  @Permissions('customers.delete')
+  @Permissions('users.delete')
   @ApiOperation({
     summary: 'Supprimer un client (soft-delete : désactivation)',
   })
@@ -66,7 +69,7 @@ export class CustomersController {
   }
 
   @Post(':id/ban')
-  @Permissions('customers.manage')
+  @Permissions('users.ban')
   @ApiOperation({ summary: 'Bannir un client' })
   async banCustomer(
     @Param('id', ParseUUIDPipe) id: string,
@@ -77,7 +80,7 @@ export class CustomersController {
   }
 
   @Post(':id/unban')
-  @Permissions('customers.manage')
+  @Permissions('users.ban')
   @ApiOperation({ summary: 'Débannir un client' })
   async unbanCustomer(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.unbanCustomer(id);
@@ -86,12 +89,14 @@ export class CustomersController {
   // ── Addresses ──
 
   @Get(':id/addresses')
+  @Permissions('users.read')
   @ApiOperation({ summary: 'Adresses du client' })
   async listAddresses(@Param('id') id: string) {
     return this.service.listAddresses(id);
   }
 
   @Get(':id/orders')
+  @Permissions('users.read')
   @ApiOperation({ summary: 'Commandes du client' })
   async getCustomerOrders(
     @Param('id') id: string,
@@ -105,14 +110,14 @@ export class CustomersController {
   }
 
   @Post(':id/addresses')
-  @Permissions('customers.create')
+  @Permissions('users.create')
   @ApiOperation({ summary: 'Ajouter une adresse' })
   async createAddress(@Param('id') id: string, @Body() body: any) {
     return this.service.createAddress(id, body);
   }
 
   @Put(':id/addresses/:addrId')
-  @Permissions('customers.update')
+  @Permissions('users.update')
   @ApiOperation({ summary: 'Modifier une adresse' })
   async updateAddress(
     @Param('id') id: string,
@@ -123,7 +128,7 @@ export class CustomersController {
   }
 
   @Put(':id/addresses/:addrId/default')
-  @Permissions('customers.update')
+  @Permissions('users.update')
   @ApiOperation({ summary: 'Définir une adresse par défaut' })
   async setDefaultAddress(
     @Param('id') id: string,
@@ -133,7 +138,7 @@ export class CustomersController {
   }
 
   @Delete(':id/addresses/:addrId')
-  @Permissions('customers.delete')
+  @Permissions('users.delete')
   @ApiOperation({ summary: 'Supprimer une adresse' })
   async deleteAddress(
     @Param('id') id: string,

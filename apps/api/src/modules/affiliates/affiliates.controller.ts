@@ -23,37 +23,42 @@ export class AffiliatesController {
   constructor(private service: AffiliatesService) {}
 
   @Get()
+  @Permissions('affiliates.read')
   @ApiOperation({ summary: 'Liste des affiliés' })
   async list(@Query() query: any) {
     return this.service.list(query);
   }
 
   @Get('summary')
+  @Permissions('affiliates.read')
   @ApiOperation({ summary: 'Résumé global des affiliés' })
   async getSummary() {
     return this.service.getSummary();
   }
 
   @Get(':id')
+  @Permissions('affiliates.read')
   @ApiOperation({ summary: 'Détail affilié' })
   async getById(@Param('id') id: string) {
     return this.service.getById(id);
   }
 
   @Post()
+  @Permissions('affiliates.create')
   @ApiOperation({ summary: 'Créer un affilié' })
   async create(@Body() body: any) {
     return this.service.create(body);
   }
 
   @Put(':id')
+  @Permissions('affiliates.update')
   @ApiOperation({ summary: 'Modifier un affilié' })
   async update(@Param('id') id: string, @Body() body: any) {
     return this.service.update(id, body);
   }
 
   @Put(':id/status')
-  @Permissions('affiliates.manage')
+  @Permissions('affiliates.approve')
   @ApiOperation({ summary: 'Changer le statut' })
   async updateStatus(
     @Param('id') id: string,
@@ -63,26 +68,28 @@ export class AffiliatesController {
   }
 
   @Get(':id/coupons')
+  @Permissions('affiliates.read')
   @ApiOperation({ summary: "Coupons liés à l'affilié" })
   async getCoupons(@Param('id') id: string, @Query() query: any) {
     return this.service.getCoupons(id, query);
   }
 
   @Get('commissions/list')
+  @Permissions('affiliates.read')
   @ApiOperation({ summary: 'Liste des commissions' })
   async listCommissions(@Query() query: any) {
     return this.service.listCommissions(query);
   }
 
   @Put('commissions/:id/approve')
-  @Permissions('affiliates.manage')
+  @Permissions('affiliates.approve')
   @ApiOperation({ summary: 'Approuver une commission' })
   async approveCommission(@Param('id') id: string) {
     return this.service.approveCommission(id);
   }
 
   @Put('commissions/:id/reject')
-  @Permissions('affiliates.manage')
+  @Permissions('affiliates.approve')
   @ApiOperation({ summary: 'Rejeter une commission' })
   async rejectCommission(@Param('id') id: string) {
     return this.service.rejectCommission(id);
@@ -96,21 +103,21 @@ export class AffiliatesController {
   }
 
   @Post('codes')
-  @Permissions('affiliates.manage')
+  @Permissions('affiliates.create')
   @ApiOperation({ summary: 'Créer un code affilié' })
   async createCode(@Body() body: any) {
     return this.service.createCode(body);
   }
 
   @Put('codes/:id')
-  @Permissions('affiliates.manage')
+  @Permissions('affiliates.update')
   @ApiOperation({ summary: 'Modifier un code affilié' })
   async updateCode(@Param('id') id: string, @Body() body: any) {
     return this.service.updateCode(id, body);
   }
 
   @Delete('codes/:id')
-  @Permissions('affiliates.manage')
+  @Permissions('affiliates.delete')
   @ApiOperation({ summary: 'Supprimer un code affilié' })
   async deleteCode(@Param('id') id: string) {
     return this.service.deleteCode(id);

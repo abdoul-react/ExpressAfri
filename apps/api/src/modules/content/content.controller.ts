@@ -11,6 +11,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  ForbiddenException,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
@@ -38,30 +39,47 @@ import {
   ReorderDto,
 } from './content.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import {
+  PermissionsGuard,
+  userHasPermission,
+} from '../../common/guards/permissions.guard';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Content')
 @Controller('content')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class ContentController {
   constructor(private service: ContentService) {}
 
   // ── Summary ──
   @Get('summary')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Résumé du contenu' })
   async getSummary() {
     return this.service.getSummary();
   }
 
   // ── Banners ──
+  // Pas de @Permissions ici : un gérant (sans content.*) gère les bannières de
+  // SA boutique — le service borne tout sur ownStoreId. L'admin plateforme,
+  // lui, doit détenir la permission content.* correspondante.
+  private assertBannerAccess(user: any, permission: string) {
+    if (user?.storeId) return; // gérant : borné par le service sur sa boutique
+    if (!userHasPermission(user, permission)) {
+      throw new ForbiddenException('Permission insuffisante');
+    }
+  }
+
   @Get('banners')
   @ApiOperation({ summary: 'Liste des bannières' })
   async listBanners(
     @CurrentUser() user: any,
     @Query('storeId') storeId?: string,
   ) {
+    this.assertBannerAccess(user, 'content.read');
     return this.service.listBanners({ storeId, ownStoreId: user?.storeId });
   }
 
@@ -71,12 +89,14 @@ export class ContentController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
   ) {
+    this.assertBannerAccess(user, 'content.read');
     return this.service.getBannerById(id, user?.storeId);
   }
 
   @Post('banners')
   @ApiOperation({ summary: 'Créer une bannière' })
   async createBanner(@Body() body: CreateBannerDto, @CurrentUser() user: any) {
+    this.assertBannerAccess(user, 'content.create');
     return this.service.createBanner(body, user?.storeId);
   }
 
@@ -87,6 +107,7 @@ export class ContentController {
     @Body() body: UpdateBannerDto,
     @CurrentUser() user: any,
   ) {
+    this.assertBannerAccess(user, 'content.update');
     return this.service.updateBanner(id, body, user?.storeId);
   }
 
@@ -96,6 +117,7 @@ export class ContentController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
   ) {
+    this.assertBannerAccess(user, 'content.delete');
     return this.service.deleteBanner(id, user?.storeId);
   }
 
@@ -130,7 +152,11 @@ export class ContentController {
     summary:
       "Uploader une image de bannière (retourne l'URL à utiliser dans imageUrl)",
   })
-  async uploadBannerImage(@UploadedFile() file: Express.Multer.File) {
+  async uploadBannerImage(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
+  ) {
+    this.assertBannerAccess(user, 'content.create');
     if (!file) throw new BadRequestException('Fichier requis');
     validateFileContent(file.path, 'image/');
     return { url: `/uploads/banners/${file.filename}` };
@@ -138,18 +164,21 @@ export class ContentController {
 
   // ── Content Blocks ──
   @Get('blocks')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Liste des blocs de contenu' })
   async listContentBlocks(@Query('group') group?: string) {
     return this.service.listContentBlocks(group);
   }
 
   @Get('blocks/:id')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Détail bloc' })
   async getContentBlock(@Param('id') id: string) {
     return this.service.getContentBlock(id);
   }
 
   @Put('blocks/:id')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Modifier un bloc' })
   async updateContentBlock(
     @Param('id') id: string,
@@ -159,6 +188,7 @@ export class ContentController {
   }
 
   @Get('groups')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Groupes de blocs' })
   async getContentGroups() {
     return this.service.getContentGroups();
@@ -166,24 +196,28 @@ export class ContentController {
 
   // ── Static Pages ──
   @Get('pages')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Liste des pages statiques' })
   async listStaticPages() {
     return this.service.listStaticPages();
   }
 
   @Get('pages/:id')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Détail page' })
   async getStaticPage(@Param('id') id: string) {
     return this.service.getStaticPage(id);
   }
 
   @Put('pages/:id')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Modifier page' })
   async updateStaticPage(@Param('id') id: string, @Body() body: any) {
     return this.service.updateStaticPage(id, body);
   }
 
   @Post('pages')
+  @Permissions('content.create')
   @ApiOperation({
     summary: 'Créer une page (informations légales, conditions…)',
   })
@@ -192,6 +226,7 @@ export class ContentController {
   }
 
   @Delete('pages/:id')
+  @Permissions('content.delete')
   @ApiOperation({ summary: 'Supprimer une page' })
   async deleteStaticPage(@Param('id') id: string) {
     return this.service.deleteStaticPage(id);
@@ -199,12 +234,14 @@ export class ContentController {
 
   // ── App Settings ──
   @Get('settings')
+  @Permissions('settings.read')
   @ApiOperation({ summary: 'Paramètres application' })
   async getAppSettings() {
     return this.service.getAppSettings();
   }
 
   @Put('settings/:key')
+  @Permissions('settings.update')
   @ApiOperation({ summary: 'Mettre à jour un paramètre' })
   async updateAppSetting(
     @Param('key') key: string,
@@ -215,12 +252,14 @@ export class ContentController {
 
   // ── Logos ──
   @Get('logos')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Liste des logos' })
   async listLogos() {
     return this.service.listLogos();
   }
 
   @Put('logos/:id')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Modifier un logo (URL)' })
   async updateLogo(@Param('id') id: string, @Body() body: { url: string }) {
     return this.service.updateLogo(id, body.url);
@@ -228,6 +267,7 @@ export class ContentController {
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('logos/:id/upload')
+  @Permissions('content.update')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
@@ -265,18 +305,21 @@ export class ContentController {
 
   // ── Feed Posts (publications Inspiration) ──
   @Get('feed-posts')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Publications du fil Inspiration' })
   async listFeedPosts() {
     return this.service.listFeedPosts();
   }
 
   @Post('feed-posts')
+  @Permissions('content.create')
   @ApiOperation({ summary: 'Créer une publication' })
   async createFeedPost(@Body() body: any) {
     return this.service.createFeedPost(body);
   }
 
   @Put('feed-posts/:id')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Modifier une publication' })
   async updateFeedPost(
     @Param('id', ParseUUIDPipe) id: string,
@@ -286,6 +329,7 @@ export class ContentController {
   }
 
   @Delete('feed-posts/:id')
+  @Permissions('content.delete')
   @ApiOperation({ summary: 'Supprimer une publication' })
   async deleteFeedPost(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.deleteFeedPost(id);
@@ -293,6 +337,7 @@ export class ContentController {
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('feed-posts/upload')
+  @Permissions('content.create')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
     FileInterceptor('file', {
@@ -336,12 +381,14 @@ export class ContentController {
 
   // ── Feed Sections ──
   @Get('feed-sections')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Sections du feed' })
   async listFeedSections() {
     return this.service.listFeedSections();
   }
 
   @Post('feed-sections')
+  @Permissions('content.create')
   @ApiOperation({ summary: 'Créer une section' })
   async createFeedSection(@Body() body: CreateFeedSectionDto) {
     return this.service.createFeedSection(body);
@@ -349,12 +396,14 @@ export class ContentController {
 
   // Route statique déclarée AVANT feed-sections/:id, sinon "reorder" est capturé comme un id
   @Put('feed-sections/reorder')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Réordonner les sections' })
   async reorderFeedSections(@Body() body: ReorderDto) {
     return this.service.reorderFeedSections(body.ids);
   }
 
   @Put('feed-sections/:id')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Modifier section' })
   async updateFeedSection(
     @Param('id', ParseUUIDPipe) id: string,
@@ -364,6 +413,7 @@ export class ContentController {
   }
 
   @Delete('feed-sections/:id')
+  @Permissions('content.delete')
   @ApiOperation({ summary: 'Supprimer section' })
   async deleteFeedSection(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.deleteFeedSection(id);
@@ -371,12 +421,14 @@ export class ContentController {
 
   // ── Feature Flags ──
   @Get('feature-flags')
+  @Permissions('features.read')
   @ApiOperation({ summary: 'Feature flags' })
   async listFeatureFlags() {
     return this.service.listFeatureFlags();
   }
 
   @Put('feature-flags/:key')
+  @Permissions('features.update')
   @ApiOperation({ summary: 'Activer/désactiver' })
   async toggleFeatureFlag(
     @Param('key') key: string,
@@ -387,12 +439,14 @@ export class ContentController {
 
   // ── Social Links ──
   @Get('social-links')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Réseaux sociaux' })
   async listSocialLinks() {
     return this.service.listSocialLinks();
   }
 
   @Put('social-links/:platform')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Modifier lien social' })
   async updateSocialLink(
     @Param('platform') platform: string,
@@ -403,12 +457,14 @@ export class ContentController {
 
   // ── SEO ──
   @Get('seo')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Méta SEO' })
   async listSEOMetadata() {
     return this.service.listSEOMetadata();
   }
 
   @Put('seo/:page')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Modifier SEO' })
   async updateSEOMetadata(@Param('page') page: string, @Body() body: any) {
     return this.service.updateSEOMetadata(page, body);
@@ -416,30 +472,35 @@ export class ContentController {
 
   // ── Payment Methods ──
   @Get('payment-methods')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Moyens de paiement' })
   async listPaymentMethods() {
     return this.service.listPaymentMethods();
   }
 
   @Get('payment-methods/:id')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Détail moyen paiement' })
   async getPaymentMethod(@Param('id') id: string) {
     return this.service.getPaymentMethod(id);
   }
 
   @Post('payment-methods')
+  @Permissions('content.create')
   @ApiOperation({ summary: 'Créer moyen paiement' })
   async createPaymentMethod(@Body() body: any) {
     return this.service.createPaymentMethod(body);
   }
 
   @Put('payment-methods/:id')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Modifier moyen paiement' })
   async updatePaymentMethod(@Param('id') id: string, @Body() body: any) {
     return this.service.updatePaymentMethod(id, body);
   }
 
   @Delete('payment-methods/:id')
+  @Permissions('content.delete')
   @ApiOperation({ summary: 'Supprimer moyen paiement' })
   async deletePaymentMethod(@Param('id') id: string) {
     return this.service.deletePaymentMethod(id);
@@ -447,6 +508,7 @@ export class ContentController {
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('payment-methods/:id/logo')
+  @Permissions('content.update')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
     FileInterceptor('file', {
@@ -485,12 +547,14 @@ export class ContentController {
 
   // ── Shortcuts (Raccourcis accueil) ──
   @Get('shortcuts')
+  @Permissions('content.read')
   @ApiOperation({ summary: 'Liste des raccourcis' })
   async listShortcuts() {
     return this.service.listShortcuts();
   }
 
   @Post('shortcuts')
+  @Permissions('content.create')
   @ApiOperation({
     summary: 'Créer un raccourci (avec destination optionnelle)',
   })
@@ -506,12 +570,14 @@ export class ContentController {
   }
 
   @Put('shortcuts/reorder')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Réordonner les raccourcis' })
   async reorderShortcuts(@Body() body: { ids: string[] }) {
     return this.service.reorderShortcuts(body.ids);
   }
 
   @Put('shortcuts/:id')
+  @Permissions('content.update')
   @ApiOperation({ summary: 'Modifier un raccourci' })
   async updateShortcut(
     @Param('id') id: string,
@@ -527,6 +593,7 @@ export class ContentController {
   }
 
   @Delete('shortcuts/:id')
+  @Permissions('content.delete')
   @ApiOperation({ summary: 'Supprimer un raccourci' })
   async deleteShortcut(@Param('id') id: string) {
     return this.service.deleteShortcut(id);
@@ -534,30 +601,35 @@ export class ContentController {
 
   // ── Legacy (old /content used only for blocks — keep for backward compat) ──
   @Get()
+  @Permissions('content.read')
   @ApiOperation({ summary: '[DEPRECATED] Liste des blocs (legacy)' })
   async legacyListBlocks(@Query() query: any) {
     return this.service.listContentBlocks(query.group);
   }
 
   @Get(':id')
+  @Permissions('content.read')
   @ApiOperation({ summary: '[DEPRECATED] Détail bloc (legacy)' })
   async legacyGetBlock(@Param('id') id: string) {
     return this.service.getContentBlock(id);
   }
 
   @Post()
+  @Permissions('content.create')
   @ApiOperation({ summary: '[DEPRECATED] Créer bloc (legacy)' })
   async legacyCreateBlock(@Body() body: any) {
     return this.service.createContentBlock(body);
   }
 
   @Put(':id')
+  @Permissions('content.update')
   @ApiOperation({ summary: '[DEPRECATED] Modifier bloc (legacy)' })
   async legacyUpdateBlock(@Param('id') id: string, @Body() body: any) {
     return this.service.updateContentBlock(id, body.value);
   }
 
   @Delete(':id')
+  @Permissions('content.delete')
   @ApiOperation({ summary: '[DEPRECATED] Supprimer bloc (legacy)' })
   async legacyDeleteBlock(@Param('id') id: string) {
     return this.service.deleteContentBlock(id);

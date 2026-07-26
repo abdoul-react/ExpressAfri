@@ -563,6 +563,10 @@ export class AuthService {
       { key: 'content.create', label: 'Créer du contenu' },
       { key: 'content.update', label: 'Modifier le contenu' },
       { key: 'content.delete', label: 'Supprimer du contenu' },
+      {
+        key: 'content.moderate',
+        label: 'Modérer les avis clients et signalements de contenu',
+      },
       { key: 'promotions.read', label: 'Voir les promotions' },
       { key: 'promotions.create', label: 'Créer une promotion' },
       { key: 'promotions.update', label: 'Modifier une promotion' },
@@ -592,12 +596,17 @@ export class AuthService {
       { key: 'notifications.read', label: 'Voir les notifications' },
       { key: 'notifications.create', label: 'Envoyer une notification' },
       { key: 'notifications.update', label: 'Modifier une notification' },
+      { key: 'notifications.delete', label: 'Supprimer une notification' },
       { key: 'settings.read', label: 'Voir les paramètres' },
       { key: 'settings.update', label: 'Modifier les paramètres' },
       { key: 'features.read', label: 'Voir les fonctionnalités' },
       {
         key: 'features.update',
         label: 'Activer/désactiver une fonctionnalité',
+      },
+      {
+        key: 'delivery.manage',
+        label: 'Gérer les livreurs et les assignations de livraison',
       },
       { key: 'shipping.read', label: 'Voir les zones de livraison' },
       { key: 'shipping.create', label: 'Créer une règle de livraison' },

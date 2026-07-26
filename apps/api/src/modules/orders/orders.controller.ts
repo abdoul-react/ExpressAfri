@@ -15,6 +15,8 @@ import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { CustomerAuthGuard } from '../mobile/customer-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CustomerRoute } from '../../common/decorators/customer-route.decorator';
@@ -25,8 +27,20 @@ import { Public } from '../../common/decorators/public.decorator';
 export class OrdersController {
   constructor(private service: OrdersService) {}
 
+  // Un gérant ne voit et ne touche que les commandes de SA boutique.
+  private async assertOrderAccess(orderId: string, user: any) {
+    if (!user?.storeId) return;
+    const order = await this.service.getById(orderId);
+    if (!order || order.storeId !== user.storeId) {
+      throw new UnauthorizedException(
+        'Cette commande appartient à une autre boutique',
+      );
+    }
+  }
+
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('orders.read')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Liste des commandes (admin)' })
   async list(
@@ -93,15 +107,18 @@ export class OrdersController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('orders.read')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Détail commande (admin)' })
-  async getById(@Param('id') id: string) {
+  async getById(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.assertOrderAccess(id, user);
     return this.service.getById(id);
   }
 
   @Put(':id/status')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('orders.update')
   @ApiBearerAuth()
   @ApiOperation({ summary: "Changer le statut d'une commande" })
   async updateStatus(
@@ -109,19 +126,13 @@ export class OrdersController {
     @Body() body: { status: string; reason?: string },
     @CurrentUser() user: any,
   ) {
-    if (user?.storeId) {
-      const order = await this.service.getById(id);
-      if (!order || order.storeId !== user.storeId) {
-        throw new UnauthorizedException(
-          'Cette commande appartient à une autre boutique',
-        );
-      }
-    }
+    await this.assertOrderAccess(id, user);
     return this.service.updateStatus(id, body.status, user?.id, body.reason);
   }
 
   @Post(':id/shipments')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('orders.update')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Créer une expédition partielle' })
   async createShipment(
@@ -133,27 +144,34 @@ export class OrdersController {
       deliveryPersonId?: string;
       notes?: string;
     },
+    @CurrentUser() user: any,
   ) {
+    await this.assertOrderAccess(orderId, user);
     return this.service.createShipment(orderId, body);
   }
 
   @Put(':id/items/:itemId/status')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('orders.update')
   @ApiBearerAuth()
   @ApiOperation({ summary: "Changer le statut d'un item individuellement" })
   async updateItemStatus(
     @Param('id') orderId: string,
     @Param('itemId') itemId: string,
     @Body() body: { status: string; issueReason?: string },
+    @CurrentUser() user: any,
   ) {
+    await this.assertOrderAccess(orderId, user);
     return this.service.updateItemStatus(orderId, itemId, body);
   }
 
   @Get(':id/shipments')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('orders.read')
   @ApiBearerAuth()
   @ApiOperation({ summary: "Lister les expéditions d'une commande" })
-  async listShipments(@Param('id') orderId: string) {
+  async listShipments(@Param('id') orderId: string, @CurrentUser() user: any) {
+    await this.assertOrderAccess(orderId, user);
     return this.service.listShipments(orderId);
   }
 }

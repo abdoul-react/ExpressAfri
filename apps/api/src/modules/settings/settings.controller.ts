@@ -21,6 +21,7 @@ export class SettingsController {
   constructor(private service: SettingsService) {}
 
   @Get()
+  @Permissions('settings.read')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Liste des paramètres' })
   async listSettings() {

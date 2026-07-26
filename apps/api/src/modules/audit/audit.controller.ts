@@ -3,15 +3,18 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 
 @ApiTags('Audit')
 @Controller('audit')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class AuditController {
   constructor(private service: AuditService) {}
 
   @Get()
+  @Permissions('audit.read')
   @ApiOperation({ summary: "Liste des logs d'audit" })
   async list(
     @Query('page') page?: string,
@@ -38,6 +41,7 @@ export class AuditController {
   }
 
   @Get('export')
+  @Permissions('audit.export')
   @ApiOperation({ summary: "Export CSV des logs d'audit" })
   async export(
     @Res() res: Response,

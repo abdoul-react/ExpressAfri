@@ -30,6 +30,7 @@ import {
 } from '../../common/upload/upload.helper';
 import { AdminMessagesService } from './admin-messages.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { userHasPermission } from '../../common/guards/permissions.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Admin Messages')
@@ -38,6 +39,25 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @ApiBearerAuth()
 export class AdminMessagesController {
   constructor(private service: AdminMessagesService) {}
+
+  // Un gérant passe (le service borne tout sur SON storeId) ; un admin
+  // plateforme doit détenir la permission messages.* correspondante.
+  private assertMessagesAccess(user: any, permission: string) {
+    if (user?.storeId) return;
+    if (!userHasPermission(user, permission)) {
+      throw new ForbiddenException('Permission insuffisante');
+    }
+  }
+
+  // Tickets support et messages internes : plateforme uniquement, avec la
+  // permission messages.* correspondante.
+  private assertPlatformMessages(user: any, permission: string) {
+    if (user?.storeId)
+      throw new ForbiddenException("Réservé à l'équipe AfriExpress");
+    if (!userHasPermission(user, permission)) {
+      throw new ForbiddenException('Permission insuffisante');
+    }
+  }
 
   // Cloisonnement messagerie :
   // - Admin plateforme (pas de storeId) → voit TOUTES les conversations.
@@ -48,31 +68,31 @@ export class AdminMessagesController {
   @Get()
   @ApiOperation({ summary: 'Liste des tickets support' })
   async list(@Query() query: any, @CurrentUser() user: any) {
-    if (user?.storeId)
-      throw new ForbiddenException("Réservé à l'équipe AfriExpress");
+    this.assertPlatformMessages(user, 'messages.read');
     return this.service.list(query);
   }
 
   @Get('unread-count')
   @ApiOperation({ summary: 'Nb tickets non lus' })
   async getUnreadCount(@CurrentUser() user: any) {
-    // Gérant : pas de tickets support — badge à zéro plutôt qu'une erreur
-    if (user?.storeId) return { count: 0 };
+    // Badge sidebar (polling) : zéro plutôt qu'un 403 pour les profils sans accès
+    if (user?.storeId || !userHasPermission(user, 'messages.read'))
+      return { count: 0 };
     return this.service.getUnreadCount();
   }
 
   @Get('internal')
   @ApiOperation({ summary: 'Liste des messages internes' })
   async listInternalMessages(@Query() query: any, @CurrentUser() user: any) {
-    if (user?.storeId)
-      throw new ForbiddenException("Réservé à l'équipe AfriExpress");
+    this.assertPlatformMessages(user, 'messages.read');
     return this.service.listInternalMessages(query);
   }
 
   @Get('internal/unread-count')
   @ApiOperation({ summary: 'Nb messages internes non lus' })
   async getUnreadInternalCount(@CurrentUser() user: any) {
-    if (user?.storeId) return { count: 0 };
+    if (user?.storeId || !userHasPermission(user, 'messages.read'))
+      return { count: 0 };
     return this.service.getUnreadInternalCount();
   }
 
@@ -82,6 +102,7 @@ export class AdminMessagesController {
       'Conversations chat mobile (toutes pour la plateforme, celles de sa boutique pour un gérant)',
   })
   async listChatConversations(@Query() query: any, @CurrentUser() user: any) {
+    this.assertMessagesAccess(user, 'messages.read');
     return this.service.listChatConversations({
       ...query,
       storeId: user?.storeId ?? undefined,
@@ -91,12 +112,14 @@ export class AdminMessagesController {
   @Get('chat/awaiting-count')
   @ApiOperation({ summary: 'Nb conversations chat en attente de réponse admin (gérant: sa boutique)' })
   async getChatAwaitingCount(@CurrentUser() user: any) {
+    this.assertMessagesAccess(user, 'messages.read');
     return this.service.getChatAwaitingCount(user?.storeId ?? undefined);
   }
 
   @Get('chat/:id')
   @ApiOperation({ summary: 'Détail conversation chat mobile' })
   async getChatConversation(@Param('id') id: string, @CurrentUser() user: any) {
+    this.assertMessagesAccess(user, 'messages.read');
     return this.service.getChatConversation(id, user?.storeId ?? undefined);
   }
 
@@ -117,6 +140,7 @@ export class AdminMessagesController {
     },
     @CurrentUser() user: any,
   ) {
+    this.assertMessagesAccess(user, 'messages.update');
     return this.service.replyChatConversation(
       id,
       body,
@@ -159,7 +183,11 @@ export class AdminMessagesController {
     summary:
       'Uploader une pièce jointe de chat côté admin (retourne url, name, type)',
   })
-  async uploadChatAttachment(@UploadedFile() file: Express.Multer.File) {
+  async uploadChatAttachment(
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: any,
+  ) {
+    this.assertMessagesAccess(user, 'messages.update');
     if (!file) throw new BadRequestException('Fichier requis');
     const prefix = file.mimetype.startsWith('image/')
       ? 'image/'
@@ -188,6 +216,7 @@ export class AdminMessagesController {
     @Param('id') id: string,
     @CurrentUser() user: any,
   ) {
+    this.assertMessagesAccess(user, 'messages.read');
     return this.service.getChatConversationMedia(
       id,
       user?.storeId ?? undefined,
@@ -203,10 +232,7 @@ export class AdminMessagesController {
   ) {
     // Bloquer un client l'empêche d'écrire à TOUTES les boutiques :
     // décision de plateforme, pas de gérant.
-    if (user?.storeId)
-      throw new ForbiddenException(
-        "Le blocage des clients est réservé à l'équipe AfriExpress",
-      );
+    this.assertPlatformMessages(user, 'messages.update');
     return this.service.setCustomerChatBlocked(customerId, !!body.blocked);
   }
 
@@ -219,6 +245,7 @@ export class AdminMessagesController {
     @Body() body: { status: 'open' | 'closed' },
     @CurrentUser() user: any,
   ) {
+    this.assertMessagesAccess(user, 'messages.update');
     return this.service.updateChatStatus(
       id,
       body.status,
@@ -228,13 +255,19 @@ export class AdminMessagesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Détail ticket support' })
-  async getById(@Param('id') id: string) {
+  async getById(@Param('id') id: string, @CurrentUser() user: any) {
+    this.assertPlatformMessages(user, 'messages.read');
     return this.service.getById(id);
   }
 
   @Post(':id/reply')
   @ApiOperation({ summary: 'Répondre au ticket' })
-  async reply(@Param('id') id: string, @Body() body: { content: string }) {
+  async reply(
+    @Param('id') id: string,
+    @Body() body: { content: string },
+    @CurrentUser() user: any,
+  ) {
+    this.assertPlatformMessages(user, 'messages.update');
     return this.service.reply(id, body.content);
   }
 
@@ -243,19 +276,27 @@ export class AdminMessagesController {
   async updateStatus(
     @Param('id') id: string,
     @Body() body: { status: string },
+    @CurrentUser() user: any,
   ) {
+    this.assertPlatformMessages(user, 'messages.update');
     return this.service.updateStatus(id, body.status);
   }
 
   @Patch(':id/assign')
   @ApiOperation({ summary: 'Assigner ticket' })
-  async assign(@Param('id') id: string, @Body() body: { adminId: string }) {
+  async assign(
+    @Param('id') id: string,
+    @Body() body: { adminId: string },
+    @CurrentUser() user: any,
+  ) {
+    this.assertPlatformMessages(user, 'messages.update');
     return this.service.assign(id, body.adminId);
   }
 
   @Post('internal')
   @ApiOperation({ summary: 'Envoyer message interne' })
-  async sendInternalMessage(@Body() body: any) {
+  async sendInternalMessage(@Body() body: any, @CurrentUser() user: any) {
+    this.assertPlatformMessages(user, 'messages.update');
     return this.service.sendInternalMessage(body);
   }
 
@@ -264,13 +305,19 @@ export class AdminMessagesController {
   async replyInternalMessage(
     @Param('id') id: string,
     @Body() body: { content: string },
+    @CurrentUser() user: any,
   ) {
+    this.assertPlatformMessages(user, 'messages.update');
     return this.service.replyInternalMessage(id, body.content);
   }
 
   @Patch('internal/:id/read')
   @ApiOperation({ summary: 'Marquer lu message interne' })
-  async markInternalMessageRead(@Param('id') id: string) {
+  async markInternalMessageRead(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertPlatformMessages(user, 'messages.read');
     return this.service.markInternalMessageRead(id);
   }
 }

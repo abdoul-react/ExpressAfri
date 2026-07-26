@@ -13,6 +13,8 @@ import { Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { Permissions } from '../../common/decorators/permissions.decorator';
 import { CustomerAuthGuard } from '../mobile/customer-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
 import { CustomerRoute } from '../../common/decorators/customer-route.decorator';
@@ -21,12 +23,13 @@ import type { Request } from 'express';
 
 @ApiTags('Payments')
 @Controller('payments')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class PaymentsController {
   constructor(private service: PaymentsService) {}
 
   @Get()
+  @Permissions('payments.read')
   @ApiOperation({ summary: 'Liste des paiements' })
   async list(
     @Query()
@@ -43,12 +46,14 @@ export class PaymentsController {
   }
 
   @Get(':id')
+  @Permissions('payments.read')
   @ApiOperation({ summary: 'Détail paiement' })
   async getById(@Param('id') id: string) {
     return this.service.getById(id);
   }
 
   @Post()
+  @Permissions('payments.update')
   @ApiOperation({ summary: 'Créer un paiement' })
   async create(
     @Body()
@@ -65,6 +70,7 @@ export class PaymentsController {
   }
 
   @Post(':id/refund')
+  @Permissions('payments.refund')
   @ApiOperation({ summary: 'Rembourser un paiement' })
   async refund(
     @Param('id') id: string,

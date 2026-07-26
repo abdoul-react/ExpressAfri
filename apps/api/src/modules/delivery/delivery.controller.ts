@@ -24,6 +24,7 @@ export class DeliveryController {
   constructor(private service: DeliveryService) {}
 
   @Get('persons')
+  @Permissions('delivery.manage')
   @ApiOperation({ summary: 'Liste des livreurs' })
   async listPersons(
     @Query('page') page?: string,
@@ -44,6 +45,7 @@ export class DeliveryController {
   }
 
   @Get('persons/:id')
+  @Permissions('delivery.manage')
   @ApiOperation({ summary: "Détails d'un livreur" })
   async getPersonById(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.getPersonById(id);
@@ -71,6 +73,7 @@ export class DeliveryController {
   }
 
   @Get('assignments')
+  @Permissions('delivery.manage')
   @ApiOperation({ summary: 'Liste des assignations' })
   async listAssignments(
     @Query('page') page?: string,
@@ -114,6 +117,7 @@ export class DeliveryController {
   }
 
   @Get('available-orders')
+  @Permissions('delivery.manage')
   @ApiOperation({ summary: 'Commandes disponibles' })
   async listAvailableOrders(
     @Query('page') page?: string,

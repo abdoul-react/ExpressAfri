@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { CouponsService } from './coupons.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { Public } from '../../common/decorators/public.decorator';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 
@@ -26,7 +27,8 @@ export class CouponsController {
   constructor(private service: CouponsService) {}
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('coupons.read')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Liste des coupons (admin)' })
   async list(@Query() query: any) {
@@ -51,7 +53,8 @@ export class CouponsController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @Permissions('coupons.read')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Détail coupon' })
   async getById(@Param('id') id: string) {
@@ -59,7 +62,7 @@ export class CouponsController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions('coupons.create')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Créer un coupon' })
@@ -68,7 +71,7 @@ export class CouponsController {
   }
 
   @Put(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions('coupons.update')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Modifier un coupon' })
@@ -77,7 +80,7 @@ export class CouponsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Permissions('coupons.delete')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Supprimer un coupon' })
