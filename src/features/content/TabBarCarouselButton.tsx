@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { radius, shadows, useColors, useThemedStyles, type Colors } from '@/design-system';
@@ -15,8 +16,8 @@ const ROTATE_MS = 3000;
  * Bouton central « Boutiques » de la barre de navigation : un rectangle qui
  * fait défiler en fondu les visuels configurés par l'admin (CMS → Bannières,
  * écran « Bouton central (tabbar) »). Sans visuel configuré — ou tant qu'ils
- * chargent — on retombe sur le cercle + icône « plus » historique : le bouton
- * reste toujours utilisable.
+ * chargent — un dégradé de marque avec l'icône boutique prend le relais :
+ * même forme, même place, le bouton reste toujours identifiable et utilisable.
  */
 export function TabBarCarouselButton() {
   const colors = useColors();
@@ -58,49 +59,49 @@ export function TabBarCarouselButton() {
       accessibilityLabel={t('tabs.stores')}
       onPress={() => router.push('/stores')}
     >
-      {images.length > 0 ? (
-        <View style={styles.carousel}>
-          {/* expo-image fond la transition d'URI : changer de source suffit
-              pour un cross-fade propre, sans superposer deux images. */}
+      <View style={styles.carousel}>
+        {images.length > 0 ? (
+          // expo-image fond la transition d'URI : changer de source suffit
+          // pour un cross-fade propre, sans superposer deux images.
           <Image
             source={{ uri: images[safeIndex] }}
             style={styles.image}
             contentFit="cover"
             transition={400}
           />
-        </View>
-      ) : (
-        <View style={styles.fallbackBtn}>
-          <Icon name="plus" size={26} color={colors.white} />
-        </View>
-      )}
+        ) : (
+          <LinearGradient
+            colors={[colors.primary, colors.secondary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.fallbackGradient}
+          >
+            <Icon name="store" size={22} color={colors.white} />
+          </LinearGradient>
+        )}
+      </View>
     </Pressable>
   );
 }
 
 const makeStyles = (colors: Colors) =>
   StyleSheet.create({
-    wrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    wrap: { alignItems: 'center', justifyContent: 'center' },
     carousel: {
       width: 64,
-      height: 44,
+      height: 42,
       borderRadius: radius.md,
-      marginTop: -8,
+      marginTop: -10,
       overflow: 'hidden',
       backgroundColor: colors.primary,
-      borderWidth: 1.5,
+      borderWidth: 2,
       borderColor: colors.surface,
       ...shadows.md,
     },
     image: { width: '100%', height: '100%' },
-    fallbackBtn: {
-      width: 46,
-      height: 46,
-      borderRadius: 23,
-      backgroundColor: colors.primary,
+    fallbackGradient: {
+      flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      marginTop: -8,
-      ...shadows.md,
     },
   });

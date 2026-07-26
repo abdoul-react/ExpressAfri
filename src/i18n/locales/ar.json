@@ -188,7 +188,8 @@
     "codInfo": "ستدفع المبلغ نقدًا لعامل التوصيل عند استلام طلبك. تحقق من منتجاتك قبل الدفع.",
     "processingStorePayment": "جارٍ معالجة دفع {{store}}…",
     "mobileMoneyHint": "الرقم الذي سيقوم بالدفع",
-    "cardPayment": "بطاقة بنكية"
+    "cardPayment": "بطاقة بنكية",
+    "selectCountry": "اختر البلد"
   },
   "payment": {
     "mobileMoney": "المحفظة الجوّالة",

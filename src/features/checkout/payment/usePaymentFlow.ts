@@ -11,6 +11,8 @@ export const UNKNOWN_KEY = "__unknown__";
 export type PaymentChoice = {
   provider: string;
   phone: string;
+  /** Code ISO-2 du pays de l'indicatif Mobile Money (ex. NE, CI). */
+  phoneCountry: string;
   cardNumber: string;
   cardExpiry: string;
   cardCvv: string;
@@ -19,6 +21,7 @@ export type PaymentChoice = {
 
 export const EMPTY_CHOICE: Omit<PaymentChoice, "provider"> = {
   phone: "",
+  phoneCountry: "",
   cardNumber: "",
   cardExpiry: "",
   cardCvv: "",

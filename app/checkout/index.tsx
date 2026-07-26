@@ -10,7 +10,8 @@ import {
 } from "@/design-system";
 import { useCheckout } from "@/features/checkout";
 import { calculateSubtotal } from "@/features/checkout";
-import { useCardBrands } from "@/features/payment";
+import { usePaymentMethods } from "@/features/payment";
+import { resolveMediaUrl, isSvgUrl } from "@/utils/resolveMediaUrl";
 import { usePrice } from "@/hooks/usePrice";
 import { useAuthStore } from "@/store/authStore";
 import { Icon } from "@/icons";
@@ -35,7 +36,7 @@ export default function CheckoutScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { priceXof } = usePrice();
-  const cardBrands = useCardBrands();
+  const { methods: paymentMethods } = usePaymentMethods();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   // Un compte authentifié (avec vrai token) est requis : sans lui, la commande
@@ -335,17 +336,42 @@ export default function CheckoutScreen() {
           <Text style={styles.secondaryText}>{t("checkout.secureText")}</Text>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.summaryTitle}>{t("checkout.securePayments")}</Text>
-          <View style={styles.brands}>
-            {(cardBrands.length > 0 ? cardBrands : ["VISA", "Mastercard", "UnionPay", "Amex", "JCB"]).map((b) => (
-              <View key={b} style={styles.brandPill}>
-                <Text style={styles.brandText}>{b}</Text>
-              </View>
-            ))}
+        {/* Moyens de paiement acceptés — catalogue géré par l'admin (CMS →
+            Moyens de paiement), logos compris. Rien n'est codé en dur : la
+            section disparaît si l'admin n'a rien configuré. */}
+        {paymentMethods.length > 0 && (
+          <View style={styles.card}>
+            <View style={styles.sectionHead}>
+              <Icon name="lock" size={20} color={colors.secondaryDark} />
+              <Text style={styles.sectionHeadTitle}>
+                {t("checkout.securePayments")}
+              </Text>
+            </View>
+            <View style={styles.brands}>
+              {paymentMethods.map((m) => {
+                const logo = resolveMediaUrl(m.logoUrl);
+                return (
+                  <View key={m.id} style={styles.brandPill}>
+                    {logo && !isSvgUrl(m.logoUrl) ? (
+                      <Image
+                        source={{ uri: logo }}
+                        style={styles.brandLogo}
+                        contentFit="contain"
+                        accessibilityLabel={t(m.labelKey)}
+                      />
+                    ) : (
+                      <Icon name={m.icon} size={16} color={colors.textSecondary} />
+                    )}
+                    <Text style={styles.brandText} numberOfLines={1}>
+                      {t(m.labelKey)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+            <Text style={styles.secondaryText}>{t("checkout.paymentLogos")}</Text>
           </View>
-          <Text style={styles.secondaryText}>{t("checkout.paymentLogos")}</Text>
-        </View>
+        )}
 
         <Text style={styles.termsText}>
           {t("checkout.acceptTerms")}
@@ -578,13 +604,17 @@ const makeStyles = (colors: Colors) =>
       marginTop: spacing.sm,
     },
     brandPill: {
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 4,
-      borderRadius: radius.sm,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+      borderRadius: radius.md,
       borderWidth: 1,
       borderColor: colors.border,
       backgroundColor: colors.background,
     },
+    brandLogo: { width: 22, height: 16 },
     brandText: {
       fontSize: fontSize.xs,
       fontWeight: "800",

@@ -120,14 +120,17 @@ export function StoreCard({ store, hideLike }: Props) {
           ) : null}
         </View>
 
-        {/* Note issue des avis produits — la ligne n'apparaît qu'avec des avis */}
-        {store.rating != null ? (
-          <View style={styles.ratingRow}>
-            <Icon name="star" size={12} color={colors.star} fill />
-            <Text style={styles.ratingValue}>{store.rating.toFixed(1)}</Text>
-            <Text style={styles.metaText}>({formatCount(store.ratingCount)})</Text>
-          </View>
-        ) : null}
+        {/* Ligne note toujours rendue, même sans avis : hauteur figée pour que
+            toutes les cartes de la grille gardent exactement la même taille. */}
+        <View style={styles.ratingRow}>
+          {store.rating != null ? (
+            <>
+              <Icon name="star" size={12} color={colors.star} fill />
+              <Text style={styles.ratingValue}>{store.rating.toFixed(1)}</Text>
+              <Text style={styles.metaText}>({formatCount(store.ratingCount)})</Text>
+            </>
+          ) : null}
+        </View>
 
         <View style={styles.stats}>
           <Text style={styles.metaText} numberOfLines={1}>
@@ -196,7 +199,8 @@ const makeStyles = (colors: Colors) =>
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 16 },
     metaText: { fontSize: fontSize.xs, color: colors.textMuted, lineHeight: 16 },
     stats: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 16 },
-    ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    // Hauteur figée comme `stats` : la ligne existe avec ou sans avis
+    ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 16 },
     ratingValue: {
       fontSize: fontSize.sm,
       color: colors.textSecondary,

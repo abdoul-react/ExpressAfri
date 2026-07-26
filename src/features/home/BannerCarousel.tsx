@@ -10,8 +10,9 @@ import {
 import { Icon } from "@/icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  AppState,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -78,6 +79,9 @@ function BannerBody({ banner, compact }: { banner: Banner; compact?: boolean }) 
   );
 }
 
+/** Cadence du défilement automatique des carrousels de bannières. */
+const AUTO_SCROLL_MS = 4000;
+
 export function BannerCarousel({ banners, compact }: Props) {
   const { width } = useWindowDimensions();
   const router = useRouter();
@@ -86,6 +90,35 @@ export function BannerCarousel({ banners, compact }: Props) {
   const styles = useThemedStyles(makeStyles);
   const scrollRef = useRef<ScrollView>(null);
   const cardWidth = width - spacing.lg * 2;
+
+  // Défilement automatique : suspendu pendant que l'utilisateur touche le
+  // carrousel (et repart après), coupé quand l'app est en arrière-plan.
+  const paused = useRef(false);
+  const appActive = useRef(true);
+  const count = banners?.length ?? 0;
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => {
+      appActive.current = s === "active";
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    if (count < 2) return;
+    const timer = setInterval(() => {
+      if (paused.current || !appActive.current) return;
+      setIndex((i) => {
+        const next = (i + 1) % count;
+        scrollRef.current?.scrollTo({
+          x: next * (cardWidth + spacing.sm),
+          animated: true,
+        });
+        return next;
+      });
+    }, AUTO_SCROLL_MS);
+    return () => clearInterval(timer);
+  }, [count, cardWidth]);
 
   if (!banners || banners.length === 0) return null;
 
@@ -118,9 +151,13 @@ export function BannerCarousel({ banners, compact }: Props) {
             snapToInterval={cardWidth + spacing.sm}
             decelerationRate="fast"
             contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
-            onMomentumScrollEnd={(e) =>
-              setIndex(Math.round(e.nativeEvent.contentOffset.x / (cardWidth + spacing.sm)))
-            }
+            onScrollBeginDrag={() => {
+              paused.current = true;
+            }}
+            onMomentumScrollEnd={(e) => {
+              paused.current = false;
+              setIndex(Math.round(e.nativeEvent.contentOffset.x / (cardWidth + spacing.sm)));
+            }}
           >
             {banners.map((b) => (
               <Pressable

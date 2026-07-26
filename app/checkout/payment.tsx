@@ -36,6 +36,7 @@ import { storeService } from "@/features/stores/storeService";
 import type { StorePaymentMethod } from "@/infrastructure/data-source/StoreDataSource";
 import { useAddressStore, getDefaultAddress } from "@/store/addressStore";
 import { useAuthStore } from "@/store/authStore";
+import { COUNTRIES } from "@/data/countries";
 import { Icon } from "@/icons";
 import { useCartStore } from "@/store/cartStore";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -181,12 +182,20 @@ export default function PaymentScreen() {
             (m) => m.provider === provider,
           );
           const choice = flow.choices[flow.keyOf(g.storeId)];
+          // Numéro complet indicatif inclus : le commerçant rapproche ses
+          // encaissements sans deviner le pays du payeur.
+          const dial = COUNTRIES.find(
+            (c) =>
+              c.code ===
+              (choice?.phoneCountry || defaultAddress?.countryCode || ""),
+          )?.dial;
+          const rawPhone = (choice?.phone ?? "").replace(/\D/g, "");
           return {
             storeId: g.storeId!,
             paymentMethod: provider,
             phoneNumber:
-              method?.type === "mobile_money"
-                ? choice?.phone.replace(/\D/g, "")
+              method?.type === "mobile_money" && rawPhone
+                ? `${dial ?? ""}${rawPhone}`
                 : undefined,
           };
         });
@@ -386,7 +395,14 @@ export default function PaymentScreen() {
         ) : currentMethod?.type === "mobile_money" ? (
           <MobileMoneyForm
             method={currentMethod}
-            dialCode={defaultAddress?.dialCode ?? null}
+            countryCode={
+              currentChoice?.phoneCountry ||
+              defaultAddress?.countryCode ||
+              null
+            }
+            onChangeCountry={(code) =>
+              flow.patch(group.storeId, { phoneCountry: code })
+            }
             phone={currentChoice?.phone ?? ""}
             onChangePhone={(v) => flow.patch(group.storeId, { phone: v })}
           />

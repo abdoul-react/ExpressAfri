@@ -182,7 +182,8 @@
     "codInfo": "You will pay the courier in cash upon delivery. Check your items before paying.",
     "processingStorePayment": "Processing payment for {{store}}…",
     "mobileMoneyHint": "The number that will make the payment",
-    "cardPayment": "Bank card"
+    "cardPayment": "Bank card",
+    "selectCountry": "Select country"
   },
   "payment": {
     "mobileMoney": "Mobile Money",

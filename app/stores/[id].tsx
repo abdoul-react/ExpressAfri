@@ -67,6 +67,8 @@ export default function StoreDetailScreen() {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [coverIndex, setCoverIndex] = useState(0);
+  const coverScrollRef = React.useRef<ScrollView>(null);
+  const coverPaused = React.useRef(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search.trim()), 350);
@@ -84,6 +86,25 @@ export default function StoreDetailScreen() {
     categoryId,
     search: debounced || undefined,
   });
+
+  // Défilement automatique de la galerie de couvertures : suspendu pendant le
+  // glissement de l'utilisateur, repart ensuite. `coversCount` est dérivé ici
+  // pour garder le hook AVANT les retours conditionnels de chargement.
+  const coversCount = [store.data?.coverUrl, ...(store.data?.photos ?? [])]
+    .map((u) => resolveMediaUrl(u))
+    .filter(Boolean).length;
+  useEffect(() => {
+    if (coversCount < 2) return;
+    const timer = setInterval(() => {
+      if (coverPaused.current) return;
+      setCoverIndex((i) => {
+        const next = (i + 1) % coversCount;
+        coverScrollRef.current?.scrollTo({ x: next * width, animated: true });
+        return next;
+      });
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [coversCount, width]);
 
   if (!id) return null;
 
@@ -161,14 +182,19 @@ export default function StoreDetailScreen() {
           <Image source={{ uri: covers[0] }} style={styles.cover} contentFit="cover" />
         ) : (
           <ScrollView
+            ref={coverScrollRef}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) =>
+            onScrollBeginDrag={() => {
+              coverPaused.current = true;
+            }}
+            onMomentumScrollEnd={(e) => {
+              coverPaused.current = false;
               setCoverIndex(
                 Math.round(e.nativeEvent.contentOffset.x / Math.max(1, width)),
-              )
-            }
+              );
+            }}
           >
             {covers.map((uri) => (
               <Image

@@ -6,14 +6,19 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   Length,
+  Matches,
   Min,
   ValidateNested,
 } from 'class-validator';
 
 export class StoreQuoteRequestDto {
-  @IsUUID()
+  // Pas @IsUUID() : la boutique système (00000000-…-000000000001) porte un
+  // chiffre de version 0 que le validateur UUID strict rejette.
+  @IsString()
+  @Matches(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, {
+    message: 'storeId doit être un identifiant valide',
+  })
   storeId: string;
 
   @IsNumber()

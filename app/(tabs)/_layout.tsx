@@ -44,9 +44,9 @@ function CustomTabBar({ state, navigation }: { state: any; navigation: any }) {
           return (
             <View key={route.key} style={styles.centerWrap}>
               {/* Carrousel d'images admin (CMS → Bannières → « Bouton central ») ;
-                  repli cercle + « plus » sans visuel configuré. */}
+                  repli dégradé de marque + icône boutique sans visuel configuré. */}
               <TabBarCarouselButton />
-              <Text style={[styles.label, { color: colors.tabInactive }]} numberOfLines={1}>
+              <Text style={styles.centerLabel} numberOfLines={1}>
                 {t('tabs.stores')}
               </Text>
             </View>
@@ -105,6 +105,12 @@ const makeStyles = (colors: Colors) => StyleSheet.create({
   tab: { flex: 1, alignItems: 'center', gap: 3 },
   label: { fontSize: fontSize.xs, fontWeight: '600' },
   centerWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  centerLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: '800',
+    color: colors.primary,
+    letterSpacing: 0.2,
+  },
   check: {
     position: 'absolute',
     top: -5,

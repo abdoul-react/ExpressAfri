@@ -182,7 +182,8 @@
     "codInfo": "Vous réglerez le montant en espèces au livreur, à la réception de votre commande. Vérifiez vos articles avant de payer.",
     "processingStorePayment": "Paiement de {{store}} en cours…",
     "mobileMoneyHint": "Le numéro qui effectuera le paiement",
-    "cardPayment": "Carte bancaire"
+    "cardPayment": "Carte bancaire",
+    "selectCountry": "Choisir le pays"
   },
   "payment": {
     "mobileMoney": "Mobile Money",
