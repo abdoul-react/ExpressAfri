@@ -7,8 +7,11 @@ export class MockAdminCategoryDataSource implements AdminCategoryDataSource {
     return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
-  async list(): Promise<any[]> {
+  async list(params?: { storeId?: string }): Promise<any[]> {
     await this.delay()
+    if (params?.storeId) {
+      return this.categories.filter((c: any) => c.storeId === params.storeId)
+    }
     return [...this.categories]
   }
 
@@ -19,12 +22,13 @@ export class MockAdminCategoryDataSource implements AdminCategoryDataSource {
     return cat
   }
 
-  async create(data: { name: string; parentId?: string; imageUrl?: string }): Promise<any> {
+  async create(data: { name: string; parentId?: string; imageUrl?: string; storeId?: string }): Promise<any> {
     await this.delay()
     const cat = {
       id: `cat_${String(this.categories.length + 1)}`,
       name: data.name,
       slug: data.name.toLowerCase().replace(/\s+/g, '-'),
+      storeId: data.storeId ?? null,
       parentId: data.parentId ?? null,
       imageUrl: data.imageUrl ?? undefined,
       productCount: 0,

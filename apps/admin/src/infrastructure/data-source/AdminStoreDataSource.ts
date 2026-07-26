@@ -149,6 +149,158 @@ export interface StoreMedia {
   createdAt: string
 }
 
+// ─── Sections de catalogue ────────────────────────────────────────────────────
+
+/** Format des cartes produit de la section, tel que rendu par l'app mobile. */
+export type StoreSectionLayout = 'grid' | 'rail' | 'list' | 'showcase'
+
+export interface StoreSection {
+  id: string
+  title: string
+  subtitle?: string | null
+  layout: StoreSectionLayout
+  sortOrder: number
+  isActive: boolean
+  productCount: number
+}
+
+export interface StoreSectionItem {
+  id: string
+  productId: string
+  name: string
+  price: string
+  status: string
+  sortOrder: number
+  imageUrl?: string | null
+}
+
+export interface CreateSectionPayload {
+  title: string
+  subtitle?: string
+  layout?: StoreSectionLayout
+}
+
+export interface UpdateSectionPayload {
+  title?: string
+  subtitle?: string | null
+  layout?: StoreSectionLayout
+  isActive?: boolean
+}
+
+// ─── Sections de la liste des boutiques (vitrine) ─────────────────────────────
+
+/**
+ * Regroupement de BOUTIQUES par thème sur la page liste, à ne pas confondre
+ * avec `StoreSection` ci-dessus qui regroupe des PRODUITS dans une boutique.
+ * Ces sections relèvent de l'admin central : un gérant n'y a pas accès.
+ */
+export interface StoreGroup {
+  id: string
+  title: string
+  subtitle?: string | null
+  icon?: string | null
+  sortOrder: number
+  isActive: boolean
+  storeCount: number
+}
+
+export interface StoreGroupItem {
+  id: string
+  storeId: string
+  name: string
+  city?: string | null
+  country?: string | null
+  status: string
+  sortOrder: number
+  logoUrl?: string | null
+}
+
+export interface CreateStoreGroupPayload {
+  title: string
+  subtitle?: string
+  icon?: string
+}
+
+export interface UpdateStoreGroupPayload {
+  title?: string
+  subtitle?: string | null
+  icon?: string | null
+  isActive?: boolean
+}
+
+// ─── Moyens de paiement de la boutique ────────────────────────────────────────
+
+/** Types reconnus par l'API. Le catalogue global normalise vers ces valeurs. */
+export type StorePaymentType =
+  | 'mobile_money'
+  | 'card'
+  | 'wallet'
+  | 'cash_on_delivery'
+
+/** Provider proposé par l'admin central : le boutiquier ne peut activer que ça. */
+export interface PaymentProvider {
+  code: string
+  name: string
+  description?: string | null
+  logoUrl?: string | null
+  type: StorePaymentType
+  supportedCountries?: string[] | null
+}
+
+export interface StorePaymentMethod {
+  id: string
+  storeId: string
+  type: StorePaymentType
+  provider: string
+  displayName: string
+  description?: string | null
+  logoUrl?: string | null
+  iconUrl?: string | null
+  instructions?: string | null
+  countries?: string[] | null
+  isEnabled: boolean
+  isPublic: boolean
+  sortOrder: number
+  metadataPublic?: Record<string, unknown>
+  /** Champs de configuration non sensibles, lisibles tels quels. */
+  config: Record<string, string>
+  /**
+   * Aperçus masqués (`••••1234`) des champs sensibles déjà renseignés.
+   * L'API ne renvoie jamais la valeur en clair après sauvegarde : ce champ
+   * sert seulement à savoir qu'une clé existe.
+   */
+  secrets: Record<string, string>
+}
+
+export interface CreateStorePaymentMethodPayload {
+  provider: string
+  type?: StorePaymentType
+  displayName?: string
+  description?: string
+  instructions?: string
+  isEnabled?: boolean
+  config?: Record<string, string | null>
+}
+
+export interface UpdateStorePaymentMethodPayload {
+  type?: StorePaymentType
+  displayName?: string
+  description?: string | null
+  logoUrl?: string | null
+  instructions?: string | null
+  countries?: string[]
+  isEnabled?: boolean
+  isPublic?: boolean
+  /** Une valeur `null` supprime la clé — seul moyen de retirer un secret. */
+  config?: Record<string, string | null>
+}
+
+export interface PaymentMethodValidation {
+  ok: boolean
+  missing: string[]
+  message: string
+}
+
 // ─── DataSource ───────────────────────────────────────────────────────────────
 
 export interface CreateStorePayload {
@@ -189,4 +341,29 @@ export interface AdminStoreDataSource {
   uploadMedia(storeId: string, file: File, type: StoreMediaType, alt?: string): Promise<StoreMedia>
   reorderMedia(storeId: string, ids: string[]): Promise<void>
   deleteMedia(storeId: string, mediaId: string): Promise<void>
+  listSections(storeId: string): Promise<StoreSection[]>
+  createSection(storeId: string, payload: CreateSectionPayload): Promise<StoreSection>
+  updateSection(storeId: string, sectionId: string, payload: UpdateSectionPayload): Promise<StoreSection>
+  deleteSection(storeId: string, sectionId: string): Promise<void>
+  reorderSections(storeId: string, ids: string[]): Promise<void>
+  listSectionItems(storeId: string, sectionId: string): Promise<StoreSectionItem[]>
+  addSectionItems(storeId: string, sectionId: string, productIds: string[]): Promise<void>
+  removeSectionItem(storeId: string, sectionId: string, itemId: string): Promise<void>
+  reorderSectionItems(storeId: string, sectionId: string, ids: string[]): Promise<void>
+  listStoreGroups(): Promise<StoreGroup[]>
+  createStoreGroup(payload: CreateStoreGroupPayload): Promise<StoreGroup>
+  updateStoreGroup(groupId: string, payload: UpdateStoreGroupPayload): Promise<StoreGroup>
+  deleteStoreGroup(groupId: string): Promise<void>
+  reorderStoreGroups(ids: string[]): Promise<void>
+  listStoreGroupItems(groupId: string): Promise<StoreGroupItem[]>
+  addStoreGroupItems(groupId: string, storeIds: string[]): Promise<void>
+  removeStoreGroupItem(groupId: string, itemId: string): Promise<void>
+  reorderStoreGroupItems(groupId: string, ids: string[]): Promise<void>
+  listPaymentProviders(storeId: string): Promise<PaymentProvider[]>
+  listPaymentMethods(storeId: string): Promise<StorePaymentMethod[]>
+  createPaymentMethod(storeId: string, payload: CreateStorePaymentMethodPayload): Promise<StorePaymentMethod>
+  updatePaymentMethod(storeId: string, methodId: string, payload: UpdateStorePaymentMethodPayload): Promise<StorePaymentMethod>
+  deletePaymentMethod(storeId: string, methodId: string): Promise<void>
+  reorderPaymentMethods(storeId: string, ids: string[]): Promise<void>
+  validatePaymentMethod(storeId: string, methodId: string): Promise<PaymentMethodValidation>
 }

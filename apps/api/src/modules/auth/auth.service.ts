@@ -547,6 +547,10 @@ export class AuthService {
       { key: 'stores.delete', label: 'Supprimer une boutique' },
       { key: 'stores.approve', label: 'Approuver une boutique' },
       { key: 'stores.reject', label: 'Rejeter une boutique' },
+      {
+        key: 'stores.manage',
+        label: 'Administrer la vitrine et les statuts des boutiques',
+      },
       { key: 'orders.read', label: 'Voir les commandes' },
       { key: 'orders.update', label: "Modifier le statut d'une commande" },
       { key: 'orders.cancel', label: 'Annuler une commande' },

@@ -9,6 +9,7 @@ import {
   type Colors,
 } from "@/design-system";
 import { useCheckout } from "@/features/checkout";
+import { useCartStoreGroups } from "@/features/cart";
 import { useCardBrands } from "@/features/payment";
 import { usePrice } from "@/hooks/usePrice";
 import { useAuthStore } from "@/store/authStore";
@@ -58,6 +59,8 @@ export default function CheckoutScreen() {
     isError,
     refetch,
   } = useCheckout();
+
+  const groups = useCartStoreGroups(items);
 
   if (!isAuthenticated) return null;
 
@@ -149,36 +152,47 @@ export default function CheckoutScreen() {
           </Pressable>
         )}
 
+        {/* Un bloc par boutique : chaque boutique expédie et facture séparément. */}
+        {groups.map((group) => (
+          <View key={group.storeId ?? "__unknown__"} style={styles.card}>
+            <View style={styles.shipHead}>
+              <Icon name="store" size={16} color={colors.secondaryDark} />
+              <Text style={styles.shipHeadText} numberOfLines={1}>
+                {group.storeName ?? t("cart.unknownStore")}
+              </Text>
+            </View>
+            {group.items.map((item) => (
+              <View
+                key={item.productId + (item.variantLabel ?? "")}
+                style={styles.item}
+              >
+                <Image
+                  source={{ uri: item.image }}
+                  style={styles.itemImg}
+                  contentFit="cover"
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.itemTitle} numberOfLines={2}>
+                    {item.title}
+                  </Text>
+                  {item.variantLabel && (
+                    <Text style={styles.variant}>{item.variantLabel}</Text>
+                  )}
+                  <View style={styles.itemFooter}>
+                    <Price priceUsd={item.priceUsd} size="sm" />
+                    <Text style={styles.qty}>x{item.quantity}</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        ))}
+
         <View style={styles.card}>
           <View style={styles.shipHead}>
             <Icon name="truck" size={16} color={colors.secondaryDark} />
-            <Text style={styles.shipHeadText}>{t("checkout.shippedBy")}</Text>
+            <Text style={styles.shipHeadText}>{t("checkout.shippingFee")}</Text>
           </View>
-          {items.map((item) => (
-            <View
-              key={item.productId + (item.variantLabel ?? "")}
-              style={styles.item}
-            >
-              <Image
-                source={{ uri: item.image }}
-                style={styles.itemImg}
-                contentFit="cover"
-              />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.itemTitle} numberOfLines={2}>
-                  {item.title}
-                </Text>
-                {item.variantLabel && (
-                  <Text style={styles.variant}>{item.variantLabel}</Text>
-                )}
-                <View style={styles.itemFooter}>
-                  <Price priceUsd={item.priceUsd} size="sm" />
-                  <Text style={styles.qty}>x{item.quantity}</Text>
-                </View>
-              </View>
-            </View>
-          ))}
-          <View style={styles.divider} />
           <Row
             label={t("checkout.shippingFee")}
             value={<Price priceUsd={shipping} size="sm" color={colors.text} />}

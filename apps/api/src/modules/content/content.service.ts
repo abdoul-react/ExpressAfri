@@ -3,8 +3,9 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, isNull } from 'drizzle-orm';
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module';
 import {
   contentBlocks,
@@ -13,7 +14,6 @@ import {
   logos,
   feedSections,
   feedPosts,
-  feedPostLikes,
   socialLinks,
   seoMetadata,
   paymentMethods,
@@ -21,6 +21,9 @@ import {
 import { appSettings, featureFlags } from '../../database/schema/settings';
 
 const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001';
+
+/** Valeur de filtre pour ne lister que les bannières globales (store_id NULL). */
+const GLOBAL_BANNER_SCOPE = 'global';
 
 @Injectable()
 export class ContentService {
@@ -72,35 +75,81 @@ export class ContentService {
   }
 
   // ── Banners ──
-  async listBanners() {
+  /**
+   * Un gérant ne voit que les bannières de sa boutique ; l'admin central voit
+   * tout et peut filtrer. `storeId` du jeton prime toujours sur la query.
+   */
+  async listBanners(params?: { storeId?: string; ownStoreId?: string }) {
+    const scope = params?.ownStoreId ?? params?.storeId;
     return this.db
       .select()
       .from(banners)
+      .where(
+        scope
+          ? eq(banners.storeId, scope)
+          : params?.storeId === GLOBAL_BANNER_SCOPE
+            ? isNull(banners.storeId)
+            : undefined,
+      )
       .orderBy(banners.position, banners.createdAt);
   }
 
-  async getBannerById(id: string) {
+  /**
+   * Une bannière n'est modifiable que par sa boutique propriétaire ; les
+   * bannières globales (store_id NULL) restent réservées à l'Admin central.
+   */
+  private async assertBannerWritable(id: string, ownStoreId?: string) {
+    const [banner] = await this.db
+      .select({ storeId: banners.storeId })
+      .from(banners)
+      .where(eq(banners.id, id))
+      .limit(1);
+    if (!banner) throw new NotFoundException('Bannière introuvable');
+    if (ownStoreId && banner.storeId !== ownStoreId) {
+      throw new ForbiddenException(
+        "Cette bannière n'appartient pas à votre boutique",
+      );
+    }
+    return banner;
+  }
+
+  async getBannerById(id: string, ownStoreId?: string) {
     const [banner] = await this.db
       .select()
       .from(banners)
       .where(eq(banners.id, id))
       .limit(1);
     if (!banner) throw new NotFoundException('Bannière introuvable');
+    if (ownStoreId && banner.storeId !== ownStoreId) {
+      throw new ForbiddenException(
+        "Cette bannière n'appartient pas à votre boutique",
+      );
+    }
     return banner;
   }
 
-  async createBanner(data: any) {
+  async createBanner(data: any, ownStoreId?: string) {
+    // Le storeId vient du jeton pour un gérant : un champ libre du corps ne peut
+    // pas le remplacer, sinon il publierait des bannières chez un concurrent.
+    const storeId = ownStoreId ?? data.storeId ?? null;
     const [banner] = await this.db
       .insert(banners)
-      .values(this.toBannerRow(data))
+      .values({ ...this.toBannerRow(data), storeId })
       .returning();
     return banner;
   }
 
-  async updateBanner(id: string, data: any) {
+  async updateBanner(id: string, data: any, ownStoreId?: string) {
+    const current = await this.assertBannerWritable(id, ownStoreId);
     const [banner] = await this.db
       .update(banners)
-      .set({ ...this.toBannerRow(data), updatedAt: new Date() })
+      // storeId forcé à sa valeur actuelle : un champ du corps ne doit pas
+      // déplacer une bannière d'une boutique à une autre.
+      .set({
+        ...this.toBannerRow(data),
+        storeId: current.storeId,
+        updatedAt: new Date(),
+      })
       .where(eq(banners.id, id))
       .returning();
     if (!banner) throw new NotFoundException('Bannière introuvable');
@@ -117,7 +166,8 @@ export class ContentService {
     return row;
   }
 
-  async deleteBanner(id: string) {
+  async deleteBanner(id: string, ownStoreId?: string) {
+    await this.assertBannerWritable(id, ownStoreId);
     const deleted = await this.db
       .delete(banners)
       .where(eq(banners.id, id))
@@ -440,7 +490,7 @@ export class ContentService {
     const rows = await this.db
       .select({
         post: feedPosts,
-        likes: sql<number>`(select count(*) from ${feedPostLikes} where ${feedPostLikes.postId} = ${feedPosts.id})`,
+        likes: sql<number>`(select count(*) from feed_post_likes fpl where fpl.post_id = feed_posts.id)`,
       })
       .from(feedPosts)
       .orderBy(feedPosts.position, feedPosts.createdAt);

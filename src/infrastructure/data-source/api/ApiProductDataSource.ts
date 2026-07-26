@@ -7,6 +7,7 @@ export class ApiProductDataSource implements ProductDataSource {
     const params = new URLSearchParams();
     if (query?.search) params.set('search', query.search);
     if (query?.categoryId) params.set('categoryId', query.categoryId);
+    if (query?.storeId) params.set('storeId', query.storeId);
     if (query?.limit != null) params.set('limit', String(query.limit));
     if (query?.offset != null) params.set('offset', String(query.offset));
     if (query?.minPrice != null) params.set('minPrice', String(query.minPrice));

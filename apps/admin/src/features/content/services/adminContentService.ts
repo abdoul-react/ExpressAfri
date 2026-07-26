@@ -16,9 +16,9 @@ class AdminContentService {
   }
 
   // Banners
-  async listBanners() {
+  async listBanners(params?: { storeId?: string }) {
     try {
-      return await adminContentDataSource.listBanners()
+      return await adminContentDataSource.listBanners(params)
     } catch (err) {
       throw toServiceError(err, 'Liste des bannières')
     }

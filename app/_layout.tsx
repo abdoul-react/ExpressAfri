@@ -256,6 +256,7 @@ function AppShell() {
             <Stack.Screen name="profile/index" />
             <Stack.Screen name="coupons/index" />
             <Stack.Screen name="stores/index" />
+            <Stack.Screen name="stores/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="suggestions/index" />
             <Stack.Screen name="payment/index" />
             <Stack.Screen name="wallet/bonus" />

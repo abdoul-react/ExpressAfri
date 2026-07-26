@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, Store, XCircle, Pencil, Trash2 } from 'lucide-react'
 import { useAdminStores, useUpdateStore, useDeleteStore } from '../hooks/useAdminStores'
 import { useApproveStore, useRejectStore, useCreateStore } from '../hooks/useStoreActions'
+import { StoreGroupsPanel } from '../components/StoreGroupsPanel'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import {
   PageHeader, SearchInput, Select, DataTable, StatusBadge, Button, Card, EmptyState, ConfirmDialog,
@@ -316,6 +317,8 @@ export function AdminStoreListPage() {
           </PermissionGuard>
         }
       />
+
+      <StoreGroupsPanel />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SearchInput

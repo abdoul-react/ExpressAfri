@@ -32,6 +32,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { StoresService } from './stores.service';
+import { StorePaymentMethodsService } from './store-payment-methods.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { Permissions } from '../../common/decorators/permissions.decorator';
@@ -42,7 +43,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard)
 @Controller('stores')
 export class StoresController {
-  constructor(private service: StoresService) {}
+  constructor(
+    private service: StoresService,
+    private payments: StorePaymentMethodsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Liste des boutiques' })
@@ -256,6 +260,197 @@ export class StoresController {
   ) {
     this.assertOwnership(user, id);
     return this.service.deleteMedia(id, mediaId);
+  }
+
+  // ====== SECTIONS DE CATALOGUE ======
+  // Le gérant compose les sections de SA boutique et choisit leur format.
+
+  @Get(':id/sections')
+  @ApiOperation({ summary: 'Sections de catalogue de la boutique' })
+  async listSections(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.listSections(id);
+  }
+
+  @Post(':id/sections')
+  @ApiOperation({ summary: 'Créer une section' })
+  async createSection(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { title?: string; subtitle?: string; layout?: string },
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.createSection(id, body ?? {});
+  }
+
+  // Déclarée AVANT ':id/sections/:sectionId' : sinon Nest capterait
+  // « reorder » comme un sectionId.
+  @Put(':id/sections/reorder')
+  @ApiOperation({ summary: 'Réordonner les sections' })
+  async reorderSections(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { ids: string[] },
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.reorderSections(id, body?.ids ?? []);
+  }
+
+  @Put(':id/sections/:sectionId')
+  @ApiOperation({ summary: 'Modifier une section' })
+  async updateSection(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.updateSection(id, sectionId, body ?? {});
+  }
+
+  @Delete(':id/sections/:sectionId')
+  @ApiOperation({ summary: 'Supprimer une section' })
+  async deleteSection(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.deleteSection(id, sectionId);
+  }
+
+  @Get(':id/sections/:sectionId/items')
+  @ApiOperation({ summary: 'Produits affectés à la section' })
+  async listSectionItems(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.listSectionItems(id, sectionId);
+  }
+
+  @Post(':id/sections/:sectionId/items')
+  @ApiOperation({ summary: 'Affecter des produits à la section' })
+  async addSectionItems(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @Body() body: { productIds?: string[] },
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.addSectionItems(id, sectionId, body?.productIds ?? []);
+  }
+
+  @Put(':id/sections/:sectionId/items/reorder')
+  @ApiOperation({ summary: 'Réordonner les produits de la section' })
+  async reorderSectionItems(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @Body() body: { ids: string[] },
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.reorderSectionItems(id, sectionId, body?.ids ?? []);
+  }
+
+  @Delete(':id/sections/:sectionId/items/:itemId')
+  @ApiOperation({ summary: 'Retirer un produit de la section' })
+  async removeSectionItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('sectionId', ParseUUIDPipe) sectionId: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.service.removeSectionItem(id, sectionId, itemId);
+  }
+
+  // ====== MOYENS DE PAIEMENT ======
+  // Cloisonnés au boutiquier : lui seul décide de ce qu'il accepte, et il ne
+  // voit jamais la configuration d'une autre boutique. L'admin central se
+  // borne à alimenter le catalogue de providers (`payment_methods`), qui
+  // délimite ce qui peut être activé ici.
+
+  @Get(':id/payment-methods/catalog')
+  @ApiOperation({ summary: 'Providers de paiement proposés par la plateforme' })
+  async paymentCatalog(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.payments.catalog();
+  }
+
+  @Get(':id/payment-methods')
+  @ApiOperation({ summary: 'Moyens de paiement de la boutique' })
+  async listPaymentMethods(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.payments.list(id);
+  }
+
+  @Post(':id/payment-methods')
+  @ApiOperation({ summary: 'Activer un moyen de paiement' })
+  async createPaymentMethod(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.payments.create(id, body ?? {}, user);
+  }
+
+  // Déclarée AVANT ':id/payment-methods/:methodId' : sinon Nest capterait
+  // « reorder » comme un methodId.
+  @Put(':id/payment-methods/reorder')
+  @ApiOperation({ summary: "Réordonner les moyens de paiement" })
+  async reorderPaymentMethods(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { ids?: string[] },
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.payments.reorder(id, body?.ids ?? []);
+  }
+
+  @Put(':id/payment-methods/:methodId')
+  @ApiOperation({ summary: 'Modifier un moyen de paiement' })
+  async updatePaymentMethod(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('methodId', ParseUUIDPipe) methodId: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.payments.update(id, methodId, body ?? {}, user);
+  }
+
+  @Delete(':id/payment-methods/:methodId')
+  @ApiOperation({ summary: 'Supprimer un moyen de paiement' })
+  async deletePaymentMethod(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('methodId', ParseUUIDPipe) methodId: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.payments.remove(id, methodId, user);
+  }
+
+  @Post(':id/payment-methods/:methodId/validate')
+  @ApiOperation({ summary: 'Vérifier la configuration du moyen de paiement' })
+  async validatePaymentMethod(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('methodId', ParseUUIDPipe) methodId: string,
+    @CurrentUser() user: any,
+  ) {
+    this.assertOwnership(user, id);
+    return this.payments.validate(id, methodId, user);
   }
 
   @Get(':id/kyc')

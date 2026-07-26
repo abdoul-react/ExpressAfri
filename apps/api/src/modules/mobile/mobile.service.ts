@@ -8,7 +8,17 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { eq, and, sql, desc, inArray, like, gte } from 'drizzle-orm';
+import {
+  eq,
+  and,
+  sql,
+  desc,
+  inArray,
+  like,
+  gte,
+  isNull,
+  getTableColumns,
+} from 'drizzle-orm';
 import * as bcrypt from 'bcryptjs';
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module';
 import {
@@ -24,6 +34,14 @@ import {
   productVariants,
 } from '../../database/schema/products';
 import { stores, storeMedia } from '../../database/schema/stores';
+import {
+  storeSections,
+  storeSectionItems,
+} from '../../database/schema/store-sections';
+import {
+  storeGroups,
+  storeGroupItems,
+} from '../../database/schema/store-groups';
 import { coupons, couponUsage } from '../../database/schema/coupons';
 import { otpCodes } from '../../database/schema/otp';
 import { contentBlocks } from '../../database/schema/content';
@@ -51,6 +69,7 @@ import { shippingZones, shippingMethods } from '../../database/schema/shipping';
 import { loyaltyPoints } from '../../database/schema/loyalty';
 
 import { ImageVisionService } from '../../common/vision/image-vision.service';
+import { StorePaymentMethodsService } from '../stores/store-payment-methods.service';
 
 // Boutique système (seedée) : les customers.storeId NOT NULL doivent référencer une boutique existante
 const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001';
@@ -62,6 +81,25 @@ const APPROVED_STORE = 'approved';
 function belongsToApprovedStore(storeIdColumn: any) {
   return sql`exists (select 1 from ${stores} where ${stores.id} = ${storeIdColumn} and ${stores.status} = ${APPROVED_STORE})`;
 }
+
+/**
+ * Colonnes produit + nom de la boutique d'origine, pour l'insigne de provenance
+ * affiché sur les cartes, la fiche produit et le panier.
+ *
+ * Sous-requête corrélée plutôt qu'une jointure : la jointure obligerait chaque
+ * appelant à projeter explicitement ses colonnes, et un oubli passerait
+ * inaperçu. Écrite en SQL brut car Drizzle rendrait `products.store_id` non
+ * qualifié, qui résoudrait alors vers la table interne de la sous-requête.
+ *
+ * `storeName` est nul pour la boutique système : ces produits n'ont pas de
+ * vendeur, et le client ne doit alors voir aucun insigne.
+ */
+const PRODUCT_COLUMNS_WITH_STORE = {
+  ...getTableColumns(products),
+  storeName: sql<
+    string | null
+  >`(select s.name from stores s where s.id = products.store_id and s.id <> ${SYSTEM_STORE_ID})`,
+};
 
 /**
  * Pastilles couleur de la fiche produit : traduit le nom saisi par l'admin
@@ -127,6 +165,7 @@ export class MobileService {
     @Inject(DRIZZLE) private db: DrizzleDB,
     private jwt: JwtService,
     private vision: ImageVisionService,
+    private storePayments: StorePaymentMethodsService,
   ) {}
 
   private signToken(customer: { id: string; email: string | null }) {
@@ -440,7 +479,6 @@ export class MobileService {
     if (!customer) throw new NotFoundException('Client introuvable');
 
     const orderItemsData: any[] = [];
-    let subtotal = 0;
 
     for (const item of dto.items) {
       const [product] = await this.db
@@ -497,7 +535,6 @@ export class MobileService {
       }
 
       const totalPrice = unitPrice * item.quantity;
-      subtotal += totalPrice;
 
       orderItemsData.push({
         productId: item.productId,
@@ -512,38 +549,6 @@ export class MobileService {
       });
     }
 
-    const shippingCost = subtotal >= 10000 ? 0 : 1500;
-    const taxAmount = 0;
-    let discountAmount = 0;
-    let couponId: string | null = null;
-
-    if (dto.couponCode) {
-      const [coupon] = await this.db
-        .select()
-        .from(coupons)
-        .where(
-          and(eq(coupons.code, dto.couponCode), eq(coupons.isActive, true)),
-        )
-        .limit(1);
-      if (coupon && new Date(coupon.endDate) > new Date()) {
-        couponId = coupon.id;
-        if (coupon.type === 'percentage') {
-          discountAmount = (subtotal * Number(coupon.value)) / 100;
-          if (coupon.maxDiscount)
-            discountAmount = Math.min(
-              discountAmount,
-              Number(coupon.maxDiscount),
-            );
-        } else if (coupon.type === 'fixed') {
-          discountAmount = Number(coupon.value);
-        } else if (coupon.type === 'free_shipping') {
-          discountAmount = shippingCost;
-        }
-      }
-    }
-
-    const total = subtotal + shippingCost + taxAmount - discountAmount;
-
     const [address] = await this.db
       .select()
       .from(addresses)
@@ -557,123 +562,273 @@ export class MobileService {
     if (!address)
       throw new BadRequestException('Adresse de livraison introuvable');
 
-    if (dto.idempotencyKey) {
-      const [existing] = await this.db
+    /*
+      Le panier peut mêler plusieurs boutiques, et chacune facture, expédie et
+      encaisse pour son compte : on émet UNE commande par boutique.
+
+      Une commande unique estampillait `orders`, `payments` et
+      `order_status_log` de la première boutique rencontrée — la seconde ne
+      voyait donc jamais la commande de ses propres produits, et son argent
+      était comptabilisé chez la première.
+    */
+    const groups = new Map<string, typeof orderItemsData>();
+    for (const line of orderItemsData) {
+      const key = line.storeId ?? SYSTEM_STORE_ID;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(line);
+    }
+    const storeIds = [...groups.keys()];
+
+    /*
+      Idempotence : une clé dérivée par boutique, car `orders.idempotency_key`
+      est unique. La reprise doit rendre les N commandes déjà créées — sinon une
+      double soumission en recréerait une partie.
+
+      Les clés sont énumérées explicitement plutôt que cherchées par préfixe :
+      un `LIKE` sur une valeur fournie par le client laisserait passer un `%`,
+      qui remonterait les commandes d'autres clients.
+    */
+    const derivedKeys = dto.idempotencyKey
+      ? storeIds.map((id) => `${dto.idempotencyKey}:${id}`)
+      : [];
+
+    const storeNames = new Map(
+      (
+        await this.db
+          .select({ id: stores.id, name: stores.name })
+          .from(stores)
+          .where(inArray(stores.id, storeIds))
+      ).map((s) => [s.id, s.name]),
+    );
+
+    if (derivedKeys.length) {
+      const existing = await this.db
         .select()
         .from(orders)
-        .where(eq(orders.idempotencyKey, dto.idempotencyKey))
-        .limit(1);
-      if (existing) {
+        .where(inArray(orders.idempotencyKey, derivedKeys));
+      if (existing.length) {
         return {
-          id: existing.id,
-          orderNumber: existing.orderNumber,
-          status: existing.status,
-          total: existing.total,
-          currency: existing.currency,
+          orders: existing.map((o) => ({
+            id: o.id,
+            orderNumber: o.orderNumber,
+            storeId: o.storeId,
+            storeName: storeNames.get(o.storeId) ?? null,
+            status: o.status,
+            total: o.total,
+            currency: o.currency,
+          })),
+          total: existing
+            .reduce((sum, o) => sum + Number(o.total), 0)
+            .toFixed(2),
+          currency: 'XOF',
           message: 'Commande déjà créée',
         };
       }
     }
 
-    const orderNumber = `EA-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-    const storeId = orderItemsData[0].storeId;
+    // Un coupon appartient à une boutique (`coupons.store_id` est NOT NULL) :
+    // il ne peut donc remiser que la commande de cette boutique, pas le panier.
+    let coupon: typeof coupons.$inferSelect | null = null;
+    if (dto.couponCode) {
+      const [found] = await this.db
+        .select()
+        .from(coupons)
+        .where(
+          and(eq(coupons.code, dto.couponCode), eq(coupons.isActive, true)),
+        )
+        .limit(1);
+      if (found && new Date(found.endDate) > new Date()) coupon = found;
+    }
 
-    const order = await this.db.transaction(async (tx) => {
-      const [inserted] = await tx
-        .insert(orders)
-        .values({
-          storeId,
-          customerId,
-          orderNumber,
-          status: dto.paymentMethod === 'cod' ? 'confirmed' : 'pending',
-          subtotal: subtotal.toFixed(2),
-          shippingCost: shippingCost.toFixed(2),
-          taxAmount: taxAmount.toFixed(2),
-          discountAmount: discountAmount.toFixed(2),
-          total: total.toFixed(2),
-          currency: 'XOF',
-          couponId,
-          couponCode: dto.couponCode ?? null,
-          shippingAddress: JSON.stringify(address),
-          notes: dto.notes ?? null,
-          idempotencyKey: dto.idempotencyKey ?? null,
-        })
-        .returning();
+    // Résolution ET validation des moyens de paiement avant d'écrire quoi que
+    // ce soit : un moyen refusé ne doit laisser aucune commande derrière lui.
+    const chosenMethods = new Map<string, string>();
+    for (const storeId of storeIds) {
+      const method =
+        dto.payments?.find((p) => p.storeId === storeId)?.paymentMethod ??
+        dto.paymentMethod;
+      if (!method) {
+        throw new BadRequestException(
+          `Moyen de paiement manquant pour ${storeNames.get(storeId) ?? 'la boutique'}`,
+        );
+      }
 
-      await tx
-        .insert(orderItems)
-        .values(orderItemsData.map((oi) => ({ ...oi, orderId: inserted.id })));
+      // Exception délibérée : le paiement à la livraison ne demande aucune
+      // configuration technique au commerçant, il reste donc toujours ouvert —
+      // c'est le repli proposé au client quand la boutique n'a rien activé.
+      if (!this.isCashOnDelivery(method)) {
+        const available = await this.storePayments.listPublic(storeId);
+        if (!available.some((m) => m.provider === method)) {
+          throw new BadRequestException(
+            `${storeNames.get(storeId) ?? 'Cette boutique'} n'accepte pas le moyen de paiement « ${method} »`,
+          );
+        }
+      }
+      chosenMethods.set(storeId, method);
+    }
 
-      for (const item of dto.items) {
-        if (item.variantId) {
+    const created = await this.db.transaction(async (tx) => {
+      const result: {
+        id: string;
+        orderNumber: string;
+        storeId: string;
+        storeName: string | null;
+        status: string;
+        total: string;
+        currency: string;
+        paymentMethod: string;
+      }[] = [];
+
+      for (const storeId of storeIds) {
+        const lines = groups.get(storeId)!;
+        const method = chosenMethods.get(storeId)!;
+        const isCod = this.isCashOnDelivery(method);
+
+        const groupSubtotal = lines.reduce(
+          (sum, l) => sum + Number(l.totalPrice),
+          0,
+        );
+        // Chaque boutique expédie séparément : le seuil de franchise
+        // s'apprécie par commande, pas sur le panier entier.
+        const shippingCost = groupSubtotal >= 10000 ? 0 : 1500;
+        const taxAmount = 0;
+
+        let discountAmount = 0;
+        let couponId: string | null = null;
+        if (coupon && coupon.storeId === storeId) {
+          couponId = coupon.id;
+          if (coupon.type === 'percentage') {
+            discountAmount = (groupSubtotal * Number(coupon.value)) / 100;
+            if (coupon.maxDiscount) {
+              discountAmount = Math.min(
+                discountAmount,
+                Number(coupon.maxDiscount),
+              );
+            }
+          } else if (coupon.type === 'fixed') {
+            discountAmount = Number(coupon.value);
+          } else if (coupon.type === 'free_shipping') {
+            discountAmount = shippingCost;
+          }
+        }
+
+        const groupTotal =
+          groupSubtotal + shippingCost + taxAmount - discountAmount;
+        const orderNumber = `EA-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+        const [inserted] = await tx
+          .insert(orders)
+          .values({
+            storeId,
+            customerId,
+            orderNumber,
+            status: isCod ? 'confirmed' : 'pending',
+            subtotal: groupSubtotal.toFixed(2),
+            shippingCost: shippingCost.toFixed(2),
+            taxAmount: taxAmount.toFixed(2),
+            discountAmount: discountAmount.toFixed(2),
+            total: groupTotal.toFixed(2),
+            currency: 'XOF',
+            couponId,
+            couponCode: couponId ? (dto.couponCode ?? null) : null,
+            shippingAddress: JSON.stringify(address),
+            notes: dto.notes ?? null,
+            idempotencyKey: dto.idempotencyKey
+              ? `${dto.idempotencyKey}:${storeId}`
+              : null,
+          })
+          .returning();
+
+        await tx
+          .insert(orderItems)
+          .values(lines.map((l) => ({ ...l, orderId: inserted.id })));
+
+        for (const line of lines) {
+          if (!line.variantId) continue;
           const decremented = await tx
             .update(productVariants)
             .set({
-              stock: sql`stock - ${item.quantity}`,
+              stock: sql`stock - ${line.quantity}`,
               updatedAt: new Date(),
             })
             .where(
               and(
-                eq(productVariants.id, item.variantId),
-                gte(productVariants.stock, item.quantity),
+                eq(productVariants.id, line.variantId),
+                gte(productVariants.stock, line.quantity),
               ),
             )
             .returning({ id: productVariants.id });
           if (decremented.length === 0) {
-            const variant = await tx
-              .select({ label: productVariants.label })
-              .from(productVariants)
-              .where(eq(productVariants.id, item.variantId))
-              .limit(1);
             throw new BadRequestException(
-              `Stock insuffisant pour ${variant[0]?.label ?? 'variante'}`,
+              `Stock insuffisant pour ${line.label}`,
             );
           }
         }
+
+        await tx.insert(orderStatusLog).values({
+          orderId: inserted.id,
+          storeId,
+          fromStatus: null,
+          toStatus: inserted.status,
+          reason: 'Commande créée',
+        });
+
+        await tx.insert(payments).values({
+          orderId: inserted.id,
+          storeId,
+          method,
+          status: 'pending',
+          amount: groupTotal.toFixed(2),
+          currency: 'XOF',
+          idempotencyKey: dto.idempotencyKey
+            ? `${dto.idempotencyKey}:${storeId}:payment`
+            : null,
+        });
+
+        result.push({
+          id: inserted.id,
+          orderNumber: inserted.orderNumber,
+          storeId,
+          storeName: storeNames.get(storeId) ?? null,
+          status: inserted.status,
+          total: inserted.total,
+          currency: inserted.currency,
+          paymentMethod: method,
+        });
       }
 
-      await tx.insert(orderStatusLog).values({
-        orderId: inserted.id,
-        storeId,
-        fromStatus: null,
-        toStatus: inserted.status,
-        reason: 'Commande créée',
-      });
-
-      await tx.insert(payments).values({
-        orderId: inserted.id,
-        storeId,
-        method: dto.paymentMethod,
-        status: 'pending',
-        amount: total.toFixed(2),
-        currency: 'XOF',
-        idempotencyKey: dto.idempotencyKey
-          ? `${dto.idempotencyKey}:payment`
-          : null,
-      });
-
+      const grandTotal = result.reduce((sum, o) => sum + Number(o.total), 0);
       await tx
         .update(customers)
         .set({
-          totalOrders: sql`total_orders + 1`,
-          totalSpent: sql`total_spent + ${total}`,
+          totalOrders: sql`total_orders + ${result.length}`,
+          totalSpent: sql`total_spent + ${grandTotal}`,
         })
         .where(eq(customers.id, customerId));
 
-      return inserted;
+      return result;
     });
 
+    const grandTotal = created.reduce((sum, o) => sum + Number(o.total), 0);
+    const allCod = created.every((o) => this.isCashOnDelivery(o.paymentMethod));
+
     return {
-      id: order.id,
-      orderNumber: order.orderNumber,
-      status: order.status,
-      total: order.total,
-      currency: order.currency,
-      message:
-        dto.paymentMethod === 'cod'
-          ? 'Commande confirmée. Paiement à la livraison.'
-          : 'Commande créée. Veuillez procéder au paiement.',
+      orders: created,
+      total: grandTotal.toFixed(2),
+      currency: 'XOF',
+      message: allCod
+        ? 'Commande confirmée. Paiement à la livraison.'
+        : 'Commande créée. Veuillez procéder au paiement.',
     };
+  }
+
+  /**
+   * Le paiement à la livraison est écrit `cod` par le catalogue historique et
+   * `cash_on_delivery` par la configuration des boutiques. Les deux désignent
+   * le même mode, et il est le seul à ne demander aucune configuration.
+   */
+  private isCashOnDelivery(method: string) {
+    return method === 'cod' || method === 'cash_on_delivery';
   }
 
   // ====== PROFILE ======
@@ -771,7 +926,7 @@ export class MobileService {
     else if (query.sort === 'priceHigh') orderBy = desc(products.price as any);
 
     const rows = await this.db
-      .select()
+      .select(PRODUCT_COLUMNS_WITH_STORE)
       .from(products)
       .where(and(...conditions))
       .limit(query.limit ?? 50)
@@ -818,7 +973,7 @@ export class MobileService {
 
   async getProductById(id: string) {
     const [p] = await this.db
-      .select()
+      .select(PRODUCT_COLUMNS_WITH_STORE)
       .from(products)
       .where(
         and(
@@ -1045,6 +1200,9 @@ export class MobileService {
       reviewCount: 0,
       soldCount: 0,
       categoryId: p.categoryId,
+      // Boutique d'origine : alimente l'insigne de provenance côté client.
+      storeId: p.storeId ?? null,
+      storeName: p.storeName ?? null,
       discountPercent: discount,
       freeShipping: false,
       isNewBuyerDeal: false,
@@ -1172,13 +1330,19 @@ export class MobileService {
 
   // ====== CONTENT (bridged from admin CMS tables) ======
 
-  async getBanners(screen?: string) {
+  /**
+   * Bannières publiques.
+   * `storeId` absent = bannières globales de l'Admin uniquement : sans le filtre
+   * `IS NULL`, les campagnes des boutiquiers remonteraient sur l'accueil.
+   */
+  async getBanners(screen?: string, storeId?: string) {
     const now = new Date();
     const conditions: any[] = [
       eq(banners.isActive, true),
       // Fenêtre de programmation : dates nullables = pas de contrainte
       sql`(${banners.startDate} IS NULL OR ${banners.startDate} <= ${now})`,
       sql`(${banners.endDate} IS NULL OR ${banners.endDate} >= ${now})`,
+      storeId ? eq(banners.storeId, storeId) : isNull(banners.storeId),
     ];
     const validScreens = ['home', 'store', 'feed', 'account'] as const;
     if (screen) {
@@ -1210,9 +1374,9 @@ export class MobileService {
     const rows = await this.db
       .select({
         post: feedPosts,
-        likes: sql<number>`(select count(*) from ${feedPostLikes} where ${feedPostLikes.postId} = ${feedPosts.id})`,
+        likes: sql<number>`(select count(*) from feed_post_likes fpl where fpl.post_id = feed_posts.id)`,
         likedByMe: customerId
-          ? sql<boolean>`exists(select 1 from ${feedPostLikes} where ${feedPostLikes.postId} = ${feedPosts.id} and ${feedPostLikes.customerId} = ${customerId})`
+          ? sql<boolean>`exists(select 1 from feed_post_likes fpl where fpl.post_id = feed_posts.id and fpl.customer_id = ${customerId})`
           : sql<boolean>`false`,
       })
       .from(feedPosts)
@@ -1308,11 +1472,12 @@ export class MobileService {
 
     const tagValue = `section:${section.id}`;
     let productList = await this.db
-      .select()
+      .select(PRODUCT_COLUMNS_WITH_STORE)
       .from(products)
       .where(
         and(
           eq(products.status, 'active'),
+          belongsToApprovedStore(products.storeId),
           sql`${products.tags} @> ARRAY[${tagValue}]::text[]`,
         ),
       )
@@ -1322,9 +1487,14 @@ export class MobileService {
     // Sans produits tagués : mêmes produits de secours que la section d'accueil
     if (productList.length === 0) {
       productList = await this.db
-        .select()
+        .select(PRODUCT_COLUMNS_WITH_STORE)
         .from(products)
-        .where(eq(products.status, 'active'))
+        .where(
+          and(
+            eq(products.status, 'active'),
+            belongsToApprovedStore(products.storeId),
+          ),
+        )
         .orderBy(desc(products.createdAt))
         .limit(30);
     }
@@ -1377,11 +1547,12 @@ export class MobileService {
         // Utiliser sql paramétré pour éviter toute injection
         const tagValue = `section:${section.id}`;
         const sectionProducts = await this.db
-          .select()
+          .select(PRODUCT_COLUMNS_WITH_STORE)
           .from(products)
           .where(
             and(
               eq(products.status, 'active'),
+              belongsToApprovedStore(products.storeId),
               sql`${products.tags} @> ARRAY[${tagValue}]::text[]`,
             ),
           )
@@ -1392,9 +1563,14 @@ export class MobileService {
           sectionProducts.length > 0
             ? sectionProducts
             : await this.db
-                .select()
+                .select(PRODUCT_COLUMNS_WITH_STORE)
                 .from(products)
-                .where(eq(products.status, 'active'))
+                .where(
+                  and(
+                    eq(products.status, 'active'),
+                    belongsToApprovedStore(products.storeId),
+                  ),
+                )
                 .orderBy(desc(products.createdAt))
                 .limit(6);
 
@@ -1557,15 +1733,18 @@ export class MobileService {
       (s) => (s.data as any)?.cartRecommendations === true,
     );
 
-    let productList: (typeof products.$inferSelect)[] = [];
+    let productList: (typeof products.$inferSelect & {
+      storeName: string | null;
+    })[] = [];
     if (target) {
       const tagValue = `section:${target.id}`;
       productList = await this.db
-        .select()
+        .select(PRODUCT_COLUMNS_WITH_STORE)
         .from(products)
         .where(
           and(
             eq(products.status, 'active'),
+            belongsToApprovedStore(products.storeId),
             sql`${products.tags} @> ARRAY[${tagValue}]::text[]`,
           ),
         )
@@ -1574,9 +1753,14 @@ export class MobileService {
     }
     if (productList.length === 0) {
       productList = await this.db
-        .select()
+        .select(PRODUCT_COLUMNS_WITH_STORE)
         .from(products)
-        .where(eq(products.status, 'active'))
+        .where(
+          and(
+            eq(products.status, 'active'),
+            belongsToApprovedStore(products.storeId),
+          ),
+        )
         .orderBy(desc(products.createdAt))
         .limit(12);
     }
@@ -1805,11 +1989,12 @@ export class MobileService {
     )`;
 
     const rows = await this.db
-      .select()
+      .select(PRODUCT_COLUMNS_WITH_STORE)
       .from(products)
       .where(
         and(
           eq(products.status, 'active'),
+          belongsToApprovedStore(products.storeId),
           sql`(${tokenConditions.reduce((a, b) => sql`${a} OR ${b}`)})`,
         ),
       )
@@ -2036,6 +2221,10 @@ export class MobileService {
   // ====== STORES (boutiques publiques) ======
 
   /** Colonnes calculées communes aux cartes et au détail boutique. */
+  // Les références à la table externe (stores.id) sont écrites en SQL brut et
+  // non interpolées : Drizzle rendrait `stores.id` en `"id"` non qualifié, qui
+  // résoudrait alors vers la colonne `id` de la sous-requête au lieu de celle
+  // de la requête englobante — les compteurs remontaient 0 en silence.
   private storeCardColumns(customerId?: string) {
     return {
       id: stores.id,
@@ -2045,14 +2234,14 @@ export class MobileService {
       city: stores.city,
       logoUrl: sql<
         string | null
-      >`(select sm.url from store_media sm where sm.store_id = ${stores.id} and sm.type = 'logo' and sm.is_active = true limit 1)`,
+      >`(select sm.url from store_media sm where sm.store_id = stores.id and sm.type = 'logo' and sm.is_active = true limit 1)`,
       coverUrl: sql<
         string | null
-      >`(select sm.url from store_media sm where sm.store_id = ${stores.id} and sm.type = 'cover' and sm.is_active = true limit 1)`,
-      followersCount: sql<number>`(select count(*)::int from ${storeFollows} where ${storeFollows.storeId} = ${stores.id})`,
-      productCount: sql<number>`(select count(*)::int from ${products} where ${products.storeId} = ${stores.id} and ${products.status} = 'active')`,
+      >`(select sm.url from store_media sm where sm.store_id = stores.id and sm.type = 'cover' and sm.is_active = true limit 1)`,
+      followersCount: sql<number>`(select count(*)::int from store_follows sf where sf.store_id = stores.id)`,
+      productCount: sql<number>`(select count(*)::int from products p where p.store_id = stores.id and p.status = 'active')`,
       likedByMe: customerId
-        ? sql<boolean>`exists (select 1 from ${storeFollows} where ${storeFollows.storeId} = ${stores.id} and ${storeFollows.customerId} = ${customerId})`
+        ? sql<boolean>`exists (select 1 from store_follows sf where sf.store_id = stores.id and sf.customer_id = ${customerId})`
         : sql<boolean>`false`,
     };
   }
@@ -2117,6 +2306,57 @@ export class MobileService {
     return rows.map((row) => this.toStoreCard(row));
   }
 
+  /**
+   * Vitrine de la liste des boutiques : sections composées par l'admin central,
+   * chacune avec ses boutiques déjà hydratées au format carte.
+   * Les sections vides sont écartées — un titre sans boutique n'a rien à dire.
+   */
+  async getStoreGroups(customerId?: string) {
+    const groups = await this.db
+      .select({
+        id: storeGroups.id,
+        title: storeGroups.title,
+        subtitle: storeGroups.subtitle,
+        icon: storeGroups.icon,
+      })
+      .from(storeGroups)
+      .where(eq(storeGroups.isActive, true))
+      .orderBy(storeGroups.sortOrder, storeGroups.createdAt);
+    if (!groups.length) return [];
+
+    // Une seule requête pour toutes les sections, puis répartition en mémoire.
+    // Le filtre sur le statut garantit qu'une boutique suspendue disparaît de
+    // la vitrine sans que l'admin ait à la retirer de la section à la main.
+    const rows = await this.db
+      .select({
+        groupId: storeGroupItems.groupId,
+        ...this.storeCardColumns(customerId),
+      })
+      .from(storeGroupItems)
+      .innerJoin(stores, eq(storeGroupItems.storeId, stores.id))
+      .where(
+        and(
+          inArray(
+            storeGroupItems.groupId,
+            groups.map((g) => g.id),
+          ),
+          eq(stores.status, APPROVED_STORE),
+        ),
+      )
+      .orderBy(storeGroupItems.sortOrder);
+
+    const byGroup = new Map<string, any[]>();
+    for (const row of rows) {
+      const list = byGroup.get(row.groupId) ?? [];
+      list.push(this.toStoreCard(row));
+      byGroup.set(row.groupId, list);
+    }
+
+    return groups
+      .map((g) => ({ ...g, stores: byGroup.get(g.id) ?? [] }))
+      .filter((g) => g.stores.length > 0);
+  }
+
   /** Détail d'une boutique publique. 404 si elle n'est pas approuvée. */
   async getStoreById(storeId: string, customerId?: string) {
     const [row] = await this.db
@@ -2171,6 +2411,85 @@ export class MobileService {
       icon: this.categoryIcon(c.name),
       image: c.imageUrl ?? undefined,
     }));
+  }
+
+  async getStoreBanners(storeId: string) {
+    await this.assertApprovedStore(storeId);
+    return this.getBanners(undefined, storeId);
+  }
+
+  /**
+   * Moyens de paiement acceptés par la boutique. Délégué au service qui les
+   * possède, pour que la règle de visibilité (`isEnabled`, `isPublic`, pays)
+   * n'existe qu'à un seul endroit.
+   */
+  async getStorePaymentMethods(storeId: string, country?: string) {
+    await this.assertApprovedStore(storeId);
+    return this.storePayments.listPublic(storeId, country);
+  }
+
+  /**
+   * Sections de catalogue composées par le boutiquier, avec leurs produits
+   * déjà hydratés : le mobile n'a qu'à choisir le rendu selon `layout`.
+   * Les sections vides sont écartées — un titre sans produit n'a rien à dire.
+   */
+  async getStoreSections(storeId: string) {
+    await this.assertApprovedStore(storeId);
+    const sections = await this.db
+      .select({
+        id: storeSections.id,
+        title: storeSections.title,
+        subtitle: storeSections.subtitle,
+        layout: storeSections.layout,
+      })
+      .from(storeSections)
+      .where(
+        and(
+          eq(storeSections.storeId, storeId),
+          eq(storeSections.isActive, true),
+        ),
+      )
+      .orderBy(storeSections.sortOrder, storeSections.createdAt);
+    if (!sections.length) return [];
+
+    const items = await this.db
+      .select({
+        sectionId: storeSectionItems.sectionId,
+        productId: storeSectionItems.productId,
+        sortOrder: storeSectionItems.sortOrder,
+      })
+      .from(storeSectionItems)
+      .innerJoin(products, eq(storeSectionItems.productId, products.id))
+      .where(
+        and(
+          inArray(
+            storeSectionItems.sectionId,
+            sections.map((s) => s.id),
+          ),
+          // Un produit retiré de la vente ne doit pas rester en vitrine
+          eq(products.status, 'active'),
+        ),
+      )
+      .orderBy(storeSectionItems.sortOrder);
+    if (!items.length) return [];
+
+    // Une seule requête produits pour toutes les sections, puis répartition :
+    // un produit peut apparaître dans plusieurs sections.
+    const hydrated = await this.getProducts({
+      storeId,
+      limit: items.length,
+    });
+    const byId = new Map(hydrated.map((p: any) => [p.id, p]));
+
+    return sections
+      .map((s) => ({
+        ...s,
+        products: items
+          .filter((i) => i.sectionId === s.id)
+          .map((i) => byId.get(i.productId))
+          .filter(Boolean),
+      }))
+      .filter((s) => s.products.length > 0);
   }
 
   async getStoreFollowStatus(storeId: string, customerId?: string) {
@@ -2232,8 +2551,24 @@ export class MobileService {
 
   async getCustomerConversations(customerId: string) {
     const convs = await this.db
-      .select()
+      .select({
+        id: conversations.id,
+        storeId: conversations.storeId,
+        orderId: conversations.orderId,
+        subject: conversations.subject,
+        storeName: stores.name,
+        storeLogo: sql<
+          string | null
+        >`(select sm.url from store_media sm where sm.store_id = ${conversations.storeId} and sm.type = 'logo' and sm.is_active = true limit 1)`,
+        // `conversations.order_id` est un `text` sans clé étrangère : on
+        // compare donc sur `o.id::text`, jamais l'inverse — un id non-uuid
+        // ferait échouer le cast de toute la requête.
+        orderNumber: sql<
+          string | null
+        >`(select o.order_number from orders o where o.id::text = ${conversations.orderId} limit 1)`,
+      })
       .from(conversations)
+      .leftJoin(stores, eq(stores.id, conversations.storeId))
       .where(eq(conversations.customerId, customerId))
       .orderBy(desc(conversations.updatedAt));
 
@@ -2259,9 +2594,17 @@ export class MobileService {
 
         return {
           id: conv.id,
-          name: conv.subject ?? 'Conversation',
-          avatar: '',
+          // Titre = la boutique : le client doit savoir avec qui il parle.
+          // Le sujet (« Commande N ») descend en sous-titre côté mobile.
+          name: conv.storeName ?? conv.subject ?? 'Conversation',
+          avatar: conv.storeLogo ?? '',
           online: false,
+          storeId: conv.storeId,
+          storeName: conv.storeName ?? null,
+          storeLogo: conv.storeLogo ?? null,
+          orderId: conv.orderId ?? null,
+          orderRef: conv.orderNumber ?? null,
+          subject: conv.subject ?? null,
           // Aperçu lisible pour les médias (jamais l'URL/nom de fichier brut)
           lastMessage: lastMsg
             ? lastMsg.deletedAt

@@ -5,9 +5,13 @@ import type {
   StoreQuery,
   StoreProductQuery,
   StoreCategory,
+  StoreSection,
+  StoreGroup,
+  StorePaymentMethod,
 } from "../StoreDataSource";
-import type { Product } from "@/types";
+import type { Banner, Product } from "@/types";
 import { apiAdapter } from "@/infrastructure/api/apiAdapter";
+import { resolveMediaUrl } from "@/utils/resolveMediaUrl";
 
 export class ApiStoreDataSource implements StoreDataSource {
   async getStores(query?: StoreQuery): Promise<StoreCard[]> {
@@ -17,6 +21,10 @@ export class ApiStoreDataSource implements StoreDataSource {
     if (query?.search) params.set('search', query.search);
     const qs = params.toString();
     return apiAdapter.get(`/mobile/stores${qs ? `?${qs}` : ''}`);
+  }
+
+  async getStoreGroups(): Promise<StoreGroup[]> {
+    return apiAdapter.get('/mobile/store-groups');
   }
 
   async getStoreById(id: string): Promise<StoreDetail> {
@@ -38,6 +46,31 @@ export class ApiStoreDataSource implements StoreDataSource {
 
   async getStoreCategories(id: string): Promise<StoreCategory[]> {
     return apiAdapter.get(`/mobile/stores/${id}/categories`);
+  }
+
+  async getStoreBanners(id: string): Promise<Banner[]> {
+    const raw = await apiAdapter.get(`/mobile/stores/${id}/banners`);
+    // Les images uploadées via l'admin ont une URL relative (/uploads/banners/…) :
+    // React Native ne peut pas les charger sans l'origine du serveur
+    return (raw as any[]).map((b) => ({
+      ...b,
+      imageUrl: resolveMediaUrl(b.imageUrl) ?? b.imageUrl,
+    }));
+  }
+
+  async getStoreSections(id: string): Promise<StoreSection[]> {
+    return apiAdapter.get(`/mobile/stores/${id}/sections`);
+  }
+
+  async getStorePaymentMethods(id: string): Promise<StorePaymentMethod[]> {
+    const raw = await apiAdapter.get(`/mobile/stores/${id}/payment-methods`);
+    // Mêmes contraintes que les bannières : les logos uploadés côté admin ont
+    // une URL relative que React Native ne sait pas résoudre seul.
+    return (raw as any[]).map((m) => ({
+      ...m,
+      logoUrl: resolveMediaUrl(m.logoUrl) ?? m.logoUrl,
+      iconUrl: resolveMediaUrl(m.iconUrl) ?? m.iconUrl,
+    }));
   }
 
   async getFollowedStores(): Promise<StoreCard[]> {

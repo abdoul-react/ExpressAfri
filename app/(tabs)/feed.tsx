@@ -16,7 +16,7 @@ import { useAuthStore } from "@/store/authStore";
 import type { FeedPost } from "@/types";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -86,7 +86,12 @@ export default function FeedScreen() {
               <Text style={styles.emptyFeedText}>{t("feed.empty", "Rien à afficher pour le moment")}</Text>
             </View>
           ) : (
-            <MasonryFeed left={left} right={right} onOpenMedia={setViewerItem} />
+            <MasonryGrid
+              items={posts}
+              estimateHeight={estimatePostHeight}
+              keyExtractor={(p) => p.id}
+              renderItem={(p) => <PostCard post={p} onOpenMedia={setViewerItem} />}
+            />
           )
         ) : (
           <Subscriptions />
@@ -95,29 +100,6 @@ export default function FeedScreen() {
 
       {/* Lecture plein écran (vidéos et photos du fil) */}
       <MediaViewer item={viewerItem} onClose={() => setViewerItem(null)} />
-    </View>
-  );
-}
-
-function MasonryFeed({
-  left,
-  right,
-  onOpenMedia,
-}: {
-  left: FeedPost[];
-  right: FeedPost[];
-  onOpenMedia: (item: MediaViewerItem) => void;
-}) {
-  const styles = useThemedStyles(makeStyles);
-  return (
-    <View style={styles.masonry}>
-      {[left, right].map((col, ci) => (
-        <View key={ci} style={styles.col}>
-          {col.map((post) => (
-            <PostCard key={post.id} post={post} onOpenMedia={onOpenMedia} />
-          ))}
-        </View>
-      ))}
     </View>
   );
 }
@@ -374,12 +356,6 @@ const makeStyles = (colors: Colors) =>
       paddingVertical: spacing.xxl * 2,
     },
     emptyFeedText: { fontSize: fontSize.md, color: colors.textMuted },
-    masonry: {
-      flexDirection: "row",
-      paddingHorizontal: spacing.sm,
-      gap: spacing.sm,
-    },
-    col: { flex: 1, gap: spacing.sm, paddingTop: spacing.sm },
     postCard: {
       backgroundColor: colors.surface,
       borderRadius: radius.md,

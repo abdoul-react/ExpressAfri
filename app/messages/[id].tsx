@@ -391,13 +391,22 @@ export default function ChatScreen() {
         onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
       >
         {conversation.orderRef && (
-          <View style={styles.orderCard}>
-            <Image source={{ uri: conversation.orderImage }} style={styles.orderImg} />
+          <Pressable
+            style={styles.orderCard}
+            // Sans `orderId` (conversation libre, ou commande supprimée) le
+            // bandeau reste informatif : on ne navigue pas vers une page vide.
+            disabled={!conversation.orderId}
+            onPress={() => router.push(`/orders/${conversation.orderId}`)}
+          >
+            <Image source={{ uri: conversation.orderImage ?? undefined }} style={styles.orderImg} />
             <View style={{ flex: 1 }}>
               <Text style={styles.orderLabel}>{t("messages.aboutOrder")} #{conversation.orderRef}</Text>
               <Text style={styles.orderProduct} numberOfLines={1}>{conversation.orderProduct}</Text>
             </View>
-          </View>
+            {conversation.orderId ? (
+              <Icon name="chevronRight" size={18} color={colors.textMuted} />
+            ) : null}
+          </Pressable>
         )}
 
         {allMessages.map((msg) => (

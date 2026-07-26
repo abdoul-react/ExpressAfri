@@ -8,6 +8,7 @@ import { MobileService } from './mobile.service';
 import { CustomerJwtStrategy } from './customer-jwt.strategy';
 import { CustomersModule } from '../customers/customers.module';
 import { PushModule } from '../push/push.module';
+import { StoresModule } from '../stores/stores.module';
 import { ImageVisionService } from '../../common/vision/image-vision.service';
 
 @Module({
@@ -23,6 +24,7 @@ import { ImageVisionService } from '../../common/vision/image-vision.service';
     MulterModule.register({}),
     CustomersModule,
     PushModule,
+    StoresModule,
   ],
   controllers: [MobileController],
   providers: [MobileService, CustomerJwtStrategy, ImageVisionService],

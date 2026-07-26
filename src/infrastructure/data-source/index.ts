@@ -26,6 +26,8 @@ export type {
   StoreQuery,
   StoreProductQuery,
   StoreCategory,
+  StoreGroup,
+  StorePaymentMethod,
 } from "./StoreDataSource";
 
 export const productDataSource = new ApiProductDataSource();

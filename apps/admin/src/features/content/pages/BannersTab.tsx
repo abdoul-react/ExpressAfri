@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Image, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Image, Pencil, Plus, Store, Trash2 } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -23,8 +23,13 @@ import { adminContentService } from '../services/adminContentService'
 import type { CreateBannerInput, Banner } from '@/infrastructure/data-source/AdminContentDataSource'
 import { resolveAdminMediaUrl } from '@/lib/resolveAdminMediaUrl'
 import { formatDate } from '@/lib/format'
+import { useAdminStores } from '@/features/stores'
+import { useAdminAuth } from '@/features/auth'
 
 const SCREEN_LABELS: Record<string, string> = { home: 'Accueil', store: 'Boutique', feed: 'Feed', account: 'Compte' }
+
+/** Filtre « bannières globales » : valeur sentinelle comprise par l'API. */
+const GLOBAL_BANNER_SCOPE = 'global'
 
 const SCREEN_OPTIONS = [
   { value: 'home', label: 'Accueil' },
@@ -50,12 +55,34 @@ function toLocalDateInput(iso?: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+/** Badge d'appartenance : distingue une bannière globale d'une campagne boutique. */
+function StoreTag({ storeId, label }: { storeId?: string | null; label: string }) {
+  const isGlobal = !storeId
+  return (
+    <span
+      className={`inline-flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+        isGlobal
+          ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+          : 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+      }`}
+    >
+      <Store className="h-3 w-3" />
+      {label}
+    </span>
+  )
+}
+
 interface BannerFormProps {
   initial?: Banner | null
+  /** Boutique préremplie à la création (gérant verrouillé, ou filtre actif). */
+  defaultStoreId?: string
+  /** Un gérant ne peut pas choisir la boutique : le backend force la sienne. */
+  lockStore?: boolean
+  storeOptions: { value: string; label: string }[]
   onClose: () => void
 }
 
-function BannerFormModal({ initial, onClose }: BannerFormProps) {
+function BannerFormModal({ initial, defaultStoreId, lockStore, storeOptions, onClose }: BannerFormProps) {
   const createBanner = useCreateBanner()
   const updateBanner = useUpdateBanner(initial?.id ?? '')
   const [title, setTitle] = useState(initial?.title ?? '')
@@ -71,6 +98,7 @@ function BannerFormModal({ initial, onClose }: BannerFormProps) {
   const [startDate, setStartDate] = useState(toLocalDateInput(initial?.startDate))
   const [endDate, setEndDate] = useState(toLocalDateInput(initial?.endDate))
   const [isActive, setIsActive] = useState(initial?.isActive ?? true)
+  const [storeId, setStoreId] = useState(initial?.storeId ?? defaultStoreId ?? '')
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -126,6 +154,9 @@ function BannerFormModal({ initial, onClose }: BannerFormProps) {
         })
       } else {
         const data: CreateBannerInput = {
+          // Vide = bannière globale. À l'update on ne l'envoie pas : le backend
+          // interdit de déplacer une bannière d'une boutique à une autre.
+          storeId: storeId || null,
           title: title.trim(),
           subtitle: subtitle.trim() || undefined,
           description: description.trim() || undefined,
@@ -175,6 +206,23 @@ function BannerFormModal({ initial, onClose }: BannerFormProps) {
       )}
       <form id="banner-form" onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
+          {!lockStore && !initial && (
+            <div className="col-span-2">
+              <FormField
+                label="Boutique"
+                htmlFor="banner-store"
+                hint="Vide = bannière globale, visible sur tous les écrans publics"
+              >
+                <Select
+                  id="banner-store"
+                  value={storeId}
+                  onChange={setStoreId}
+                  options={storeOptions}
+                  placeholder="Bannière globale"
+                />
+              </FormField>
+            </div>
+          )}
           <div className="col-span-2">
             <FormField label="Titre" htmlFor="banner-title" required>
               <Input id="banner-title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -267,11 +315,26 @@ function BannerFormModal({ initial, onClose }: BannerFormProps) {
 }
 
 export function BannersTab() {
-  const { data: banners, isLoading, isError } = useAdminBanners()
+  const { admin } = useAdminAuth()
+  // Un gérant est verrouillé sur sa boutique ; l'admin central peut filtrer.
+  const managerStoreId = admin?.storeId ?? undefined
+  const [storeFilter, setStoreFilter] = useState('')
+
+  const { data: banners, isLoading, isError } = useAdminBanners(
+    managerStoreId ? undefined : storeFilter ? { storeId: storeFilter } : undefined,
+  )
+  const { data: storeList } = useAdminStores({ limit: 200 })
   const deleteBanner = useDeleteBanner()
   const [showForm, setShowForm] = useState(false)
   const [editingBanner, setEditingBanner] = useState<Banner | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<Banner | null>(null)
+
+  const storeNameById = new Map<string, string>(
+    (storeList?.data ?? []).map((s) => [s.id, s.name]),
+  )
+  const storeLabel = (id?: string | null) =>
+    !id ? 'Globale' : (storeNameById.get(id) ?? 'Boutique inconnue')
+  const storeOptions = (storeList?.data ?? []).map((s) => ({ value: s.id, label: s.name }))
 
   if (isLoading) return <LoadingBlock label="Chargement..." />
   if (isError) return <p className="text-sm text-red-600 dark:text-red-400">Erreur de chargement</p>
@@ -288,9 +351,23 @@ export function BannersTab() {
               {orderedBanners.length} bannière{orderedBanners.length > 1 ? 's' : ''} — affichées dans l'application mobile.
             </CardDescription>
           </div>
-          <Button leftIcon={Plus} onClick={() => { setEditingBanner(null); setShowForm(true) }}>
-            Nouvelle bannière
-          </Button>
+          <div className="flex items-center gap-2">
+            {!managerStoreId && (
+              <Select
+                value={storeFilter}
+                onChange={setStoreFilter}
+                options={[
+                  { value: GLOBAL_BANNER_SCOPE, label: 'Bannières globales' },
+                  ...storeOptions,
+                ]}
+                placeholder="Toutes les bannières"
+                className="w-56"
+              />
+            )}
+            <Button leftIcon={Plus} onClick={() => { setEditingBanner(null); setShowForm(true) }}>
+              Nouvelle bannière
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {orderedBanners.length === 0 ? (
@@ -333,9 +410,12 @@ export function BannersTab() {
                               <p className="mt-1 line-clamp-2 text-sm text-gray-500 dark:text-gray-400">{banner.description}</p>
                             )}
                           </div>
-                          <Badge variant={active ? 'success' : 'neutral'} dot>
-                            {active ? 'Active' : 'Inactive'}
-                          </Badge>
+                          <div className="flex flex-shrink-0 items-center gap-2">
+                            <StoreTag storeId={banner.storeId} label={storeLabel(banner.storeId)} />
+                            <Badge variant={active ? 'success' : 'neutral'} dot>
+                              {active ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </div>
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                           <Badge variant="neutral" size="sm">{SCREEN_LABELS[banner.screen] ?? banner.screen}</Badge>
@@ -378,6 +458,12 @@ export function BannersTab() {
       {showForm && (
         <BannerFormModal
           initial={editingBanner}
+          defaultStoreId={
+            managerStoreId ??
+            (storeFilter && storeFilter !== GLOBAL_BANNER_SCOPE ? storeFilter : undefined)
+          }
+          lockStore={!!managerStoreId}
+          storeOptions={storeOptions}
           onClose={() => { setShowForm(false); setEditingBanner(null) }}
         />
       )}

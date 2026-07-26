@@ -1,4 +1,4 @@
-import type { AdminStoreDataSource, AdminStore, StoreQueryParams, PaginatedResult, UpdateKycPayload, UpdateDocumentPayload, UpdateCommissionPayload, UpdateStorePayload, StoreManager, CreateManagerPayload, SetManagerActivePayload, ResetManagerPasswordPayload, StoreMedia, StoreMediaType } from '../AdminStoreDataSource'
+import type { AdminStoreDataSource, AdminStore, StoreQueryParams, PaginatedResult, UpdateKycPayload, UpdateDocumentPayload, UpdateCommissionPayload, UpdateStorePayload, StoreManager, CreateManagerPayload, SetManagerActivePayload, ResetManagerPasswordPayload, StoreMedia, StoreMediaType, StoreSection, StoreSectionItem, CreateSectionPayload, UpdateSectionPayload, StoreGroup, StoreGroupItem, CreateStoreGroupPayload, UpdateStoreGroupPayload, PaymentProvider, StorePaymentMethod, CreateStorePaymentMethodPayload, UpdateStorePaymentMethodPayload, PaymentMethodValidation } from '../AdminStoreDataSource'
 import api from '@/lib/api'
 
 function toStore(raw: any): AdminStore {
@@ -126,5 +126,127 @@ export class ApiAdminStoreDataSource implements AdminStoreDataSource {
 
   async deleteMedia(storeId: string, mediaId: string): Promise<void> {
     await api.delete(`/stores/${storeId}/media/${mediaId}`)
+  }
+
+  async listSections(storeId: string): Promise<StoreSection[]> {
+    const { data } = await api.get(`/stores/${storeId}/sections`)
+    return data
+  }
+
+  async createSection(storeId: string, payload: CreateSectionPayload): Promise<StoreSection> {
+    const { data } = await api.post(`/stores/${storeId}/sections`, payload)
+    return data
+  }
+
+  async updateSection(
+    storeId: string,
+    sectionId: string,
+    payload: UpdateSectionPayload,
+  ): Promise<StoreSection> {
+    const { data } = await api.put(`/stores/${storeId}/sections/${sectionId}`, payload)
+    return data
+  }
+
+  async deleteSection(storeId: string, sectionId: string): Promise<void> {
+    await api.delete(`/stores/${storeId}/sections/${sectionId}`)
+  }
+
+  async reorderSections(storeId: string, ids: string[]): Promise<void> {
+    await api.put(`/stores/${storeId}/sections/reorder`, { ids })
+  }
+
+  async listSectionItems(storeId: string, sectionId: string): Promise<StoreSectionItem[]> {
+    const { data } = await api.get(`/stores/${storeId}/sections/${sectionId}/items`)
+    return data
+  }
+
+  async addSectionItems(storeId: string, sectionId: string, productIds: string[]): Promise<void> {
+    await api.post(`/stores/${storeId}/sections/${sectionId}/items`, { productIds })
+  }
+
+  async removeSectionItem(storeId: string, sectionId: string, itemId: string): Promise<void> {
+    await api.delete(`/stores/${storeId}/sections/${sectionId}/items/${itemId}`)
+  }
+
+  async reorderSectionItems(storeId: string, sectionId: string, ids: string[]): Promise<void> {
+    await api.put(`/stores/${storeId}/sections/${sectionId}/items/reorder`, { ids })
+  }
+
+  // ─── Sections de la liste des boutiques (vitrine, admin central) ───────────
+  // Routes sans storeId : ces sections sont transverses à la plateforme.
+
+  async listStoreGroups(): Promise<StoreGroup[]> {
+    const { data } = await api.get('/store-groups')
+    return data
+  }
+
+  async createStoreGroup(payload: CreateStoreGroupPayload): Promise<StoreGroup> {
+    const { data } = await api.post('/store-groups', payload)
+    return data
+  }
+
+  async updateStoreGroup(groupId: string, payload: UpdateStoreGroupPayload): Promise<StoreGroup> {
+    const { data } = await api.put(`/store-groups/${groupId}`, payload)
+    return data
+  }
+
+  async deleteStoreGroup(groupId: string): Promise<void> {
+    await api.delete(`/store-groups/${groupId}`)
+  }
+
+  async reorderStoreGroups(ids: string[]): Promise<void> {
+    await api.put('/store-groups/reorder', { ids })
+  }
+
+  async listStoreGroupItems(groupId: string): Promise<StoreGroupItem[]> {
+    const { data } = await api.get(`/store-groups/${groupId}/stores`)
+    return data
+  }
+
+  async addStoreGroupItems(groupId: string, storeIds: string[]): Promise<void> {
+    await api.post(`/store-groups/${groupId}/stores`, { storeIds })
+  }
+
+  async removeStoreGroupItem(groupId: string, itemId: string): Promise<void> {
+    await api.delete(`/store-groups/${groupId}/stores/${itemId}`)
+  }
+
+  async reorderStoreGroupItems(groupId: string, ids: string[]): Promise<void> {
+    await api.put(`/store-groups/${groupId}/stores/reorder`, { ids })
+  }
+
+  // ─── Moyens de paiement (cloisonnés au boutiquier) ─────────────────────────
+
+  async listPaymentProviders(storeId: string): Promise<PaymentProvider[]> {
+    const { data } = await api.get(`/stores/${storeId}/payment-methods/catalog`)
+    return data
+  }
+
+  async listPaymentMethods(storeId: string): Promise<StorePaymentMethod[]> {
+    const { data } = await api.get(`/stores/${storeId}/payment-methods`)
+    return data
+  }
+
+  async createPaymentMethod(storeId: string, payload: CreateStorePaymentMethodPayload): Promise<StorePaymentMethod> {
+    const { data } = await api.post(`/stores/${storeId}/payment-methods`, payload)
+    return data
+  }
+
+  async updatePaymentMethod(storeId: string, methodId: string, payload: UpdateStorePaymentMethodPayload): Promise<StorePaymentMethod> {
+    const { data } = await api.put(`/stores/${storeId}/payment-methods/${methodId}`, payload)
+    return data
+  }
+
+  async deletePaymentMethod(storeId: string, methodId: string): Promise<void> {
+    await api.delete(`/stores/${storeId}/payment-methods/${methodId}`)
+  }
+
+  async reorderPaymentMethods(storeId: string, ids: string[]): Promise<void> {
+    await api.put(`/stores/${storeId}/payment-methods/reorder`, { ids })
+  }
+
+  async validatePaymentMethod(storeId: string, methodId: string): Promise<PaymentMethodValidation> {
+    const { data } = await api.post(`/stores/${storeId}/payment-methods/${methodId}/validate`)
+    return data
   }
 }

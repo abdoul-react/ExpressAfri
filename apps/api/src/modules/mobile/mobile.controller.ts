@@ -516,6 +516,15 @@ export class MobileController {
     return this.service.getFollowedStores(user.id);
   }
 
+  // Idem : déclarée avant stores/:id. Vitrine composée par l'admin central —
+  // regroupe les BOUTIQUES par thème, à ne pas confondre avec stores/:id/sections
+  // qui regroupe les PRODUITS d'une boutique.
+  @Get('store-groups')
+  @ApiOperation({ summary: 'Sections de la liste des boutiques' })
+  async storeGroups(@CurrentUser() user: any) {
+    return this.service.getStoreGroups(user?.id);
+  }
+
   @Get('stores/:id')
   @ApiOperation({ summary: "Détail d'une boutique approuvée" })
   async storeById(@CurrentUser() user: any, @Param('id') id: string) {
@@ -541,6 +550,30 @@ export class MobileController {
   @ApiOperation({ summary: "Catégories actives d'une boutique" })
   async storeCategories(@Param('id') id: string) {
     return this.service.getStoreCategories(id);
+  }
+
+  @Public()
+  @Get('stores/:id/sections')
+  @ApiOperation({ summary: "Sections de catalogue d'une boutique" })
+  async storeSections(@Param('id') id: string) {
+    return this.service.getStoreSections(id);
+  }
+
+  @Public()
+  @Get('stores/:id/banners')
+  @ApiOperation({ summary: "Bannières publicitaires actives d'une boutique" })
+  async storeBanners(@Param('id') id: string) {
+    return this.service.getStoreBanners(id);
+  }
+
+  // Vue client : seulement les méthodes activées et publiques de CETTE
+  // boutique. Aucune clé ni secret n'est projeté — le service ne sélectionne
+  // même pas les colonnes de configuration.
+  @Public()
+  @Get('stores/:id/payment-methods')
+  @ApiOperation({ summary: "Moyens de paiement acceptés par une boutique" })
+  async storePaymentMethods(@Param('id') id: string, @Query() query: any) {
+    return this.service.getStorePaymentMethods(id, query?.country);
   }
 
   @Get('stores/:id/follow-status')

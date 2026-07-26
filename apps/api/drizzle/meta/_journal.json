@@ -166,7 +166,7 @@
     {
       "idx": 24,
       "version": "7",
-      "when": 1784900000000,
+      "when": 1784790000000,
       "tag": "0024_otp_hash_and_ip",
       "breakpoints": true
     },
@@ -252,6 +252,34 @@
       "version": "7",
       "when": 1784890200000,
       "tag": "0036_store_media",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1784890300000,
+      "tag": "0037_store_banners",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1784890400000,
+      "tag": "0038_store_sections",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1784890500000,
+      "tag": "0039_store_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1784890600000,
+      "tag": "0040_store_payment_methods",
       "breakpoints": true
     }
   ]

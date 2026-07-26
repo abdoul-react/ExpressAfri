@@ -20,6 +20,7 @@ type Props = {
   onSubmit?: () => void;
   onCameraPress?: () => void;
   showCamera?: boolean;
+  autoFocus?: boolean;
 };
 
 export function SearchBar({
@@ -31,6 +32,7 @@ export function SearchBar({
   onSubmit,
   onCameraPress,
   showCamera = true,
+  autoFocus = true,
 }: Props) {
   const styles = useThemedStyles(makeStyles);
   const colors = useColors();
@@ -54,7 +56,7 @@ export function SearchBar({
           onChangeText={onChangeText}
           onSubmitEditing={onSubmit}
           returnKeyType="search"
-          autoFocus
+          autoFocus={autoFocus}
         />
       ) : (
         <Text style={styles.placeholder} numberOfLines={1}>

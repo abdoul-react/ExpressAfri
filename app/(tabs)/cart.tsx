@@ -15,7 +15,7 @@ import {
   useThemedStyles,
   type Colors,
 } from "@/design-system";
-import { useCartData, useCartRecommendations } from "@/features/cart";
+import { useCartData, useCartRecommendations, useCartStoreGroups } from "@/features/cart";
 import { useAppSettings } from "@/features/content";
 import { usePrice } from "@/hooks/usePrice";
 import { useWishlistStore } from "@/store/wishlistStore";
@@ -55,6 +55,12 @@ export default function CartScreen() {
   const allSelected = items.length > 0 && items.every((i) => i.selected);
   const progress = Math.min(1, subtotal / FREE_SHIP_THRESHOLD_XOF);
   const remaining = Math.max(0, FREE_SHIP_THRESHOLD_XOF - subtotal);
+
+  /*
+    Le panier est multi-boutiques : chaque groupe deviendra une commande
+    distincte, avec ses propres moyens de paiement.
+  */
+  const groups = useCartStoreGroups(items);
 
   if (isLoading) {
     return (
@@ -120,55 +126,83 @@ export default function CartScreen() {
         contentContainerStyle={{ paddingBottom: 116 + insets.bottom }}
         showsVerticalScrollIndicator={false}
       >
-        {items.map((item) => (
-          <View
-            key={item.productId + (item.variantLabel ?? "")}
-            style={styles.item}
-          >
-            <Pressable
-              onPress={() => toggleSelected(item.productId)}
-              hitSlop={8}
-            >
-              <View style={[styles.check, item.selected && styles.checkOn]}>
-                {item.selected && (
-                  <Icon name="check" size={14} color={colors.white} />
-                )}
+        {groups.map((group) => {
+          const groupSubtotal = group.items
+            .filter((i) => i.selected)
+            .reduce((sum, i) => sum + i.priceUsd * i.quantity, 0);
+          return (
+            <View key={group.storeId ?? "__unknown__"}>
+              <View style={styles.groupHeader}>
+                <Pressable
+                  style={styles.groupStore}
+                  disabled={!group.storeId}
+                  onPress={() => router.push("/stores/" + group.storeId)}
+                >
+                  <Icon name="store" size={16} color={colors.text} />
+                  <Text style={styles.groupName} numberOfLines={1}>
+                    {group.storeName ?? t("cart.unknownStore")}
+                  </Text>
+                  {group.storeId ? (
+                    <Icon name="chevronRight" size={14} color={colors.textMuted} />
+                  ) : null}
+                </Pressable>
+                {groupSubtotal > 0 ? (
+                  <Price priceUsd={groupSubtotal} size="sm" />
+                ) : null}
               </View>
-            </Pressable>
-            <Image
-              source={{ uri: item.image }}
-              style={styles.itemImg}
-              contentFit="cover"
-            />
-            <View style={styles.itemBody}>
-              <Text style={[styles.itemTitle, styles.itemTitleSpace]} numberOfLines={2}>
-                {item.title}
-              </Text>
-              {item.variantLabel && (
-                <Text style={styles.variant}>{item.variantLabel}</Text>
-              )}
-              <View style={styles.itemFooter}>
-                {/* Le prix peut rétrécir ; le compteur garde sa largeur et reste dans la carte */}
-                <View style={styles.itemPriceWrap}>
-                  <Price priceUsd={item.priceUsd} size="sm" />
+
+              {group.items.map((item) => (
+                <View
+                  key={item.productId + (item.variantLabel ?? "")}
+                  style={styles.item}
+                >
+                  <Pressable
+                    onPress={() => toggleSelected(item.productId)}
+                    hitSlop={8}
+                  >
+                    <View style={[styles.check, item.selected && styles.checkOn]}>
+                      {item.selected && (
+                        <Icon name="check" size={14} color={colors.white} />
+                      )}
+                    </View>
+                  </Pressable>
+                  <Image
+                    source={{ uri: item.image }}
+                    style={styles.itemImg}
+                    contentFit="cover"
+                  />
+                  <View style={styles.itemBody}>
+                    <Text style={[styles.itemTitle, styles.itemTitleSpace]} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    {item.variantLabel && (
+                      <Text style={styles.variant}>{item.variantLabel}</Text>
+                    )}
+                    <View style={styles.itemFooter}>
+                      {/* Le prix peut rétrécir ; le compteur garde sa largeur et reste dans la carte */}
+                      <View style={styles.itemPriceWrap}>
+                        <Price priceUsd={item.priceUsd} size="sm" />
+                      </View>
+                      <QuantityStepper
+                        compact
+                        value={item.quantity}
+                        onChange={(v) => setQuantity(item.productId, v)}
+                      />
+                    </View>
+                  </View>
+                  {/* Corbeille en haut à droite de la carte */}
+                  <Pressable
+                    onPress={() => remove(item.productId)}
+                    hitSlop={8}
+                    style={styles.trash}
+                  >
+                    <Icon name="trash" size={18} color={colors.textMuted} />
+                  </Pressable>
                 </View>
-                <QuantityStepper
-                  compact
-                  value={item.quantity}
-                  onChange={(v) => setQuantity(item.productId, v)}
-                />
-              </View>
+              ))}
             </View>
-            {/* Corbeille en haut à droite de la carte */}
-            <Pressable
-              onPress={() => remove(item.productId)}
-              hitSlop={8}
-              style={styles.trash}
-            >
-              <Icon name="trash" size={18} color={colors.textMuted} />
-            </Pressable>
-          </View>
-        ))}
+          );
+        })}
 
         {/* Vous aimerez aussi — produits de la section choisie par l'admin */}
         {suggestions.length > 0 && (
@@ -285,6 +319,28 @@ const makeStyles = (colors: Colors) =>
       marginTop: spacing.md,
       padding: spacing.md,
       borderRadius: radius.lg,
+    },
+    groupHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.lg,
+      paddingBottom: spacing.xs,
+    },
+    groupStore: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    groupName: {
+      fontSize: fontSize.md,
+      fontWeight: "700",
+      color: colors.text,
+      flexShrink: 1,
     },
     check: {
       width: 22,

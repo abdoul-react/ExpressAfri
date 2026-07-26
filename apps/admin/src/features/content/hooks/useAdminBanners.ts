@@ -2,10 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { adminContentService } from '../services/adminContentService'
 import type { CreateBannerInput, UpdateBannerInput } from '@/infrastructure/data-source/AdminContentDataSource'
 
-export function useAdminBanners() {
+export function useAdminBanners(params?: { storeId?: string }) {
   return useQuery({
-    queryKey: ['admin', 'content', 'banners'],
-    queryFn: () => adminContentService.listBanners(),
+    queryKey: ['admin', 'content', 'banners', params ?? {}],
+    queryFn: () => adminContentService.listBanners(params),
   })
 }
 

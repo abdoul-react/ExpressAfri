@@ -8,6 +8,7 @@ import { Icon, IconName } from '@/icons';
 import { ScreenHeader, Button } from '@/components';
 import { useConversations } from '@/features/messages';
 import { useAuthStore } from '@/store/authStore';
+import { resolveMediaUrl } from '@/utils/resolveMediaUrl';
 
 const CHANNELS: { id: string; icon: IconName; colorKey: keyof Colors; titleKey: string; hintKey: string }[] = [
   { id: 'orders', icon: 'box', colorKey: 'secondary', titleKey: 'messages.orders', hintKey: 'messages.ordersHint' },
@@ -83,15 +84,19 @@ export default function MessagesScreen() {
         {conversations.length === 0 && (
           <Text style={styles.emptyHint}>{t('messages.emptyHint', 'Aucune conversation — contactez un vendeur depuis une commande.')}</Text>
         )}
-        {conversations.map((c) => (
+        {conversations.map((c) => {
+          // Le logo boutique arrive en chemin relatif (/uploads/…) : il faut
+          // le résoudre contre l'hôte de l'API avant de le passer à <Image>.
+          const avatar = resolveMediaUrl(c.storeLogo || c.avatar);
+          return (
           <Pressable
             key={c.id}
             style={styles.msgRow}
             onPress={() => router.push(`/messages/${c.id}`)}
           >
             <View>
-              {c.avatar ? (
-                <Image source={{ uri: c.avatar }} style={styles.msgAvatar} />
+              {avatar ? (
+                <Image source={{ uri: avatar }} style={styles.msgAvatar} />
               ) : (
                 <View style={[styles.msgAvatar, styles.msgAvatarFallback]}>
                   <Icon name="store" size={20} color={colors.textMuted} />
@@ -104,12 +109,20 @@ export default function MessagesScreen() {
               )}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.msgName}>{c.name}</Text>
+              {/* La boutique titre la ligne : on doit savoir avec qui on parle
+                  avant de savoir de quelle commande il s'agit. */}
+              <Text style={styles.msgName} numberOfLines={1}>{c.storeName || c.name}</Text>
+              {c.orderRef ? (
+                <Text style={styles.msgOrder} numberOfLines={1}>
+                  {t('messages.orderLabel')} #{c.orderRef}
+                </Text>
+              ) : null}
               <Text style={styles.msgPreview} numberOfLines={1}>{c.lastMessage || t('messages.noMessages', 'Démarrez la conversation')}</Text>
             </View>
             <Text style={styles.msgDate}>{formatConvTime(c.lastTime)}</Text>
           </Pressable>
-        ))}
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -132,6 +145,7 @@ const makeStyles = (colors: Colors) => StyleSheet.create({
   msgBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: colors.slate500, borderRadius: 9, minWidth: 18, height: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
   msgBadgeText: { color: colors.white, fontSize: 10, fontWeight: '700' },
   msgName: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text },
+  msgOrder: { fontSize: fontSize.xs, color: colors.textSecondary, fontWeight: '600', marginTop: 1 },
   msgPreview: { fontSize: fontSize.sm, color: colors.textMuted, marginTop: 2 },
   msgDate: { fontSize: fontSize.xs, color: colors.textMuted },
 });

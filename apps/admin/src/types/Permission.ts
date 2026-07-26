@@ -37,6 +37,7 @@ export const PERMISSIONS = {
   'stores.delete': 'Supprimer une boutique',
   'stores.approve': 'Approuver une boutique',
   'stores.reject': 'Rejeter une boutique',
+  'stores.manage': 'Administrer la vitrine et les statuts des boutiques',
 
   'orders.read': 'Voir les commandes',
   'orders.update': "Modifier le statut d'une commande",

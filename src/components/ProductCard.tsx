@@ -10,6 +10,7 @@ import { usePrice } from '@/hooks/usePrice';
 import { Price } from './Price';
 import { Rating } from './Rating';
 import { Badge } from './Badge';
+import { StoreBadge } from './StoreBadge';
 type Props = {
   product: Product;
   /** Largeur imposée (grille) ; sinon flex. */
@@ -31,6 +32,12 @@ type Props = {
   onToggleWish?: (id: string) => void;
   /** Callback ajout panier */
   onAddToCart?: (product: Product, quantity: number) => void;
+  /**
+   * Masque l'insigne de provenance. À activer dans une boutique, où répéter son
+   * nom sur chaque carte est du bruit. La zone reste réservée : la géométrie
+   * fixe des cartes ne dépend pas du contenu.
+   */
+  hideStoreBadge?: boolean;
 };
 
 /**
@@ -53,7 +60,7 @@ function CompactPrice({ priceUsd }: { priceUsd: number }) {
   );
 }
 
-export function ProductCard({ product, width, size, variant = 'full', quickAdd = true, isWished, onToggleWish, onAddToCart }: Props) {
+export function ProductCard({ product, width, size, variant = 'full', quickAdd = true, isWished, onToggleWish, onAddToCart, hideStoreBadge }: Props) {
   const styles = useThemedStyles(makeStyles);
   const colors = useColors();
   const router = useRouter();
@@ -174,6 +181,13 @@ export function ProductCard({ product, width, size, variant = 'full', quickAdd =
             <Price priceUsd={product.priceUsd} originalPriceUsd={product.originalPriceUsd} size="sm" fit />
           </View>
 
+          {/* Provenance toujours rendue (hauteur fixe) : vide pour la boutique système */}
+          <View style={styles.storeRow}>
+            {hideStoreBadge ? null : (
+              <StoreBadge storeId={product.storeId} storeName={product.storeName} />
+            )}
+          </View>
+
           {/* Ligne méta toujours rendue (hauteur fixe) : note/ventes, sinon offre, sinon vide */}
           <View style={styles.metaRow}>
             {product.rating > 0 || product.soldCount > 0 ? (
@@ -245,11 +259,17 @@ const makeStyles = (colors: Colors) => StyleSheet.create({
   /*
     Hauteurs FIXES par zone — la somme est constante, donc toutes les cartes
     ont exactement la même hauteur, que le titre fasse 1 ou 2 lignes,
-    qu'il y ait une note ou non, une livraison gratuite ou non :
-      titre 32 + prix 20 + méta 16 + footer 32 (+ paddings/gaps)
+    qu'il y ait une note ou non, une livraison gratuite ou non, une boutique
+    d'origine ou non :
+      titre 32 + prix 20 + boutique 20 + méta 16 + footer 32 (+ paddings/gaps)
+
+    `storeRow` fait 20 pour 14 de texte : l'insigne est aligné en bas de sa
+    zone, ce qui le décolle du prix sans rendre la carte plus haute qu'un
+    autre choix de hauteur — la géométrie reste constante.
   */
   title: { fontSize: fontSize.sm, color: colors.text, lineHeight: 16, height: 32 },
   priceRow: { height: 20, justifyContent: 'center' },
+  storeRow: { height: 20, justifyContent: 'flex-end' },
   metaRow: { height: 16, justifyContent: 'center' },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 32 },
   freeShip: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 1 },

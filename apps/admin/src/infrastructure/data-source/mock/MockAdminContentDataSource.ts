@@ -58,7 +58,11 @@ export class MockAdminContentDataSource implements AdminContentDataSource {
   }
 
   // ── Banners ──
-  async listBanners(): Promise<Banner[]> { await this.delay(); return [...this.banners] }
+  async listBanners(params?: { storeId?: string }): Promise<Banner[]> {
+    await this.delay()
+    if (params?.storeId) return this.banners.filter((b) => b.storeId === params.storeId)
+    return [...this.banners]
+  }
   async getBannerById(id: string): Promise<Banner> {
     await this.delay()
     const b = this.banners.find((x) => x.id === id)

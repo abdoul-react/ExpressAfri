@@ -5,10 +5,15 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, like, or, and, sql } from 'drizzle-orm';
+import { eq, like, or, and, sql, inArray } from 'drizzle-orm';
 import * as bcrypt from 'bcryptjs';
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module';
 import { stores, storeKyc, storeMedia } from '../../database/schema/stores';
+import {
+  storeSections,
+  storeSectionItems,
+} from '../../database/schema/store-sections';
+import { products } from '../../database/schema/products';
 import { admins, roles } from '../../database/schema/auth';
 
 @Injectable()
@@ -18,6 +23,10 @@ export class StoresService {
   /**
    * Colonnes de boutique enrichies des agrégats attendus par l'Admin.
    * Les compteurs sont calculés en SQL : jamais de valeur en dur côté client.
+   *
+   * `stores.id` est écrit en SQL brut et non interpolé : Drizzle le rendrait en
+   * `"id"` non qualifié, qui résoudrait vers la colonne `id` de la sous-requête
+   * au lieu de celle de la requête englobante — les compteurs remonteraient 0.
    */
   private storeColumns() {
     return {
@@ -34,13 +43,13 @@ export class StoresService {
       updatedAt: stores.updatedAt,
       logoUrl: sql<
         string | null
-      >`(select sm.url from store_media sm where sm.store_id = ${stores.id} and sm.type = 'logo' and sm.is_active = true limit 1)`,
+      >`(select sm.url from store_media sm where sm.store_id = stores.id and sm.type = 'logo' and sm.is_active = true limit 1)`,
       coverUrl: sql<
         string | null
-      >`(select sm.url from store_media sm where sm.store_id = ${stores.id} and sm.type = 'cover' and sm.is_active = true limit 1)`,
-      productCount: sql<number>`(select count(*)::int from products p where p.store_id = ${stores.id} and p.status = 'active')`,
-      totalOrders: sql<number>`(select count(*)::int from orders o where o.store_id = ${stores.id} and o.status not in ('cancelled', 'refunded'))`,
-      revenue: sql<number>`(select coalesce(sum(o.total::numeric), 0)::float8 from orders o where o.store_id = ${stores.id} and o.status not in ('cancelled', 'refunded'))`,
+      >`(select sm.url from store_media sm where sm.store_id = stores.id and sm.type = 'cover' and sm.is_active = true limit 1)`,
+      productCount: sql<number>`(select count(*)::int from products p where p.store_id = stores.id and p.status = 'active')`,
+      totalOrders: sql<number>`(select count(*)::int from orders o where o.store_id = stores.id and o.status not in ('cancelled', 'refunded'))`,
+      revenue: sql<number>`(select coalesce(sum(o.total::numeric), 0)::float8 from orders o where o.store_id = stores.id and o.status not in ('cancelled', 'refunded'))`,
     };
   }
 
@@ -328,6 +337,257 @@ export class StoresService {
       .returning({ id: storeMedia.id });
     if (!deleted)
       throw new NotFoundException('Média introuvable pour cette boutique');
+    return { ok: true };
+  }
+
+  // ====== SECTIONS DE CATALOGUE ======
+  // Chaque requête est bornée sur storeId : une section d'une autre boutique
+  // est introuvable, jamais modifiable.
+
+  private static readonly SECTION_LAYOUTS = [
+    'grid',
+    'rail',
+    'list',
+    'showcase',
+  ];
+
+  private assertLayout(layout?: string) {
+    if (layout && !StoresService.SECTION_LAYOUTS.includes(layout)) {
+      throw new BadRequestException(
+        `Format attendu : ${StoresService.SECTION_LAYOUTS.join(', ')}`,
+      );
+    }
+  }
+
+  async listSections(storeId: string) {
+    const rows = await this.db
+      .select({
+        id: storeSections.id,
+        title: storeSections.title,
+        subtitle: storeSections.subtitle,
+        layout: storeSections.layout,
+        sortOrder: storeSections.sortOrder,
+        isActive: storeSections.isActive,
+        productCount: sql<number>`(select count(*)::int from store_section_items si where si.section_id = store_sections.id)`,
+      })
+      .from(storeSections)
+      .where(eq(storeSections.storeId, storeId))
+      .orderBy(storeSections.sortOrder, storeSections.createdAt);
+    return rows.map((r) => ({ ...r, productCount: Number(r.productCount ?? 0) }));
+  }
+
+  async createSection(
+    storeId: string,
+    data: { title?: string; subtitle?: string; layout?: string },
+  ) {
+    if (!data?.title?.trim())
+      throw new BadRequestException('Titre de section requis');
+    this.assertLayout(data.layout);
+    const [{ maxOrder }] = await this.db
+      .select({ maxOrder: sql<number>`coalesce(max(sort_order), -1)::int` })
+      .from(storeSections)
+      .where(eq(storeSections.storeId, storeId));
+    const [section] = await this.db
+      .insert(storeSections)
+      .values({
+        storeId,
+        title: data.title.trim(),
+        subtitle: data.subtitle?.trim() || null,
+        layout: data.layout ?? 'grid',
+        sortOrder: Number(maxOrder ?? -1) + 1,
+      })
+      .returning();
+    return section;
+  }
+
+  async updateSection(
+    storeId: string,
+    sectionId: string,
+    data: {
+      title?: string;
+      subtitle?: string | null;
+      layout?: string;
+      isActive?: boolean;
+    },
+  ) {
+    this.assertLayout(data?.layout);
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (data?.title !== undefined) {
+      if (!data.title.trim())
+        throw new BadRequestException('Titre de section requis');
+      patch.title = data.title.trim();
+    }
+    if (data?.subtitle !== undefined)
+      patch.subtitle = data.subtitle?.trim() || null;
+    if (data?.layout !== undefined) patch.layout = data.layout;
+    if (data?.isActive !== undefined) patch.isActive = data.isActive;
+
+    const [section] = await this.db
+      .update(storeSections)
+      .set(patch)
+      .where(
+        and(
+          eq(storeSections.id, sectionId),
+          eq(storeSections.storeId, storeId),
+        ),
+      )
+      .returning();
+    if (!section)
+      throw new NotFoundException('Section introuvable pour cette boutique');
+    return section;
+  }
+
+  async deleteSection(storeId: string, sectionId: string) {
+    const [deleted] = await this.db
+      .delete(storeSections)
+      .where(
+        and(
+          eq(storeSections.id, sectionId),
+          eq(storeSections.storeId, storeId),
+        ),
+      )
+      .returning({ id: storeSections.id });
+    if (!deleted)
+      throw new NotFoundException('Section introuvable pour cette boutique');
+    return { ok: true };
+  }
+
+  async reorderSections(storeId: string, ids: string[]) {
+    if (!ids.length) return { ok: true };
+    await Promise.all(
+      ids.map((id, index) =>
+        this.db
+          .update(storeSections)
+          .set({ sortOrder: index, updatedAt: new Date() })
+          .where(
+            and(
+              eq(storeSections.id, id),
+              eq(storeSections.storeId, storeId),
+            ),
+          ),
+      ),
+    );
+    return { ok: true };
+  }
+
+  /** Vérifie que la section appartient bien à la boutique appelante. */
+  private async assertSectionOwned(storeId: string, sectionId: string) {
+    const [section] = await this.db
+      .select({ id: storeSections.id })
+      .from(storeSections)
+      .where(
+        and(
+          eq(storeSections.id, sectionId),
+          eq(storeSections.storeId, storeId),
+        ),
+      )
+      .limit(1);
+    if (!section)
+      throw new NotFoundException('Section introuvable pour cette boutique');
+  }
+
+  async listSectionItems(storeId: string, sectionId: string) {
+    await this.assertSectionOwned(storeId, sectionId);
+    return this.db
+      .select({
+        id: storeSectionItems.id,
+        productId: products.id,
+        name: products.name,
+        price: products.price,
+        status: products.status,
+        sortOrder: storeSectionItems.sortOrder,
+        // Les images vivent dans product_images : première image par sortOrder
+        imageUrl: sql<
+          string | null
+        >`(select pi.url from product_images pi where pi.product_id = products.id order by pi.sort_order limit 1)`,
+      })
+      .from(storeSectionItems)
+      .innerJoin(products, eq(storeSectionItems.productId, products.id))
+      .where(eq(storeSectionItems.sectionId, sectionId))
+      .orderBy(storeSectionItems.sortOrder);
+  }
+
+  async addSectionItems(
+    storeId: string,
+    sectionId: string,
+    productIds: string[],
+  ) {
+    await this.assertSectionOwned(storeId, sectionId);
+    if (!productIds?.length) return { ok: true, added: 0 };
+
+    // Seuls les produits de CETTE boutique sont affectables : sinon un gérant
+    // mettrait en vitrine le catalogue d'un concurrent.
+    const owned = await this.db
+      .select({ id: products.id })
+      .from(products)
+      .where(
+        and(eq(products.storeId, storeId), inArray(products.id, productIds)),
+      );
+    if (!owned.length)
+      throw new BadRequestException(
+        'Aucun produit de cette boutique dans la sélection',
+      );
+
+    const [{ maxOrder }] = await this.db
+      .select({ maxOrder: sql<number>`coalesce(max(sort_order), -1)::int` })
+      .from(storeSectionItems)
+      .where(eq(storeSectionItems.sectionId, sectionId));
+
+    let next = Number(maxOrder ?? -1) + 1;
+    await this.db
+      .insert(storeSectionItems)
+      .values(
+        owned.map((p) => ({
+          sectionId,
+          productId: p.id,
+          sortOrder: next++,
+        })),
+      )
+      // L'index unique empêche le doublon : on ignore silencieusement les
+      // produits déjà présents dans la section.
+      .onConflictDoNothing();
+    return { ok: true, added: owned.length };
+  }
+
+  async removeSectionItem(
+    storeId: string,
+    sectionId: string,
+    itemId: string,
+  ) {
+    await this.assertSectionOwned(storeId, sectionId);
+    const [deleted] = await this.db
+      .delete(storeSectionItems)
+      .where(
+        and(
+          eq(storeSectionItems.id, itemId),
+          eq(storeSectionItems.sectionId, sectionId),
+        ),
+      )
+      .returning({ id: storeSectionItems.id });
+    if (!deleted) throw new NotFoundException('Produit introuvable dans la section');
+    return { ok: true };
+  }
+
+  async reorderSectionItems(
+    storeId: string,
+    sectionId: string,
+    ids: string[],
+  ) {
+    await this.assertSectionOwned(storeId, sectionId);
+    if (!ids.length) return { ok: true };
+    await Promise.all(
+      ids.map((id, index) =>
+        this.db
+          .update(storeSectionItems)
+          .set({ sortOrder: index })
+          .where(
+            and(
+              eq(storeSectionItems.id, id),
+              eq(storeSectionItems.sectionId, sectionId),
+            ),
+          ),
+      ),
+    );
     return { ok: true };
   }
 

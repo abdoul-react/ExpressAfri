@@ -15,8 +15,8 @@ export class ApiAdminContentDataSource implements AdminContentDataSource {
     return data as ContentSummary
   }
 
-  async listBanners(): Promise<Banner[]> {
-    const { data } = await api.get('/content/banners')
+  async listBanners(params?: { storeId?: string }): Promise<Banner[]> {
+    const { data } = await api.get('/content/banners', { params })
     return (data.data ?? data) as Banner[]
   }
 

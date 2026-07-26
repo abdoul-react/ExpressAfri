@@ -1,9 +1,12 @@
-import type { ProductDataSource } from "../ProductDataSource";
+import type { ProductDataSource, ProductQuery } from "../ProductDataSource";
 import type { Product } from "@/types";
 import { PRODUCTS, getProductById, getProductsByCategory } from "./products";
 
 export class MockProductDataSource implements ProductDataSource {
-  async getProducts(): Promise<Product[]> {
+  async getProducts(query?: ProductQuery): Promise<Product[]> {
+    // Seul `storeId` est honoré : le mock sert les écrans de démo, et le
+    // cloisonnement par boutique doit s'y voir comme en production.
+    if (query?.storeId) return PRODUCTS.filter((p) => p.storeId === query.storeId);
     return PRODUCTS;
   }
 

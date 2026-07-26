@@ -274,7 +274,7 @@ export default function HomeScreen() {
                           <Pressable
                             key={s.id}
                             style={styles.storeCard}
-                            onPress={() => router.push('/stores')}
+                            onPress={() => router.push(`/stores/${s.id}`)}
                           >
                             <View style={styles.storeAvatar}>
                               {s.avatar ? (
@@ -399,7 +399,7 @@ export default function HomeScreen() {
                     <Pressable
                       key={s.id}
                       style={styles.storeCard}
-                      onPress={() => router.push('/stores')}
+                      onPress={() => router.push(`/stores/${s.id}`)}
                     >
                       <View style={styles.storeAvatar}>
                         {s.avatar ? (

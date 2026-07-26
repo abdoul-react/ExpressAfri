@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { Folder, FolderTree, ImageIcon, Pencil, Plus, RefreshCw, Tags, Trash2, XCircle } from 'lucide-react'
+import { Folder, FolderTree, ImageIcon, Pencil, Plus, RefreshCw, Store, Tags, Trash2, XCircle } from 'lucide-react'
 import { useAdminCategories } from '../hooks/useAdminCategories'
 import { useCreateCategory } from '../hooks/useCreateCategory'
 import { useUpdateCategory } from '../hooks/useUpdateCategory'
 import { useDeleteCategory } from '../hooks/useDeleteCategory'
+import { useAdminStores } from '@/features/stores'
+import { useAdminAuth } from '@/features/auth'
 import { resolveAdminMediaUrl } from '@/lib/resolveAdminMediaUrl'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import {
@@ -23,12 +25,16 @@ import {
 } from '@/components/ui'
 import { toast } from '@/lib/toast'
 
+/** Boutique système : porte les catégories globales, communes à toutes les boutiques. */
+const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001'
+
 type CategoryModalState = {
   mode: 'create' | 'edit'
   id?: string
   name: string
   parentId: string
   imageUrl: string
+  storeId: string
 }
 
 type ConfirmState = {
@@ -38,8 +44,33 @@ type ConfirmState = {
   onConfirm: () => void | Promise<void>
 }
 
+/** Badge d'appartenance : distingue une catégorie globale d'une catégorie boutique. */
+function StoreTag({ storeId, label }: { storeId?: string | null; label: string }) {
+  const isGlobal = !storeId || storeId === SYSTEM_STORE_ID
+  return (
+    <span
+      className={`inline-flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+        isGlobal
+          ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+          : 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+      }`}
+    >
+      <Store className="h-3 w-3" />
+      {label}
+    </span>
+  )
+}
+
 export function AdminCategoryListPage() {
-  const { data: categories, isLoading, isError, error, refetch } = useAdminCategories()
+  const { admin } = useAdminAuth()
+  // Un gérant est verrouillé sur sa boutique ; l'admin central peut filtrer.
+  const managerStoreId = admin?.storeId ?? undefined
+  const [storeFilter, setStoreFilter] = useState('')
+
+  const { data: categories, isLoading, isError, error, refetch } = useAdminCategories(
+    managerStoreId ? undefined : storeFilter ? { storeId: storeFilter } : undefined,
+  )
+  const { data: storeList } = useAdminStores({ limit: 200 })
   const createCategory = useCreateCategory()
   const updateCategory = useUpdateCategory()
   const deleteCategory = useDeleteCategory()
@@ -47,13 +78,28 @@ export function AdminCategoryListPage() {
   const [modal, setModal] = useState<CategoryModalState | null>(null)
   const [confirm, setConfirm] = useState<ConfirmState | null>(null)
 
+  const storeNameById = new Map<string, string>(
+    (storeList?.data ?? []).map((s) => [s.id, s.name]),
+  )
+  const storeLabel = (id?: string | null) =>
+    !id || id === SYSTEM_STORE_ID ? 'Globale' : (storeNameById.get(id) ?? 'Boutique inconnue')
+
   const parentCategories = categories?.filter((c: any) => !c.parentId) ?? []
   const childCategories = categories?.filter((c: any) => c.parentId) ?? []
 
   const isSaving = createCategory.isPending || updateCategory.isPending
 
   function startCreate(parentId?: string) {
-    setModal({ mode: 'create', name: '', parentId: parentId ?? '', imageUrl: '' })
+    const parent = parentId ? categories?.find((c: any) => c.id === parentId) : undefined
+    setModal({
+      mode: 'create',
+      name: '',
+      parentId: parentId ?? '',
+      imageUrl: '',
+      // Une sous-catégorie hérite de la boutique de son parent : le backend
+      // refuserait un parent appartenant à une autre boutique.
+      storeId: parent?.storeId ?? managerStoreId ?? storeFilter ?? '',
+    })
   }
 
   function startEdit(cat: any) {
@@ -63,6 +109,7 @@ export function AdminCategoryListPage() {
       name: cat.name,
       parentId: cat.parentId ?? '',
       imageUrl: cat.imageUrl ?? '',
+      storeId: cat.storeId ?? '',
     })
   }
 
@@ -74,7 +121,7 @@ export function AdminCategoryListPage() {
       imageUrl: modal.imageUrl || undefined,
     }
     if (modal.mode === 'create') {
-      createCategory.mutate(data, {
+      createCategory.mutate({ ...data, storeId: modal.storeId || undefined }, {
         onSuccess: () => {
           toast.success(`Catégorie "${data.name}" créée`)
           setModal(null)
@@ -174,11 +221,25 @@ export function AdminCategoryListPage() {
         title="Catégories"
         description={categories ? `${categories.length} catégories` : 'Chargement…'}
         actions={
-          <PermissionGuard permission="categories.create">
-            <Button leftIcon={Plus} onClick={() => startCreate()}>
-              Nouvelle catégorie
-            </Button>
-          </PermissionGuard>
+          <div className="flex items-center gap-2">
+            {!managerStoreId && (
+              <Select
+                value={storeFilter}
+                onChange={setStoreFilter}
+                options={[
+                  { value: SYSTEM_STORE_ID, label: 'Catégories globales' },
+                  ...(storeList?.data ?? []).map((s) => ({ value: s.id, label: s.name })),
+                ]}
+                placeholder="Toutes les boutiques"
+                className="w-56"
+              />
+            )}
+            <PermissionGuard permission="categories.create">
+              <Button leftIcon={Plus} onClick={() => startCreate()}>
+                Nouvelle catégorie
+              </Button>
+            </PermissionGuard>
+          </div>
         }
       />
 
@@ -219,6 +280,7 @@ export function AdminCategoryListPage() {
                         />
                       )}
                       <span className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{cat.name}</span>
+                      <StoreTag storeId={cat.storeId} label={storeLabel(cat.storeId)} />
                       <span className="text-xs text-gray-400 dark:text-gray-500">({cat.productCount ?? 0} prod.)</span>
                     </div>
                     {renderRowActions(cat, true)}
@@ -235,7 +297,7 @@ export function AdminCategoryListPage() {
                           >
                             <div className="flex items-center gap-2">
                               <span className="text-sm text-gray-700 dark:text-gray-300">{sub.name}</span>
-                              <span className="text-xs text-gray-400 dark:text-gray-500">({sub.productCount} prod.)</span>
+                              <span className="text-xs text-gray-400 dark:text-gray-500">({sub.productCount ?? 0} prod.)</span>
                             </div>
                             {renderRowActions(sub, false)}
                           </div>
@@ -321,6 +383,26 @@ export function AdminCategoryListPage() {
               />
             </FormField>
 
+            {!managerStoreId && modal.mode === 'create' && !modal.parentId && (
+              <FormField
+                label="Boutique"
+                htmlFor="category-store"
+                hint="Une catégorie globale est visible par toutes les boutiques."
+              >
+                <Select
+                  id="category-store"
+                  value={modal.storeId}
+                  onChange={(v) => setModal({ ...modal, storeId: v, parentId: '' })}
+                  options={[
+                    { value: SYSTEM_STORE_ID, label: 'Globale (toutes boutiques)' },
+                    ...(storeList?.data ?? []).map((s) => ({ value: s.id, label: s.name })),
+                  ]}
+                  placeholder="Globale (toutes boutiques)"
+                  className="w-full"
+                />
+              </FormField>
+            )}
+
             <FormField label="Catégorie parente" htmlFor="category-parent">
               <Select
                 id="category-parent"
@@ -328,6 +410,8 @@ export function AdminCategoryListPage() {
                 onChange={(v) => setModal({ ...modal, parentId: v })}
                 options={parentCategories
                   .filter((c: any) => c.id !== modal.id)
+                  // Le backend refuse un parent d'une autre boutique
+                  .filter((c: any) => !modal.storeId || c.storeId === modal.storeId)
                   .map((c: any) => ({ value: c.id, label: c.name }))}
                 placeholder="Catégorie principale"
                 className="w-full"

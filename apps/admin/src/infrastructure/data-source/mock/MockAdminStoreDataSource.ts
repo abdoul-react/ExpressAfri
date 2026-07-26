@@ -14,6 +14,19 @@ import type {
   CreateStorePayload,
   StoreMedia,
   StoreMediaType,
+  StoreSection,
+  StoreSectionItem,
+  CreateSectionPayload,
+  UpdateSectionPayload,
+  StoreGroup,
+  StoreGroupItem,
+  CreateStoreGroupPayload,
+  UpdateStoreGroupPayload,
+  PaymentProvider,
+  StorePaymentMethod,
+  CreateStorePaymentMethodPayload,
+  UpdateStorePaymentMethodPayload,
+  PaymentMethodValidation,
 } from '../AdminStoreDataSource'
 import { MOCK_STORES } from './data/mockStores'
 
@@ -239,5 +252,118 @@ export class MockAdminStoreDataSource implements AdminStoreDataSource {
 
   async deleteMedia(_storeId: string, _mediaId: string): Promise<void> {
     await this.delay()
+  }
+
+  async listSections(_storeId: string): Promise<StoreSection[]> {
+    await this.delay()
+    return []
+  }
+
+  async createSection(_storeId: string, _payload: CreateSectionPayload): Promise<StoreSection> {
+    await this.delay()
+    throw new Error('Non implémenté en mode mock')
+  }
+
+  async updateSection(_storeId: string, _sectionId: string, _payload: UpdateSectionPayload): Promise<StoreSection> {
+    await this.delay()
+    throw new Error('Non implémenté en mode mock')
+  }
+
+  async deleteSection(_storeId: string, _sectionId: string): Promise<void> {
+    await this.delay()
+  }
+
+  async reorderSections(_storeId: string, _ids: string[]): Promise<void> {
+    await this.delay()
+  }
+
+  async listSectionItems(_storeId: string, _sectionId: string): Promise<StoreSectionItem[]> {
+    await this.delay()
+    return []
+  }
+
+  async addSectionItems(_storeId: string, _sectionId: string, _productIds: string[]): Promise<void> {
+    await this.delay()
+  }
+
+  async removeSectionItem(_storeId: string, _sectionId: string, _itemId: string): Promise<void> {
+    await this.delay()
+  }
+
+  async reorderSectionItems(_storeId: string, _sectionId: string, _ids: string[]): Promise<void> {
+    await this.delay()
+  }
+
+  async listStoreGroups(): Promise<StoreGroup[]> {
+    await this.delay()
+    return []
+  }
+
+  async createStoreGroup(_payload: CreateStoreGroupPayload): Promise<StoreGroup> {
+    await this.delay()
+    throw new Error('Non implémenté en mode mock')
+  }
+
+  async updateStoreGroup(_groupId: string, _payload: UpdateStoreGroupPayload): Promise<StoreGroup> {
+    await this.delay()
+    throw new Error('Non implémenté en mode mock')
+  }
+
+  async deleteStoreGroup(_groupId: string): Promise<void> {
+    await this.delay()
+  }
+
+  async reorderStoreGroups(_ids: string[]): Promise<void> {
+    await this.delay()
+  }
+
+  async listStoreGroupItems(_groupId: string): Promise<StoreGroupItem[]> {
+    await this.delay()
+    return []
+  }
+
+  async addStoreGroupItems(_groupId: string, _storeIds: string[]): Promise<void> {
+    await this.delay()
+  }
+
+  async removeStoreGroupItem(_groupId: string, _itemId: string): Promise<void> {
+    await this.delay()
+  }
+
+  async reorderStoreGroupItems(_groupId: string, _ids: string[]): Promise<void> {
+    await this.delay()
+  }
+
+  async listPaymentProviders(_storeId: string): Promise<PaymentProvider[]> {
+    await this.delay()
+    return []
+  }
+
+  async listPaymentMethods(_storeId: string): Promise<StorePaymentMethod[]> {
+    await this.delay()
+    return []
+  }
+
+  async createPaymentMethod(_storeId: string, _payload: CreateStorePaymentMethodPayload): Promise<StorePaymentMethod> {
+    await this.delay()
+    throw new Error('Non implémenté en mode mock')
+  }
+
+  async updatePaymentMethod(_storeId: string, _methodId: string, _payload: UpdateStorePaymentMethodPayload): Promise<StorePaymentMethod> {
+    await this.delay()
+    throw new Error('Non implémenté en mode mock')
+  }
+
+  async deletePaymentMethod(_storeId: string, _methodId: string): Promise<void> {
+    await this.delay()
+  }
+
+  async reorderPaymentMethods(_storeId: string, _ids: string[]): Promise<void> {
+    await this.delay()
+  }
+
+  async validatePaymentMethod(_storeId: string, _methodId: string): Promise<PaymentMethodValidation> {
+    await this.delay()
+    return { ok: false, missing: [], message: 'Non implémenté en mode mock' }
   }
 }

@@ -5,7 +5,7 @@ export function useCreateCategory() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { name: string; parentId?: string; imageUrl?: string }) => adminCategoryService.create(data),
+    mutationFn: (data: { name: string; parentId?: string; imageUrl?: string; storeId?: string }) => adminCategoryService.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'categories'] })
     },

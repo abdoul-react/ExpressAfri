@@ -20,9 +20,65 @@ import {
   useWindowDimensions,
 } from "react-native";
 
-type Props = { banners: Banner[] };
+type Props = {
+  banners: Banner[];
+  /**
+   * Variante discrète pour les campagnes de boutique : bandeau bas, texte
+   * réduit. L'accueil garde le grand format promotionnel.
+   */
+  compact?: boolean;
+};
 
-export function BannerCarousel({ banners }: Props) {
+/** Contenu d'une bannière — image plein cadre, ou bloc texte + CTA. */
+function BannerBody({ banner, compact }: { banner: Banner; compact?: boolean }) {
+  const colors = useColors();
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <>
+      {banner.imageUrl ? (
+        <Image
+          source={{ uri: banner.imageUrl }}
+          style={styles.image}
+          contentFit="cover"
+        />
+      ) : (
+        <View style={[styles.textContent, compact && styles.textContentCompact]}>
+          <Text
+            style={[styles.title, compact && styles.titleCompact]}
+            numberOfLines={compact ? 1 : 2}
+          >
+            {banner.title}
+          </Text>
+          {banner.subtitle && (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {banner.subtitle}
+            </Text>
+          )}
+          {banner.discountLabel && (
+            <View style={styles.discountRow}>
+              <Text style={[styles.discount, compact && styles.discountCompact]}>
+                {banner.discountLabel}
+              </Text>
+            </View>
+          )}
+          {banner.ctaText && (
+            <View style={[styles.ctaBtn, compact && styles.ctaBtnCompact]}>
+              <Text style={styles.ctaText}>{banner.ctaText}</Text>
+              <Icon name="chevronRight" size={14} color={colors.primary} />
+            </View>
+          )}
+        </View>
+      )}
+      {banner.discountLabel && banner.imageUrl && (
+        <View style={styles.discountBadge}>
+          <Text style={styles.discountBadgeText}>{banner.discountLabel}</Text>
+        </View>
+      )}
+    </>
+  );
+}
+
+export function BannerCarousel({ banners, compact }: Props) {
   const { width } = useWindowDimensions();
   const router = useRouter();
   const [index, setIndex] = useState(0);
@@ -34,7 +90,7 @@ export function BannerCarousel({ banners }: Props) {
   if (!banners || banners.length === 0) return null;
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, compact && styles.wrapCompact]}>
       {banners.length === 1 ? (
         /* Bandeau statique unique (pas de carrousel ni pagination) */
         <Pressable
@@ -44,39 +100,11 @@ export function BannerCarousel({ banners }: Props) {
           <View
             style={[
               styles.card,
+              compact && styles.cardCompact,
               { backgroundColor: banners[0].backgroundColor ?? colors.primary },
             ]}
           >
-            {banners[0].imageUrl ? (
-              <Image
-                source={{ uri: banners[0].imageUrl }}
-                style={styles.image}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={styles.textContent}>
-                <Text style={styles.title} numberOfLines={2}>{banners[0].title}</Text>
-                {banners[0].subtitle && (
-                  <Text style={styles.subtitle} numberOfLines={1}>{banners[0].subtitle}</Text>
-                )}
-                {banners[0].discountLabel && (
-                  <View style={styles.discountRow}>
-                    <Text style={styles.discount}>{banners[0].discountLabel}</Text>
-                  </View>
-                )}
-                {banners[0].ctaText && (
-                  <View style={styles.ctaBtn}>
-                    <Text style={styles.ctaText}>{banners[0].ctaText}</Text>
-                    <Icon name="chevronRight" size={14} color={colors.primary} />
-                  </View>
-                )}
-              </View>
-            )}
-            {banners[0].discountLabel && banners[0].imageUrl && (
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountBadgeText}>{banners[0].discountLabel}</Text>
-              </View>
-            )}
+            <BannerBody banner={banners[0]} compact={compact} />
           </View>
         </Pressable>
       ) : (
@@ -102,39 +130,11 @@ export function BannerCarousel({ banners }: Props) {
                 <View
                   style={[
                     styles.card,
+                    compact && styles.cardCompact,
                     { width: cardWidth, backgroundColor: b.backgroundColor ?? colors.primary },
                   ]}
                 >
-                  {b.imageUrl ? (
-                    <Image
-                      source={{ uri: b.imageUrl }}
-                      style={styles.image}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View style={styles.textContent}>
-                      <Text style={styles.title} numberOfLines={2}>{b.title}</Text>
-                      {b.subtitle && (
-                        <Text style={styles.subtitle} numberOfLines={1}>{b.subtitle}</Text>
-                      )}
-                      {b.discountLabel && (
-                        <View style={styles.discountRow}>
-                          <Text style={styles.discount}>{b.discountLabel}</Text>
-                        </View>
-                      )}
-                      {b.ctaText && (
-                        <View style={styles.ctaBtn}>
-                          <Text style={styles.ctaText}>{b.ctaText}</Text>
-                          <Icon name="chevronRight" size={14} color={colors.primary} />
-                        </View>
-                      )}
-                    </View>
-                  )}
-                  {b.discountLabel && b.imageUrl && (
-                    <View style={styles.discountBadge}>
-                      <Text style={styles.discountBadgeText}>{b.discountLabel}</Text>
-                    </View>
-                  )}
+                  <BannerBody banner={b} compact={compact} />
                 </View>
               </Pressable>
             ))}
@@ -156,12 +156,16 @@ export function BannerCarousel({ banners }: Props) {
 const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     wrap: { paddingVertical: spacing.sm },
+    wrapCompact: { paddingVertical: spacing.xs },
     card: {
       height: 130,
       borderRadius: radius.lg,
       overflow: "hidden",
       position: "relative",
     },
+    // Bandeau d'annonce : assez haut pour une image lisible, assez bas pour ne
+    // pas voler la vedette au catalogue de la boutique.
+    cardCompact: { height: 72, borderRadius: radius.md },
     image: { width: "100%", height: "100%" },
     textContent: {
       flex: 1,
@@ -169,10 +173,13 @@ const makeStyles = (colors: Colors) =>
       justifyContent: "center",
       gap: spacing.xs,
     },
+    textContentCompact: { padding: spacing.md, gap: 2 },
     title: { color: colors.white, fontSize: fontSize.xl, fontWeight: "800" },
+    titleCompact: { fontSize: fontSize.md },
     subtitle: { color: "rgba(255,255,255,0.9)", fontSize: fontSize.sm },
     discountRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
     discount: { color: "#DFFF3E", fontSize: 36, fontWeight: "900", letterSpacing: -1 },
+    discountCompact: { fontSize: fontSize.lg, letterSpacing: 0 },
     ctaBtn: {
       flexDirection: "row",
       alignItems: "center",
@@ -184,6 +191,7 @@ const makeStyles = (colors: Colors) =>
       marginTop: spacing.sm,
       gap: 4,
     },
+    ctaBtnCompact: { marginTop: 2, paddingVertical: 2 },
     ctaText: { fontSize: fontSize.xs, fontWeight: "800", color: colors.primary },
     discountBadge: {
       position: "absolute",

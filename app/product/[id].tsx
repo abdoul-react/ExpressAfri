@@ -1,4 +1,4 @@
-import { Badge, Price, ProductCard, Rating, ScreenHeader, SkeletonProductDetail, StatusState } from "@/components";
+import { Badge, Price, ProductCard, Rating, ScreenHeader, SkeletonProductDetail, StatusState, StoreBadge } from "@/components";
 import {
   fontSize,
   radius,
@@ -206,6 +206,13 @@ export default function ProductScreen() {
               <Badge label={`-${product.discountPercent}%`} tone="sale" />
             ) : null}
           </View>
+          {/* Provenance, sous le prix : d'où vient l'article, et accès à la boutique. */}
+          <StoreBadge
+            storeId={product.storeId}
+            storeName={product.storeName}
+            size="md"
+            pressable
+          />
           <Rating
             value={product.rating}
             soldCount={product.soldCount}
@@ -383,15 +390,27 @@ export default function ProductScreen() {
           </Pressable>
         </View>
 
-        {/* Produits similaires */}
-        <Text style={styles.sectionTitle2}>{t("product.relatedProducts")}</Text>
-        <View style={styles.relatedGrid}>
-          {related.map((p) => (
-            <View key={p.id} style={{ width: "47%", marginBottom: spacing.sm }}>
-              <ProductCard product={p} isWished={wishedIds.includes(p.id)} onToggleWish={toggleWish} onAddToCart={addToCart} />
+        {/* Produits similaires — tous de la boutique du produit consulté.
+            Section masquée si la boutique n'a rien d'autre à proposer :
+            un titre suivi du vide est pire que pas de titre. */}
+        {related.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle2}>
+              {product.storeName
+                ? t("product.moreFromStore", { store: product.storeName })
+                : t("product.relatedProducts")}
+            </Text>
+            <View style={styles.relatedGrid}>
+              {related.map((p) => (
+                <View key={p.id} style={{ width: "47%", marginBottom: spacing.sm }}>
+                  {/* Insigne masqué : tous viennent de la même boutique, le
+                      répéter sur chaque carte est du bruit. */}
+                  <ProductCard product={p} hideStoreBadge isWished={wishedIds.includes(p.id)} onToggleWish={toggleWish} onAddToCart={addToCart} />
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
+          </>
+        )}
       </ScrollView>
 
       {/* Modale : donner mon avis */}

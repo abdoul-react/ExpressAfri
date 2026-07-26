@@ -29,6 +29,12 @@ const DISPLAY_STYLES = ['horizontal-scroll', 'grid', 'list', 'card'] as const;
 // @IsOptional() laisse passer null et undefined ; la valeur null atteint Drizzle et vide la colonne.
 
 export class CreateBannerDto {
+  // Réservé à l'admin central : pour un gérant, le storeId du jeton l'écrase.
+  // null / absent = bannière globale visible sur tous les écrans publics.
+  @IsOptional()
+  @IsUUID()
+  storeId?: string | null;
+
   @IsString()
   @IsNotEmpty()
   title!: string;

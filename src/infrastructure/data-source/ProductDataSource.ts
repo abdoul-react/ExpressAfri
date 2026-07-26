@@ -5,6 +5,8 @@ export type ReviewPayload = { rating: number; title?: string; content?: string }
 export type ProductQuery = {
   search?: string;
   categoryId?: string;
+  /** Restreint à une boutique — la route `/mobile/products` filtre déjà dessus. */
+  storeId?: string;
   limit?: number;
   offset?: number;
   minPrice?: number;

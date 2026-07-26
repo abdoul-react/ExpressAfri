@@ -24,13 +24,24 @@ export function useProduct(id: string): UseProductResult {
     queryFn: () => catalogService.getProductById(id),
   });
 
-  const productsQ = useQuery<Product[]>({
-    queryKey: ["products"],
-    queryFn: () => catalogService.getProducts(),
+  const product = productQ.data;
+  const storeId = product?.storeId ?? null;
+
+  // Les similaires viennent EXCLUSIVEMENT de la boutique du produit consulté :
+  // proposer le catalogue global renverrait le client chez un concurrent.
+  // La clé inclut la boutique — réutiliser ["products"] partagerait le cache
+  // du catalogue global et ramènerait les autres boutiques.
+  const relatedQ = useQuery<Product[]>({
+    queryKey: ["products", { storeId }],
+    // +1 : le produit courant est dans la liste et sera retiré ensuite.
+    queryFn: () =>
+      catalogService.getProducts({ storeId: storeId!, limit: RELATED_COUNT + 1 }),
+    enabled: !!storeId,
   });
 
-  const product = productQ.data;
-  const related = getRelatedProducts(productsQ.data ?? [], id, RELATED_COUNT);
+  const related = storeId
+    ? getRelatedProducts(relatedQ.data ?? [], id, RELATED_COUNT)
+    : [];
 
   return { product, related, isLoading: productQ.isLoading };
 }

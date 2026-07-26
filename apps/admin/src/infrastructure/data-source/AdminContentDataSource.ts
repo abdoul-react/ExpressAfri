@@ -1,5 +1,7 @@
 export interface Banner {
   id: string
+  /** null = bannière globale de l'Admin ; sinon campagne d'une boutique */
+  storeId?: string | null
   title: string
   subtitle?: string
   description?: string
@@ -40,6 +42,8 @@ export interface StaticPage {
 }
 
 export interface CreateBannerInput {
+  /** Réservé à l'admin central ; pour un gérant le backend force sa boutique */
+  storeId?: string | null
   title: string
   subtitle?: string
   description?: string
@@ -249,7 +253,7 @@ export interface ContentSummary {
 export interface AdminContentDataSource {
   getSummary(): Promise<ContentSummary>
 
-  listBanners(): Promise<Banner[]>
+  listBanners(params?: { storeId?: string }): Promise<Banner[]>
   getBannerById(id: string): Promise<Banner>
   createBanner(data: CreateBannerInput): Promise<Banner>
   updateBanner(id: string, data: UpdateBannerInput): Promise<Banner>

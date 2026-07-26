@@ -9,17 +9,20 @@ import {
   Body,
   UseGuards,
   Inject,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { eq, like, and, sql } from 'drizzle-orm';
+import { eq, like, and, or, sql } from 'drizzle-orm';
 import * as fs from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { DRIZZLE, type DrizzleDB } from '../../database/database.module';
-import { categories, products } from '../../database/schema/products';
+import { categories } from '../../database/schema/products';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { Permissions } from '../../common/decorators/permissions.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 const BASE64_RE = /^data:image\/(\w+);base64,(.+)$/;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB decoded
@@ -47,13 +50,34 @@ const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001';
 export class CategoriesController {
   constructor(@Inject(DRIZZLE) private db: DrizzleDB) {}
 
+  /**
+   * Un gérant de boutique ne peut écrire que sur les catégories de sa boutique.
+   * Les catégories globales (boutique système) restent réservées à l'Admin central.
+   */
+  private async assertWritable(categoryId: string, storeId?: string) {
+    const [cat] = await this.db
+      .select({ storeId: categories.storeId })
+      .from(categories)
+      .where(eq(categories.id, categoryId))
+      .limit(1);
+    if (!cat) throw new NotFoundException('Catégorie introuvable');
+    if (storeId && cat.storeId !== storeId) {
+      throw new ForbiddenException(
+        'Cette catégorie appartient à une autre boutique',
+      );
+    }
+    return cat;
+  }
+
   @Get()
   @ApiOperation({ summary: 'Liste des catégories' })
   async list(
+    @CurrentUser() user: any,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('parentId') parentId?: string,
+    @Query('storeId') storeId?: string,
   ) {
     const p = page ? Number(page) : 1;
     const l = limit ? Number(limit) : 50;
@@ -61,6 +85,18 @@ export class CategoriesController {
     const conditions: any[] = [];
     if (search) conditions.push(like(categories.name, `%${search}%`));
     if (parentId) conditions.push(eq(categories.parentId, parentId));
+    if (user?.storeId) {
+      // Le gérant voit ses catégories et les catégories globales, jamais
+      // celles d'une autre boutique. Le storeId du jeton prime sur la query.
+      conditions.push(
+        or(
+          eq(categories.storeId, user.storeId),
+          eq(categories.storeId, SYSTEM_STORE_ID),
+        ),
+      );
+    } else if (storeId) {
+      conditions.push(eq(categories.storeId, storeId));
+    }
     const where = conditions.length ? and(...conditions) : undefined;
     const [data, [{ count }]] = await Promise.all([
       this.db
@@ -75,12 +111,12 @@ export class CategoriesController {
           isActive: categories.isActive,
           createdAt: categories.createdAt,
           updatedAt: categories.updatedAt,
-          productCount: sql<number>`cast(count(${products.id}) as int)`,
+          // Sous-requête corrélée plutôt qu'un leftJoin + group by : le join
+          // comptait les produits de toutes boutiques rattachés à la catégorie.
+          productCount: sql<number>`(select count(*)::int from products p where p.category_id = categories.id and p.store_id = categories.store_id)`,
         })
         .from(categories)
-        .leftJoin(products, eq(products.categoryId, categories.id))
         .where(where)
-        .groupBy(categories.id)
         .orderBy(categories.name)
         .limit(l)
         .offset(offset),
@@ -94,24 +130,38 @@ export class CategoriesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Détail catégorie' })
-  async getById(@Param('id') id: string) {
+  async getById(@Param('id') id: string, @CurrentUser() user: any) {
     const [cat] = await this.db
       .select()
       .from(categories)
       .where(eq(categories.id, id))
       .limit(1);
-    return cat ?? null;
+    if (!cat) return null;
+    if (
+      user?.storeId &&
+      cat.storeId !== user.storeId &&
+      cat.storeId !== SYSTEM_STORE_ID
+    ) {
+      throw new ForbiddenException(
+        'Cette catégorie appartient à une autre boutique',
+      );
+    }
+    return cat;
   }
 
   @Post()
   @Permissions('categories.create')
   @ApiOperation({ summary: 'Créer une catégorie' })
-  async create(@Body() body: any) {
+  async create(@Body() body: any, @CurrentUser() user: any) {
+    // Le storeId vient du jeton pour un gérant : un champ libre ne peut pas
+    // le remplacer, sinon il créerait des catégories chez un concurrent.
+    const storeId = user?.storeId ?? body.storeId ?? SYSTEM_STORE_ID;
+    if (body.parentId) await this.assertWritable(body.parentId, user?.storeId);
     const imageUrl = body.imageUrl ? persistBase64Image(body.imageUrl) : body.imageUrl;
     const payload = {
       ...body,
       imageUrl,
-      storeId: body.storeId || SYSTEM_STORE_ID,
+      storeId,
       slug:
         body.slug ||
         (body.name ?? 'cat')
@@ -128,7 +178,13 @@ export class CategoriesController {
   @Put(':id')
   @Permissions('categories.update')
   @ApiOperation({ summary: 'Modifier une catégorie' })
-  async update(@Param('id') id: string, @Body() body: any) {
+  async update(
+    @Param('id') id: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+  ) {
+    const current = await this.assertWritable(id, user?.storeId);
+    if (body.parentId) await this.assertWritable(body.parentId, user?.storeId);
     // Anti-cycle : interdire qu'une catégorie devienne son propre ancêtre
     if (body.parentId && body.parentId !== null) {
       let cursor: string | null = body.parentId;
@@ -150,7 +206,7 @@ export class CategoriesController {
     const imageUrl = body.imageUrl ? persistBase64Image(body.imageUrl) : body.imageUrl;
     const [cat] = await this.db
       .update(categories)
-      .set({ ...body, imageUrl, updatedAt: new Date() })
+      .set({ ...body, imageUrl, storeId: current.storeId, updatedAt: new Date() })
       .where(eq(categories.id, id))
       .returning();
     return cat;
@@ -159,7 +215,8 @@ export class CategoriesController {
   @Delete(':id')
   @Permissions('categories.delete')
   @ApiOperation({ summary: 'Supprimer une catégorie' })
-  async delete(@Param('id') id: string) {
+  async delete(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.assertWritable(id, user?.storeId);
     // Réassigne les sous-catégories orphelines au niveau racine avant suppression
     await this.db.update(categories)
       .set({ parentId: null })

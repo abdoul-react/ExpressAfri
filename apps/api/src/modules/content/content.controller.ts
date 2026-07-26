@@ -39,6 +39,7 @@ import {
 } from './content.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Content')
 @Controller('content')
@@ -57,20 +58,26 @@ export class ContentController {
   // ── Banners ──
   @Get('banners')
   @ApiOperation({ summary: 'Liste des bannières' })
-  async listBanners() {
-    return this.service.listBanners();
+  async listBanners(
+    @CurrentUser() user: any,
+    @Query('storeId') storeId?: string,
+  ) {
+    return this.service.listBanners({ storeId, ownStoreId: user?.storeId });
   }
 
   @Get('banners/:id')
   @ApiOperation({ summary: 'Détail bannière' })
-  async getBannerById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.getBannerById(id);
+  async getBannerById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.getBannerById(id, user?.storeId);
   }
 
   @Post('banners')
   @ApiOperation({ summary: 'Créer une bannière' })
-  async createBanner(@Body() body: CreateBannerDto) {
-    return this.service.createBanner(body);
+  async createBanner(@Body() body: CreateBannerDto, @CurrentUser() user: any) {
+    return this.service.createBanner(body, user?.storeId);
   }
 
   @Put('banners/:id')
@@ -78,14 +85,18 @@ export class ContentController {
   async updateBanner(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: UpdateBannerDto,
+    @CurrentUser() user: any,
   ) {
-    return this.service.updateBanner(id, body);
+    return this.service.updateBanner(id, body, user?.storeId);
   }
 
   @Delete('banners/:id')
   @ApiOperation({ summary: 'Supprimer une bannière' })
-  async deleteBanner(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.deleteBanner(id);
+  async deleteBanner(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.deleteBanner(id, user?.storeId);
   }
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })

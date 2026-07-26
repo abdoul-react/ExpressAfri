@@ -38,11 +38,13 @@ import { MobileModule } from './modules/mobile/mobile.module';
 import { AdminMessagesModule } from './modules/admin-messages/admin-messages.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './common/mail/mail.module';
+import { CryptoModule } from './common/crypto/crypto.module';
 @Module({
   imports: [
     AppLoggerModule,
     RedisModule,
     MailModule,
+    CryptoModule,
     LoggerModule.forRoot({
       pinoHttp: {
         transport:

@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  AlertTriangle, Ban, CheckCircle2, ExternalLink, FileCheck, Image, LayoutDashboard, Pencil, ShieldAlert, Store, Trash2, Users, XCircle,
+  AlertTriangle, Ban, CheckCircle2, CreditCard, ExternalLink, FileCheck, Image, LayoutDashboard, LayoutGrid, Pencil, ShieldAlert, Store, Trash2, Users, XCircle,
 } from 'lucide-react'
 import { useAdminStore, useUpdateStore, useDeleteStore } from '../hooks/useAdminStores'
 import { useApproveStore, useRejectStore, useSuspendStore, useReactivateStore, useUpdateKyc, useUpdateDocument, useUpdateCommission } from '../hooks/useStoreActions'
 import { PermissionGuard } from '@/components/guards/PermissionGuard'
 import { StoreManagersSection } from '../components/StoreManagersSection'
 import { StoreIdentitySection } from '../components/StoreIdentitySection'
+import { StoreSectionsSection } from '../components/StoreSectionsSection'
+import { StorePaymentMethodsSection } from '../components/StorePaymentMethodsSection'
 import {
   PageHeader, Card, CardHeader, CardTitle, CardContent, Button, StatusBadge, Badge,
   LoadingBlock, EmptyState, ConfirmDialog, Modal, Input, FormField, Select, Tabs, TabsList, TabsTrigger, TabsContent,
@@ -335,6 +337,8 @@ export function AdminStoreDetailPage() {
         <TabsList variant="underline">
           <TabsTrigger value="overview" icon={LayoutDashboard}>Aperçu</TabsTrigger>
           <TabsTrigger value="identity" icon={Image}>Identité</TabsTrigger>
+          <TabsTrigger value="sections" icon={LayoutGrid}>Sections</TabsTrigger>
+          <TabsTrigger value="payments" icon={CreditCard}>Paiements</TabsTrigger>
           <TabsTrigger value="kyc" icon={FileCheck}>KYC</TabsTrigger>
           <TabsTrigger value="managers" icon={Users}>Gérants</TabsTrigger>
           <TabsTrigger value="sanctions" icon={ShieldAlert} badge={s.sanctions.length}>Sanctions</TabsTrigger>
@@ -438,6 +442,16 @@ export function AdminStoreDetailPage() {
         {/* ─── Identité visuelle ─── */}
         <TabsContent value="identity">
           <StoreIdentitySection storeId={s.id} />
+        </TabsContent>
+
+        {/* ─── Sections de catalogue ─── */}
+        <TabsContent value="sections">
+          <StoreSectionsSection storeId={s.id} />
+        </TabsContent>
+
+        {/* ─── Moyens de paiement (cloisonnés au boutiquier) ─── */}
+        <TabsContent value="payments">
+          <StorePaymentMethodsSection storeId={s.id} />
         </TabsContent>
 
         {/* ─── KYC ─── */}

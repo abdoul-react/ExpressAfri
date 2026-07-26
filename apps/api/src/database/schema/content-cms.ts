@@ -9,9 +9,15 @@ import {
   doublePrecision,
   unique,
 } from 'drizzle-orm/pg-core';
+import { stores } from './stores';
 
 export const banners = pgTable('banners', {
   id: uuid('id').primaryKey().defaultRandom(),
+  // NULL = bannière globale de l'Admin central ; renseigné = bannière de campagne
+  // gérée par le boutiquier et affichée uniquement sur sa boutique.
+  storeId: uuid('store_id').references(() => stores.id, {
+    onDelete: 'cascade',
+  }),
   title: text('title').notNull(),
   subtitle: text('subtitle'),
   description: text('description'),

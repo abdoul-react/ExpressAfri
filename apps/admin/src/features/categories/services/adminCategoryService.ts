@@ -2,9 +2,9 @@ import { adminCategoryDataSource } from '@/infrastructure/data-source'
 import { toServiceError } from '@/lib/service-error'
 
 class AdminCategoryService {
-  async list() {
+  async list(params?: { storeId?: string }) {
     try {
-      return await adminCategoryDataSource.list()
+      return await adminCategoryDataSource.list(params)
     } catch (err) {
       throw toServiceError(err, 'Liste des catégories')
     }
@@ -18,7 +18,7 @@ class AdminCategoryService {
     }
   }
 
-  async create(data: { name: string; parentId?: string; imageUrl?: string }) {
+  async create(data: { name: string; parentId?: string; imageUrl?: string; storeId?: string }) {
     try {
       return await adminCategoryDataSource.create(data)
     } catch (err) {

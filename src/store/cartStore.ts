@@ -92,6 +92,8 @@ export const useCartStore = create<CartState>()((set, get) => ({
             quantity,
             variantLabel,
             variantAttributes,
+            storeId: product.storeId ?? null,
+            storeName: product.storeName ?? null,
             selected: true,
           },
         ],

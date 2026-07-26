@@ -61,14 +61,20 @@ export class ChatService {
       .where(eq(messages.conversationId, id))
       .orderBy(messages.createdAt);
 
-    // Nom de la boutique pour l'en-tête du chat
+    // Nom + logo de la boutique pour l'en-tête du chat
     const [store] = await this.db
-      .select({ name: stores.name })
+      .select({
+        name: stores.name,
+        logo: sql<
+          string | null
+        >`(select sm.url from store_media sm where sm.store_id = stores.id and sm.type = 'logo' and sm.is_active = true limit 1)`,
+      })
       .from(stores)
       .where(eq(stores.id, conv.storeId))
       .limit(1);
 
     // Contexte commande (premier article) si la conversation y est liée
+    let orderId: string | null = null;
     let orderRef: string | null = null;
     let orderProduct: string | null = null;
     let orderImage: string | null = null;
@@ -79,6 +85,9 @@ export class ChatService {
         .where(eq(orders.id, conv.orderId))
         .limit(1);
       if (order) {
+        // L'identifiant technique doit sortir : le bandeau épinglé navigue
+        // vers /orders/[id], qui attend l'uuid, pas le numéro lisible.
+        orderId = order.id;
         orderRef = order.orderNumber;
         const [item] = await this.db
           .select()
@@ -94,8 +103,11 @@ export class ChatService {
     return {
       id: conv.id,
       name: store?.name ?? conv.subject ?? 'Vendeur',
-      avatar: '',
+      avatar: store?.logo ?? '',
       online: false,
+      storeId: conv.storeId,
+      storeName: store?.name ?? null,
+      storeLogo: store?.logo ?? null,
       lastMessage: (() => {
         const last = msgList[msgList.length - 1];
         if (!last || last.deletedAt) return '';
@@ -105,6 +117,8 @@ export class ChatService {
       unread: msgList.filter((m) => !m.readAt && m.senderRole !== 'customer')
         .length,
       status: conv.status,
+      subject: conv.subject ?? null,
+      orderId,
       orderRef,
       orderProduct,
       orderImage,
@@ -170,6 +184,25 @@ export class ChatService {
     }
 
     if (!storeId) throw new BadRequestException('storeId ou orderId requis');
+
+    // Conversation libre (« contacter la boutique », sans commande) : une seule
+    // par boutique. Sans ce garde-fou, chaque appui sur le bouton empilait une
+    // conversation vide de plus pour le même interlocuteur.
+    if (!data.orderId) {
+      const [existing] = await this.db
+        .select()
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.customerId, data.customerId),
+            eq(conversations.storeId, storeId),
+            sql`${conversations.orderId} is null`,
+            eq(conversations.status, 'open'),
+          ),
+        )
+        .limit(1);
+      if (existing) return existing;
+    }
 
     const [conv] = await this.db
       .insert(conversations)

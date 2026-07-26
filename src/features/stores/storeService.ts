@@ -1,4 +1,4 @@
-import type { Product } from "@/types";
+import type { Banner, Product } from "@/types";
 import { storeDataSource } from "@/infrastructure/data-source";
 import type {
   StoreCard,
@@ -6,11 +6,18 @@ import type {
   StoreQuery,
   StoreProductQuery,
   StoreCategory,
+  StoreSection,
+  StoreGroup,
+  StorePaymentMethod,
 } from "@/infrastructure/data-source/StoreDataSource";
 
 export const storeService = {
   async getStores(query?: StoreQuery): Promise<StoreCard[]> {
     return storeDataSource.getStores(query);
+  },
+
+  async getStoreGroups(): Promise<StoreGroup[]> {
+    return storeDataSource.getStoreGroups();
   },
 
   async getStoreById(id: string): Promise<StoreDetail> {
@@ -23,6 +30,18 @@ export const storeService = {
 
   async getStoreCategories(id: string): Promise<StoreCategory[]> {
     return storeDataSource.getStoreCategories(id);
+  },
+
+  async getStoreBanners(id: string): Promise<Banner[]> {
+    return storeDataSource.getStoreBanners(id);
+  },
+
+  async getStoreSections(id: string): Promise<StoreSection[]> {
+    return storeDataSource.getStoreSections(id);
+  },
+
+  async getStorePaymentMethods(id: string): Promise<StorePaymentMethod[]> {
+    return storeDataSource.getStorePaymentMethods(id);
   },
 
   async getFollowedStores(): Promise<StoreCard[]> {

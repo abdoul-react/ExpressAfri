@@ -12,7 +12,11 @@ export default function SuccessScreen() {
   const colors = useColors();
   const router = useRouter();
   const { t } = useTranslation();
-  const { orderNumber } = useLocalSearchParams<{ orderId?: string; orderNumber?: string }>();
+  const { orderNumbers } = useLocalSearchParams<{ orderNumbers?: string }>();
+
+  // Un panier multi-boutiques produit une commande par boutique : le client
+  // doit voir tous ses numéros, pas seulement le premier.
+  const numbers = (orderNumbers ?? '').split(',').filter(Boolean);
 
   return (
     <View style={styles.container}>
@@ -20,9 +24,16 @@ export default function SuccessScreen() {
         <Icon name="check" size={56} color={colors.white} strokeWidth={3} />
       </LinearGradient>
       <Text style={styles.title}>{t('checkout.success')}</Text>
-      {orderNumber ? (
-        <Text style={styles.orderNumber}>N° {orderNumber}</Text>
+      {numbers.length > 1 ? (
+        <Text style={styles.ordersCount}>
+          {t('checkout.ordersCreated', { count: numbers.length })}
+        </Text>
       ) : null}
+      {numbers.map((n) => (
+        <Text key={n} style={styles.orderNumber}>
+          N° {n}
+        </Text>
+      ))}
       <Text style={styles.hint}>{t('checkout.successHint')}</Text>
 
       <View style={styles.actions}>
@@ -53,6 +64,7 @@ const makeStyles = (colors: Colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', padding: spacing.xxxl, gap: spacing.md },
   circle: { width: 110, height: 110, borderRadius: 55, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
   title: { fontSize: fontSize['3xl'], fontWeight: '900', color: colors.text, textAlign: 'center' },
+  ordersCount: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, textAlign: 'center' },
   orderNumber: { fontSize: fontSize.md, fontWeight: '700', color: colors.primary, textAlign: 'center' },
   hint: { fontSize: fontSize.md, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
   actions: { width: '100%', gap: spacing.md, marginTop: spacing.xl },

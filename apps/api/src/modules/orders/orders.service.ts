@@ -364,9 +364,6 @@ export class OrdersService {
     },
     customerId?: string,
   ) {
-    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const orderNumber = `EXP-${datePart}-${randPart}`;
     const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001';
 
     const UUID_RE =
@@ -374,15 +371,11 @@ export class OrdersService {
     const isValidUuid = (s: unknown): boolean =>
       typeof s === 'string' && UUID_RE.test(s);
 
-    // Idempotency : si une clé est fournie et qu'une commande existe déjà, la retourner
-    if (data.idempotencyKey) {
-      const [existing] = await this.db
-        .select()
-        .from(orders)
-        .where(eq(orders.idempotencyKey, data.idempotencyKey))
-        .limit(1);
-      if (existing) return this.getById(existing.id);
-    }
+    const orderNumberFor = () => {
+      const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+      return `EXP-${datePart}-${randPart}`;
+    };
 
     const validItems = (data.items ?? []).filter((item) =>
       isValidUuid(item.productId),
@@ -405,117 +398,177 @@ export class OrdersService {
     }
 
     // Tout est transactionnel : calcul prix + réservation stock + insertion commande/items +
-    // payment pending. Une rupture de stock annule TOUTE la commande.
-    const orderId = await this.db.transaction(async (tx) => {
+    // payment pending. Une rupture de stock annule TOUTES les commandes.
+    const { created, replayed } = await this.db.transaction(async (tx) => {
       // Recalculer TOUS les prix côté serveur — les montants envoyés par le client sont ignorés
-      const { pricedItems, subtotal, shippingCost, discount, total, couponId } =
-        await this.priceCart(
-          tx,
-          validItems.map((i) => ({
-            productId: i.productId,
-            variantId: i.variantId ?? undefined,
-            quantity: i.quantity ?? 1,
-          })),
-          data.couponCode ?? null,
-          customerId,
-        );
+      const { pricedItems, couponId } = await this.priceCart(
+        tx,
+        validItems.map((i) => ({
+          productId: i.productId,
+          variantId: i.variantId ?? undefined,
+          quantity: i.quantity ?? 1,
+        })),
+        data.couponCode ?? null,
+        customerId,
+      );
 
-      const storeId = pricedItems[0]?.product.storeId ?? SYSTEM_STORE_ID;
-      const defaultStatus =
-        data.paymentMethod === 'cod' ? 'confirmed' : 'pending';
-      const [order] = await tx
-        .insert(orders)
-        .values({
-          storeId,
-          idempotencyKey: data.idempotencyKey ?? null,
-          customerId: isValidUuid(customerId) ? customerId : undefined,
-          orderNumber,
-          status: defaultStatus,
-          subtotal: subtotal.toFixed(2),
-          shippingCost: shippingCost.toFixed(2),
-          taxAmount: '0',
-          discountAmount: discount.toFixed(2),
-          total: total.toFixed(2),
-          currency: 'XOF',
-          couponId,
-          couponCode: data.couponCode ?? null,
-          shippingAddress: shippingAddress
-            ? JSON.stringify(shippingAddress)
-            : undefined,
-          notes: data.notes ?? null,
-        })
-        .returning();
-
+      /*
+        Une commande par boutique : chaque boutique facture, expédie et encaisse
+        pour son compte. Attribuer tout le panier à `pricedItems[0]` privait les
+        autres boutiques de leurs propres commandes et de leur argent.
+      */
+      const groups = new Map<string, typeof pricedItems>();
       for (const pi of pricedItems) {
-        const variant = pi.variant;
-        if (variant) {
-          const decremented = await tx
-            .update(productVariants)
-            .set({
-              stock: sql`${productVariants.stock} - ${pi.quantity}`,
-              updatedAt: new Date(),
-            })
-            .where(
-              and(
-                eq(productVariants.id, variant.id),
-                gte(productVariants.stock, pi.quantity),
-              ),
-            )
-            .returning({ id: productVariants.id });
-          if (decremented.length === 0) {
-            throw new BadRequestException(
-              `Stock insuffisant pour ${variant.label}`,
-            );
-          }
-        }
-
-        await tx.insert(orderItems).values({
-          orderId: order.id,
-          productId: pi.product.id,
-          variantId: variant?.id ?? null,
-          storeId,
-          sku: variant?.sku ?? pi.product.slug,
-          label: variant
-            ? `${pi.product.name} - ${variant.label}`
-            : pi.product.name,
-          quantity: pi.quantity,
-          unitPrice: pi.unitPrice.toFixed(2),
-          totalPrice: pi.lineTotal.toFixed(2),
-        });
+        const key = pi.product.storeId ?? SYSTEM_STORE_ID;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(pi);
       }
 
-      await tx.insert(orderStatusLog).values({
-        orderId: order.id,
-        storeId,
-        fromStatus: null,
-        toStatus: defaultStatus,
-        reason: 'Commande créée',
-      });
+      const defaultStatus =
+        data.paymentMethod === 'cod' ? 'confirmed' : 'pending';
+      const inserted: { id: string; orderNumber: string }[] = [];
 
-      await tx.insert(payments).values({
-        orderId: order.id,
-        storeId,
-        method: data.paymentMethod ?? 'orange_money',
-        status: 'pending',
-        amount: total.toFixed(2),
-        currency: 'XOF',
-        idempotencyKey: data.idempotencyKey
-          ? `${data.idempotencyKey}:payment`
-          : null,
-      });
+      /*
+        Idempotence : une clé dérivée par boutique, car `orders.idempotency_key`
+        est unique. La reprise doit rendre les N commandes déjà créées, sinon une
+        double soumission en recréerait une partie.
 
-      return order.id;
+        Les clés sont énumérées plutôt que cherchées par préfixe : un `LIKE` sur
+        une valeur fournie par le client laisserait passer un `%`, qui
+        remonterait les commandes d'autres clients.
+      */
+      if (data.idempotencyKey) {
+        const derivedKeys = [...groups.keys()].map(
+          (storeId) => `${data.idempotencyKey}:${storeId}`,
+        );
+        const existing = await tx
+          .select({ id: orders.id, orderNumber: orders.orderNumber })
+          .from(orders)
+          .where(inArray(orders.idempotencyKey, derivedKeys));
+        if (existing.length) return { created: existing, replayed: true };
+      }
+
+      for (const [storeId, lines] of groups) {
+        const groupSubtotal = lines.reduce((sum, pi) => sum + pi.lineTotal, 0);
+        // Chaque boutique expédie séparément : la franchise de port
+        // s'apprécie par commande, pas sur le panier entier.
+        const shippingCost = groupSubtotal >= 10000 ? 0 : 1500;
+        // Un coupon appartient à une boutique (`coupons.store_id` NOT NULL) :
+        // la remise ne peut porter que sur la commande de cette boutique.
+        const groupDiscount = 0;
+        const groupTotal = Math.max(
+          0,
+          groupSubtotal + shippingCost - groupDiscount,
+        );
+        const orderNumber = orderNumberFor();
+
+        const [order] = await tx
+          .insert(orders)
+          .values({
+            storeId,
+            idempotencyKey: data.idempotencyKey
+              ? `${data.idempotencyKey}:${storeId}`
+              : null,
+            customerId: isValidUuid(customerId) ? customerId : undefined,
+            orderNumber,
+            status: defaultStatus,
+            subtotal: groupSubtotal.toFixed(2),
+            shippingCost: shippingCost.toFixed(2),
+            taxAmount: '0',
+            discountAmount: groupDiscount.toFixed(2),
+            total: groupTotal.toFixed(2),
+            currency: 'XOF',
+            couponId,
+            couponCode: data.couponCode ?? null,
+            shippingAddress: shippingAddress
+              ? JSON.stringify(shippingAddress)
+              : undefined,
+            notes: data.notes ?? null,
+          })
+          .returning();
+
+        for (const pi of lines) {
+          const variant = pi.variant;
+          if (variant) {
+            const decremented = await tx
+              .update(productVariants)
+              .set({
+                stock: sql`${productVariants.stock} - ${pi.quantity}`,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(productVariants.id, variant.id),
+                  gte(productVariants.stock, pi.quantity),
+                ),
+              )
+              .returning({ id: productVariants.id });
+            if (decremented.length === 0) {
+              throw new BadRequestException(
+                `Stock insuffisant pour ${variant.label}`,
+              );
+            }
+          }
+
+          await tx.insert(orderItems).values({
+            orderId: order.id,
+            productId: pi.product.id,
+            variantId: variant?.id ?? null,
+            storeId,
+            sku: variant?.sku ?? pi.product.slug,
+            label: variant
+              ? `${pi.product.name} - ${variant.label}`
+              : pi.product.name,
+            quantity: pi.quantity,
+            unitPrice: pi.unitPrice.toFixed(2),
+            totalPrice: pi.lineTotal.toFixed(2),
+          });
+        }
+
+        await tx.insert(orderStatusLog).values({
+          orderId: order.id,
+          storeId,
+          fromStatus: null,
+          toStatus: defaultStatus,
+          reason: 'Commande créée',
+        });
+
+        await tx.insert(payments).values({
+          orderId: order.id,
+          storeId,
+          method: data.paymentMethod ?? 'orange_money',
+          status: 'pending',
+          amount: groupTotal.toFixed(2),
+          currency: 'XOF',
+          idempotencyKey: data.idempotencyKey
+            ? `${data.idempotencyKey}:${storeId}:payment`
+            : null,
+        });
+
+        inserted.push({ id: order.id, orderNumber: order.orderNumber });
+      }
+
+      return { created: inserted, replayed: false };
     });
 
-    await this.audit.create({
-      action: 'CREATE',
-      resource: 'orders',
-      resourceId: orderId,
-      details: { orderNumber, paymentMethod: data.paymentMethod },
-      status: 'success',
-    });
-
-    return this.getById(orderId);
+    // Une reprise d'idempotence n'a rien créé : la ré-auditer laisserait croire
+    // à une seconde commande.
+    if (!replayed) {
+      for (const o of created) {
+        await this.audit.create({
+          action: 'CREATE',
+          resource: 'orders',
+          resourceId: o.id,
+          details: {
+            orderNumber: o.orderNumber,
+            paymentMethod: data.paymentMethod,
+          },
+          status: 'success',
+        });
+      }
+    }
+    const full = await Promise.all(created.map((o) => this.getById(o.id)));
+    return { orders: full };
   }
 
   /**

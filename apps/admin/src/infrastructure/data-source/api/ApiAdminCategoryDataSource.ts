@@ -2,8 +2,10 @@ import type { AdminCategoryDataSource, Category } from '../AdminCategoryDataSour
 import api from '@/lib/api'
 
 export class ApiAdminCategoryDataSource implements AdminCategoryDataSource {
-  async list(): Promise<Category[]> {
-    const { data } = await api.get('/categories', { params: { limit: 500 } })
+  async list(params?: { storeId?: string }): Promise<Category[]> {
+    const { data } = await api.get('/categories', {
+      params: { limit: 500, ...params },
+    })
     return (Array.isArray(data) ? data : (data.data ?? [])) as Category[]
   }
 
@@ -12,7 +14,7 @@ export class ApiAdminCategoryDataSource implements AdminCategoryDataSource {
     return data as Category
   }
 
-  async create(input: { name: string; parentId?: string; imageUrl?: string }): Promise<Category> {
+  async create(input: { name: string; parentId?: string; imageUrl?: string; storeId?: string }): Promise<Category> {
     const { data } = await api.post('/categories', input)
     return data as Category
   }
