@@ -34,7 +34,7 @@ import {
 import { StoresService } from './stores.service';
 import { StorePaymentMethodsService } from './store-payment-methods.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { PermissionsGuard, userHasPermission } from '../../common/guards/permissions.guard';
 import { Permissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -60,19 +60,22 @@ export class StoresController {
       const store = await this.service.getById(user.storeId);
       return { data: store ? [store] : [], total: store ? 1 : 0, page: 1 };
     }
+    if (!userHasPermission(user, 'stores.read')) {
+      throw new ForbiddenException('Permission insuffisante');
+    }
     return this.service.list(query);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Détail boutique' })
   async getById(@Param('id') id: string, @CurrentUser() user: any) {
-    if (user?.storeId && id !== user.storeId) {
-      throw new ForbiddenException('Vous ne gérez pas cette boutique');
-    }
+    this.assertStoreAccess(user, id, 'stores.read');
     return this.service.getById(id);
   }
 
   @Post()
+  @UseGuards(PermissionsGuard)
+  @Permissions('stores.create')
   @ApiOperation({ summary: 'Créer boutique' })
   async create(@Body() body: any, @CurrentUser() user: any) {
     if (user?.storeId)
@@ -87,9 +90,8 @@ export class StoresController {
     @Body() body: any,
     @CurrentUser() user: any,
   ) {
+    this.assertStoreAccess(user, id, 'stores.update');
     if (user?.storeId) {
-      if (id !== user.storeId)
-        throw new ForbiddenException('Vous ne gérez pas cette boutique');
       // Un gérant ne change ni le statut ni la commission de sa boutique
       const { status: _s, commissionRate: _c, ...allowed } = body ?? {};
       return this.service.update(id, allowed);
@@ -176,9 +178,31 @@ export class StoresController {
   // ====== MÉDIAS (logo, cover, galerie) ======
   // Le gérant gère les médias de SA boutique uniquement.
 
-  private assertOwnership(user: any, storeId: string) {
-    if (user?.storeId && user.storeId !== storeId) {
-      throw new ForbiddenException('Vous ne gérez pas cette boutique');
+  /**
+   * Autorise une écriture sur les ressources d'une boutique (médias, sections,
+   * moyens de paiement).
+   *
+   * Deux profils légitimes, et deux seulement :
+   *  - le gérant rattaché à CETTE boutique ;
+   *  - un admin plateforme (sans storeId) disposant de la permission demandée.
+   *
+   * Le rôle « Gérant de boutique » ne porte aucune permission `stores.*` : on
+   * ne peut donc pas se reposer sur `@Permissions` seul sans lui fermer l'accès
+   * à sa propre vitrine.
+   */
+  private assertStoreAccess(
+    user: any,
+    storeId: string,
+    permission: 'stores.read' | 'stores.update',
+  ) {
+    if (user?.storeId) {
+      if (user.storeId !== storeId) {
+        throw new ForbiddenException('Vous ne gérez pas cette boutique');
+      }
+      return;
+    }
+    if (!userHasPermission(user, permission)) {
+      throw new ForbiddenException('Permission insuffisante');
     }
   }
 
@@ -188,7 +212,7 @@ export class StoresController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.read');
     return this.service.listMedia(id);
   }
 
@@ -229,7 +253,7 @@ export class StoresController {
     @Body() body: { type?: string; alt?: string },
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     if (!file) throw new BadRequestException('Fichier requis');
     validateFileContent(file.path, 'image/');
     const url = `/uploads/stores/${file.filename}`;
@@ -247,7 +271,7 @@ export class StoresController {
     @Body() body: { ids: string[] },
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.reorderMedia(id, body?.ids ?? []);
   }
 
@@ -258,7 +282,7 @@ export class StoresController {
     @Param('mediaId', ParseUUIDPipe) mediaId: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.deleteMedia(id, mediaId);
   }
 
@@ -271,7 +295,7 @@ export class StoresController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.read');
     return this.service.listSections(id);
   }
 
@@ -282,7 +306,7 @@ export class StoresController {
     @Body() body: { title?: string; subtitle?: string; layout?: string },
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.createSection(id, body ?? {});
   }
 
@@ -295,7 +319,7 @@ export class StoresController {
     @Body() body: { ids: string[] },
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.reorderSections(id, body?.ids ?? []);
   }
 
@@ -307,7 +331,7 @@ export class StoresController {
     @Body() body: any,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.updateSection(id, sectionId, body ?? {});
   }
 
@@ -318,7 +342,7 @@ export class StoresController {
     @Param('sectionId', ParseUUIDPipe) sectionId: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.deleteSection(id, sectionId);
   }
 
@@ -329,7 +353,7 @@ export class StoresController {
     @Param('sectionId', ParseUUIDPipe) sectionId: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.read');
     return this.service.listSectionItems(id, sectionId);
   }
 
@@ -341,7 +365,7 @@ export class StoresController {
     @Body() body: { productIds?: string[] },
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.addSectionItems(id, sectionId, body?.productIds ?? []);
   }
 
@@ -353,7 +377,7 @@ export class StoresController {
     @Body() body: { ids: string[] },
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.reorderSectionItems(id, sectionId, body?.ids ?? []);
   }
 
@@ -365,7 +389,7 @@ export class StoresController {
     @Param('itemId', ParseUUIDPipe) itemId: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.removeSectionItem(id, sectionId, itemId);
   }
 
@@ -381,7 +405,7 @@ export class StoresController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.read');
     return this.payments.catalog();
   }
 
@@ -391,7 +415,7 @@ export class StoresController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.read');
     return this.payments.list(id);
   }
 
@@ -402,7 +426,7 @@ export class StoresController {
     @Body() body: any,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.payments.create(id, body ?? {}, user);
   }
 
@@ -415,7 +439,7 @@ export class StoresController {
     @Body() body: { ids?: string[] },
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.payments.reorder(id, body?.ids ?? []);
   }
 
@@ -427,7 +451,7 @@ export class StoresController {
     @Body() body: any,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.payments.update(id, methodId, body ?? {}, user);
   }
 
@@ -438,7 +462,7 @@ export class StoresController {
     @Param('methodId', ParseUUIDPipe) methodId: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.payments.remove(id, methodId, user);
   }
 
@@ -449,38 +473,46 @@ export class StoresController {
     @Param('methodId', ParseUUIDPipe) methodId: string,
     @CurrentUser() user: any,
   ) {
-    this.assertOwnership(user, id);
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.payments.validate(id, methodId, user);
   }
 
   @Get(':id/kyc')
   @ApiOperation({ summary: 'Documents KYC de la boutique' })
   async getKyc(@Param('id') id: string, @CurrentUser() user: any) {
-    if (
-      !user?.isSuperAdmin &&
-      !user?.permissions?.includes('stores.read') &&
-      user?.storeId !== id
-    ) {
-      throw new ForbiddenException('Accès refusé');
-    }
+    this.assertStoreAccess(user, id, 'stores.read');
     return this.service.getKyc(id);
   }
 
+  // Le gérant dépose ses justificatifs ; il ne prononce jamais la décision.
   @Put(':id/kyc')
   @ApiOperation({ summary: 'Mettre à jour les documents KYC' })
-  async upsertKyc(@Param('id') id: string, @Body() body: any) {
+  async upsertKyc(
+    @Param('id') id: string,
+    @Body() body: any,
+    @CurrentUser() user: any,
+  ) {
+    this.assertStoreAccess(user, id, 'stores.update');
     return this.service.upsertKyc(id, body);
   }
 
   @Put(':id/kyc/approve')
+  @UseGuards(PermissionsGuard)
+  @Permissions('stores.approve')
   @ApiOperation({ summary: 'Approuver KYC' })
   async approveKyc(@Param('id') id: string, @CurrentUser() user: any) {
+    if (user?.storeId)
+      throw new ForbiddenException("Réservé à l'équipe AfriExpress");
     return this.service.approveKyc(id, user.id);
   }
 
   @Put(':id/kyc/reject')
+  @UseGuards(PermissionsGuard)
+  @Permissions('stores.reject')
   @ApiOperation({ summary: 'Rejeter KYC' })
   async rejectKyc(@Param('id') id: string, @Body() body: { reason?: string }, @CurrentUser() user: any) {
+    if (user?.storeId)
+      throw new ForbiddenException("Réservé à l'équipe AfriExpress");
     return this.service.rejectKyc(id, user.id, body.reason);
   }
 }

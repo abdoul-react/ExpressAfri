@@ -59,6 +59,9 @@ async function main() {
         'campaigns.read', 'campaigns.create', 'campaigns.update', 'campaigns.delete',
         'promotions.read', 'promotions.create', 'promotions.update',
         'analytics.read',
+        // Lectures seules : cibler un coupon ou une campagne suppose de
+        // parcourir le catalogue et les boutiques (TargetSelector).
+        'stores.read', 'products.read',
       ],
       isSuperAdmin: false,
     },

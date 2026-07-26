@@ -70,9 +70,25 @@ export class ApiAdminStoreDataSource implements AdminStoreDataSource {
     return toStore(data)
   }
 
-  async updateKyc(id: string, _payload: UpdateKycPayload): Promise<AdminStore> {
-    const { data } = await api.put(`/stores/${id}/kyc`, _payload)
-    return toStore(data)
+  // Le verdict KYC passe par les routes de décision dédiées, protégées par
+  // `stores.approve` / `stores.reject`. `PUT /stores/:id/kyc` ne sert qu'au
+  // dépôt du dossier par le gérant et remet toujours le statut à `pending` :
+  // l'utiliser ici annulerait la décision au lieu de l'enregistrer.
+  //
+  // Ces deux routes renvoient la ligne KYC, pas la boutique : on relit la
+  // boutique pour rendre un AdminStore complet.
+  async updateKyc(id: string, payload: UpdateKycPayload): Promise<AdminStore> {
+    if (payload.status === 'approved') {
+      await api.put(`/stores/${id}/kyc/approve`, {})
+      return this.getById(id)
+    }
+    if (payload.status === 'rejected') {
+      await api.put(`/stores/${id}/kyc/reject`, {
+        reason: payload.rejectionReason,
+      })
+      return this.getById(id)
+    }
+    throw new Error(`Statut KYC non pris en charge : ${payload.status}`)
   }
 
   async updateDocument(_storeId: string, _docId: string, _payload: UpdateDocumentPayload): Promise<AdminStore> {

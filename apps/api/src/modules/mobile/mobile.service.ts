@@ -1646,7 +1646,9 @@ export class MobileService {
       const zones = await this.db
         .select()
         .from(shippingZones)
-        .where(eq(shippingZones.isActive, true))
+        .where(
+          and(eq(shippingZones.isActive, true), isNull(shippingZones.storeId)),
+        )
         .orderBy(desc(shippingZones.priority));
       const zone = zones.find((z) => {
         const list = Array.isArray(z.countries) ? z.countries : [];
@@ -1663,6 +1665,10 @@ export class MobileService {
             and(
               eq(shippingMethods.zoneId, zone.id),
               eq(shippingMethods.isActive, true),
+              // Devis global du panier : seules les méthodes de la plateforme
+              // entrent en jeu. Retenir celle d'une boutique laisserait
+              // n'importe quel vendeur fixer les frais de port de tous.
+              isNull(shippingMethods.storeId),
             ),
           );
         // Méthode la moins chère de la zone (baseRate est un decimal → string)

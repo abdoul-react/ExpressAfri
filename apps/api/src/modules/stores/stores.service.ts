@@ -601,18 +601,37 @@ export class StoresService {
   }
 
   async upsertKyc(storeId: string, data: any) {
+    // Liste blanche stricte : le déposant décrit son dossier, il ne prononce
+    // jamais le verdict. Sans ce filtre, un status/reviewedBy glissé dans le
+    // body vaudrait auto-approbation sans passer par approveKyc().
+    const declarative = {
+      firstName: data?.firstName,
+      lastName: data?.lastName,
+      nationality: data?.nationality,
+      dateOfBirth: data?.dateOfBirth,
+      nidNumber: data?.nidNumber,
+      rccm: data?.rccm,
+      nif: data?.nif,
+      businessType: data?.businessType,
+      address: data?.address,
+    };
+    const payload = Object.fromEntries(
+      Object.entries(declarative).filter(([, v]) => v !== undefined),
+    );
+
     const existing = await this.getKyc(storeId);
     if (existing) {
       const [kyc] = await this.db
         .update(storeKyc)
-        .set({ ...data, updatedAt: new Date() })
+        // Un nouveau dépôt repasse le dossier en attente de revue.
+        .set({ ...payload, status: 'pending', updatedAt: new Date() })
         .where(eq(storeKyc.storeId, storeId))
         .returning();
       return kyc;
     }
     const [kyc] = await this.db
       .insert(storeKyc)
-      .values({ ...data, storeId })
+      .values({ ...payload, storeId, status: 'pending' } as any)
       .returning();
     return kyc;
   }

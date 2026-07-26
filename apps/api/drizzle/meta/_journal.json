@@ -281,6 +281,13 @@
       "when": 1784890600000,
       "tag": "0040_store_payment_methods",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1784890700000,
+      "tag": "0041_marketing_read_scopes",
+      "breakpoints": true
     }
   ]
 }

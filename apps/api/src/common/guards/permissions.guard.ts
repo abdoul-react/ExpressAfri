@@ -21,6 +21,19 @@ function matchesPermission(
   });
 }
 
+/**
+ * Même logique que le guard, mais appelable depuis un contrôleur lorsque
+ * l'autorisation dépend aussi de la donnée visée (ex. « gérant de CETTE
+ * boutique » OU « admin plateforme disposant de la permission »).
+ */
+export function userHasPermission(user: any, required: string): boolean {
+  if (!user) return false;
+  if (user.isSuperAdmin) return true;
+  if (user.permissions === '*') return true;
+  if (!Array.isArray(user.permissions)) return false;
+  return matchesPermission(user.permissions, required);
+}
+
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
@@ -36,16 +49,6 @@ export class PermissionsGuard implements CanActivate {
     const { user } = context.switchToHttp().getRequest();
     if (!user) return false;
 
-    // SuperAdmin → accès total
-    if (user.isSuperAdmin) return true;
-
-    // Permissions '*' (rôle marqué superAdmin ou contenant ["*"])
-    if (user.permissions === '*') return true;
-
-    // Tableau de permissions : toutes les permissions requises doivent être satisfaites
-    if (!Array.isArray(user.permissions)) return false;
-    return requiredPermissions.every((p) =>
-      matchesPermission(user.permissions, p),
-    );
+    return requiredPermissions.every((p) => userHasPermission(user, p));
   }
 }

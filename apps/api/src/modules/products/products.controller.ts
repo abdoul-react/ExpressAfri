@@ -35,6 +35,7 @@ export class ProductsController {
   // produits de sa boutique : le storeId du jeton écrase tout ce que le client envoie.
 
   @Get()
+  @Permissions('products.read')
   @ApiOperation({ summary: 'Liste des produits' })
   async list(@Query() query: ProductQueryDto, @CurrentUser() user: any) {
     const params = user?.storeId ? { ...query, storeId: user.storeId } : query;
@@ -42,6 +43,7 @@ export class ProductsController {
   }
 
   @Get(':id')
+  @Permissions('products.read')
   @ApiOperation({ summary: 'Détail produit avec variantes et images' })
   async getById(
     @Param('id', ParseUUIDPipe) id: string,
@@ -57,6 +59,7 @@ export class ProductsController {
   }
 
   @Post()
+  @Permissions('products.create')
   @ApiOperation({ summary: 'Créer un produit' })
   async create(@Body() body: CreateProductDto, @CurrentUser() user: any) {
     const payload = user?.storeId ? { ...body, storeId: user.storeId } : body;
@@ -64,6 +67,7 @@ export class ProductsController {
   }
 
   @Put(':id')
+  @Permissions('products.update')
   @ApiOperation({ summary: 'Modifier un produit' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -95,6 +99,7 @@ export class ProductsController {
   }
 
   @Delete(':id')
+  @Permissions('products.delete')
   @ApiOperation({ summary: 'Supprimer un produit' })
   async delete(
     @Param('id', ParseUUIDPipe) id: string,
