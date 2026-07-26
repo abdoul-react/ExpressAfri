@@ -7,26 +7,28 @@ import { useTranslation } from 'react-i18next';
 import { radius, shadows, useColors, useThemedStyles, type Colors } from '@/design-system';
 import { Icon } from '@/icons';
 import { resolveMediaUrl } from '@/utils/resolveMediaUrl';
-import { useScreenBanners } from './useScreenBanners';
+import { useStores } from '@/features/stores';
 
 /** Cadence de rotation des visuels du bouton central. */
 const ROTATE_MS = 3000;
 
 /**
  * Bouton central « Boutiques » de la barre de navigation : un rectangle qui
- * fait défiler en fondu les visuels configurés par l'admin (CMS → Bannières,
- * écran « Bouton central (tabbar) »). Sans visuel configuré — ou tant qu'ils
- * chargent — un dégradé de marque avec l'icône boutique prend le relais :
- * même forme, même place, le bouton reste toujours identifiable et utilisable.
+ * fait défiler en fondu les photos de couverture des boutiques — les mêmes
+ * visuels qui coiffent leur espace. Aucun réglage admin : le bouton vit avec
+ * le catalogue. Tant qu'aucune boutique n'a de couverture, un dégradé de
+ * marque avec l'icône boutique prend le relais — même forme, même place.
  */
 export function TabBarCarouselButton() {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
   const { t } = useTranslation();
-  const banners = useScreenBanners('tabbar');
+  // Même clé de cache que la grille de découverte (['stores', {limit: 8}]) :
+  // l'accueil la précharge déjà, le bouton ne coûte aucune requête de plus.
+  const { data: stores } = useStores({ limit: 8 });
 
-  const images = banners
-    .map((b) => resolveMediaUrl(b.imageUrl))
+  const images = (stores ?? [])
+    .map((s) => resolveMediaUrl(s.coverUrl) ?? resolveMediaUrl(s.photos?.[0]))
     .filter((u): u is string => !!u);
 
   const [index, setIndex] = useState(0);
@@ -49,7 +51,7 @@ export function TabBarCarouselButton() {
     return () => clearInterval(timer);
   }, [images.length]);
 
-  // Le visuel courant peut disparaître si l'admin retire des bannières
+  // Le visuel courant peut disparaître si la liste des boutiques change
   const safeIndex = images.length ? index % images.length : 0;
 
   return (
@@ -86,12 +88,11 @@ export function TabBarCarouselButton() {
 
 const makeStyles = (colors: Colors) =>
   StyleSheet.create({
-    wrap: { alignItems: 'center', justifyContent: 'center' },
+    wrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     carousel: {
-      width: 64,
-      height: 42,
-      borderRadius: radius.md,
-      marginTop: -10,
+      width: 66,
+      height: 44,
+      borderRadius: radius.lg,
       overflow: 'hidden',
       backgroundColor: colors.primary,
       borderWidth: 2,

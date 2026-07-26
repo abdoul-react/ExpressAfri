@@ -42,14 +42,9 @@ function CustomTabBar({ state, navigation }: { state: any; navigation: any }) {
 
         if (cfg.center) {
           return (
-            <View key={route.key} style={styles.centerWrap}>
-              {/* Carrousel d'images admin (CMS → Bannières → « Bouton central ») ;
-                  repli dégradé de marque + icône boutique sans visuel configuré. */}
-              <TabBarCarouselButton />
-              <Text style={styles.centerLabel} numberOfLines={1}>
-                {t('tabs.stores')}
-              </Text>
-            </View>
+            // Carrousel des couvertures de boutiques — sans libellé, centré
+            // sur la hauteur de la barre comme les autres onglets.
+            <TabBarCarouselButton key={route.key} />
           );
         }
 
@@ -104,13 +99,6 @@ const makeStyles = (colors: Colors) => StyleSheet.create({
   },
   tab: { flex: 1, alignItems: 'center', gap: 3 },
   label: { fontSize: fontSize.xs, fontWeight: '600' },
-  centerWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
-  centerLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 0.2,
-  },
   check: {
     position: 'absolute',
     top: -5,

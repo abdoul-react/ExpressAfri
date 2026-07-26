@@ -26,7 +26,7 @@ import { formatDate } from '@/lib/format'
 import { useAdminStores } from '@/features/stores'
 import { useAdminAuth } from '@/features/auth'
 
-const SCREEN_LABELS: Record<string, string> = { home: 'Accueil', store: 'Boutique', feed: 'Feed', account: 'Compte', tabbar: 'Bouton central (tabbar)' }
+const SCREEN_LABELS: Record<string, string> = { home: 'Accueil', store: 'Boutique', feed: 'Feed', account: 'Compte' }
 
 /** Filtre « bannières globales » : valeur sentinelle comprise par l'API. */
 const GLOBAL_BANNER_SCOPE = 'global'
@@ -36,7 +36,6 @@ const SCREEN_OPTIONS = [
   { value: 'store', label: 'Boutique' },
   { value: 'feed', label: 'Feed' },
   { value: 'account', label: 'Compte' },
-  { value: 'tabbar', label: 'Bouton central (tabbar)' },
 ]
 
 function isActiveBanner(b: Banner) {
