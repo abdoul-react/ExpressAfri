@@ -25,7 +25,8 @@
     "endsIn": "Fin dans",
     "comingSoon": "Cette section arrive très bientôt sur AfriExpress.",
     "shareFrom": "Partagé depuis",
-    "back": "Retour"
+    "back": "Retour",
+    "continue": "Continuer"
   },
   "tabs": {
     "home": "Accueil",
@@ -169,7 +170,19 @@
     "ordersWillBeCreated_one": "Une commande sera créée.",
     "ordersWillBeCreated_other": "{{count}} commandes seront créées, une par boutique.",
     "ordersCreated_one": "1 commande créée",
-    "ordersCreated_other": "{{count}} commandes créées"
+    "ordersCreated_other": "{{count}} commandes créées",
+    "freeShipping": "Gratuite",
+    "storeSubtotal": "Sous-total boutique",
+    "estimatedDaysRange": "{{min}}–{{max}} jours",
+    "shippingMultiStore": "Livraison ({{count}} boutiques)",
+    "paymentStep": "Paiement {{current}}/{{total}} — {{store}}",
+    "amountDue": "Montant à payer",
+    "continueToNext": "Boutique suivante",
+    "confirmAndPay": "Confirmer et payer",
+    "codInfo": "Vous réglerez le montant en espèces au livreur, à la réception de votre commande. Vérifiez vos articles avant de payer.",
+    "processingStorePayment": "Paiement de {{store}} en cours…",
+    "mobileMoneyHint": "Le numéro qui effectuera le paiement",
+    "cardPayment": "Carte bancaire"
   },
   "payment": {
     "mobileMoney": "Mobile Money",
@@ -278,7 +291,8 @@
     "paymentMethods": "Moyens de paiement acceptés",
     "noProducts": "Cette boutique n'a pas encore de produit",
     "categories": "Catégories",
-    "about": "À propos"
+    "about": "À propos",
+    "reviews": "avis"
   },
   "account": {
     "myOrders": "Mes commandes",

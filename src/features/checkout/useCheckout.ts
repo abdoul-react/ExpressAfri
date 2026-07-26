@@ -3,12 +3,18 @@ import { getDefaultAddress, useAddressStore } from "@/store/addressStore";
 import { useCartStore } from "@/store/cartStore";
 import { COUNTRIES } from "@/store/settingsStore";
 import { useEffect, useMemo, useState } from "react";
+import { useCartStoreGroups, type CartStoreGroup } from "@/features/cart";
 import checkoutService, { PromoResult } from "./checkoutService";
 import { useShippingQuote } from "./useShippingQuote";
+import {
+  useStoreShippingQuotes,
+  type StoreShippingQuote,
+} from "./useStoreShippingQuotes";
 
 export function useCheckout() {
   const allItems = useCartStore((s) => s.items);
   const items = useMemo(() => allItems.filter((i) => i.selected), [allItems]);
+  const groups = useCartStoreGroups(items);
 
   const [promoOpen, setPromoOpen] = useState(false);
   const [promoCode, setPromoCode] = useState("");
@@ -34,22 +40,35 @@ export function useCheckout() {
     ? (COUNTRIES.find((c) => c.code === address.countryCode)?.name ?? "")
     : "";
 
-  // Livraison résolue côté serveur (zone du pays, sinon repli global). Un code
-  // promo « FREESHIP » force la gratuité ; sinon on suit le devis. Repli local
-  // tant que le devis n'est pas chargé.
-  const { data: quote } = useShippingQuote(address?.countryCode, subtotal);
+  // Livraison par boutique : chaque boutique facture ses propres frais, le
+  // total est la somme des devis. Même calcul serveur que la création de
+  // commande → total affiché = total facturé.
+  const storeQuotes = useStoreShippingQuotes(address?.countryCode, groups);
+
+  // Repli : devis global historique tant que les devis par boutique ne sont
+  // pas chargés (ou pour les paniers d'articles hérités sans storeId).
+  const { data: globalQuote } = useShippingQuote(
+    address?.countryCode,
+    subtotal,
+  );
+
   const shipping = promoResult.freeShipping
     ? 0
-    : quote
-      ? quote.shippingCost
-      : checkoutService.calculateShipping(subtotal, promoResult);
+    : storeQuotes.totalShipping != null
+      ? storeQuotes.totalShipping
+      : globalQuote
+        ? globalQuote.shippingCost
+        : checkoutService.calculateShipping(subtotal, promoResult);
   const total = checkoutService.calculateTotal(subtotal, shipping, discount);
 
   return {
     items,
+    groups,
     subtotal,
     shipping,
-    shippingQuote: quote,
+    shippingQuote: globalQuote,
+    quotesByStore: storeQuotes.quotesByStore,
+    quotesLoading: storeQuotes.isLoading,
     discount,
     total,
     address,
@@ -84,3 +103,5 @@ export function useCheckout() {
     },
   };
 }
+
+export type { CartStoreGroup, StoreShippingQuote };

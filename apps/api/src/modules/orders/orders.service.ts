@@ -34,6 +34,7 @@ import {
 } from './order-status';
 import { AppLoggerService } from '../../common/logger/logger.service';
 import { setLogContext } from '../../common/interceptors/request-id.interceptor';
+import { quoteStoreShipping } from '../shipping/store-shipping.util';
 
 @Injectable()
 export class OrdersService {
@@ -325,6 +326,9 @@ export class OrdersService {
       });
     }
 
+    // Estimation panier entier, NON utilisée pour la facturation : la
+    // création de commande recalcule les frais PAR BOUTIQUE via
+    // quoteStoreShipping (createFromCheckout ne lit que pricedItems/couponId).
     const shippingCost = subtotal >= 10000 ? 0 : 1500;
     let discount = 0;
     let couponId: string | null = null;
@@ -450,9 +454,15 @@ export class OrdersService {
 
       for (const [storeId, lines] of groups) {
         const groupSubtotal = lines.reduce((sum, pi) => sum + pi.lineTotal, 0);
-        // Chaque boutique expédie séparément : la franchise de port
-        // s'apprécie par commande, pas sur le panier entier.
-        const shippingCost = groupSubtotal >= 10000 ? 0 : 1500;
+        // Chaque boutique expédie séparément : frais issus du même devis que
+        // l'endpoint /mobile/checkout/shipping-quotes (zones de la boutique,
+        // repli global) — total affiché = total facturé.
+        const { shippingCost } = await quoteStoreShipping(this.db, {
+          storeId,
+          country: (shippingAddress as { countryCode?: string } | null)
+            ?.countryCode,
+          subtotal: groupSubtotal,
+        });
         // Un coupon appartient à une boutique (`coupons.store_id` NOT NULL) :
         // la remise ne peut porter que sur la commande de cette boutique.
         const groupDiscount = 0;

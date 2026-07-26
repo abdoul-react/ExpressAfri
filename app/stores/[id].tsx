@@ -24,6 +24,7 @@ import { Icon } from '@/icons';
 import {
   ProductCard,
   ProductSection,
+  Rating,
   ScreenHeader,
   SearchBar,
   SkeletonProductGrid,
@@ -206,6 +207,15 @@ export default function StoreDetailScreen() {
               <View style={styles.metaRow}>
                 <Icon name="location" size={12} color={colors.textMuted} />
                 <Text style={styles.meta}>{location}</Text>
+              </View>
+            ) : null}
+            {/* Note issue des avis produits — rien tant qu'aucun avis n'existe */}
+            {s.rating != null ? (
+              <View style={styles.metaRow}>
+                <Rating value={s.rating} soldCount={s.salesCount} />
+                <Text style={styles.meta}>
+                  ({s.ratingCount} {t('stores.reviews')})
+                </Text>
               </View>
             ) : null}
             <Text style={styles.meta}>

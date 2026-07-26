@@ -19,6 +19,12 @@ export type CheckoutPayload = {
   payments?: StorePaymentChoice[];
   couponCode?: string;
   notes?: string;
+  /**
+   * Clé d'idempotence stable pour toute la tentative d'achat : générée au
+   * début du flux de paiement et réutilisée à chaque retry, elle garantit
+   * qu'un double-tap ou une reprise réseau ne recrée pas les commandes.
+   */
+  idempotencyKey?: string;
 };
 
 /** Une commande par boutique : l'API renvoie donc une liste, pas un objet. */
@@ -41,7 +47,11 @@ export type CheckoutResult = {
 };
 
 export async function createOrder(payload: CheckoutPayload): Promise<CheckoutResult> {
-  const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  // La clé fournie par l'appelant (flux de paiement) prime : elle est stable
+  // sur toute la tentative. Le repli horodaté ne protège qu'un retry immédiat.
+  const idempotencyKey =
+    payload.idempotencyKey ??
+    `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return apiAdapter.post("/mobile/orders", { ...payload, idempotencyKey } as any);
 }
 

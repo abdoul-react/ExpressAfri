@@ -12,6 +12,11 @@ export type StoreCard = {
   photos: string[];
   followersCount: number;
   productCount: number;
+  /** Note bayésienne 1–5 issue des avis produits ; null = aucun avis (rien à afficher). */
+  rating: number | null;
+  ratingCount: number;
+  /** Nombre de commandes servies (hors annulées/remboursées). */
+  salesCount: number;
   likedByMe: boolean;
   /** Champs de compatibilité avec les écrans historiques (compteur formaté, avatar). */
   followers: string;

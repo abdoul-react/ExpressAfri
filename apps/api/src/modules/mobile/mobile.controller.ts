@@ -38,6 +38,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { CustomerRoute } from '../../common/decorators/customer-route.decorator';
 import { PushService } from '../push/push.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { ShippingQuotesDto } from './dto/shipping-quotes.dto';
 
 @ApiTags('Mobile')
 @Controller('mobile')
@@ -373,6 +374,16 @@ export class MobileController {
       country,
       subtotal: subtotal ? Number(subtotal) : 0,
     });
+  }
+
+  @Public()
+  @Post('checkout/shipping-quotes')
+  @ApiOperation({
+    summary:
+      'Devis de livraison PAR BOUTIQUE (multi-vendeurs) — même calcul que la création de commande',
+  })
+  async shippingQuotes(@Body() body: ShippingQuotesDto) {
+    return this.service.getStoreShippingQuotes(body);
   }
 
   @Public()

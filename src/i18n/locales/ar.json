@@ -25,7 +25,8 @@
     "endsIn": "ينتهي خلال",
     "comingSoon": "هذا القسم قادم قريباً إلى أفري إكسبريس.",
     "shareFrom": "تمت المشاركة من",
-    "back": "رجوع"
+    "back": "رجوع",
+    "continue": "متابعة"
   },
   "tabs": {
     "home": "الرئيسية",
@@ -175,7 +176,19 @@
     "ordersWillBeCreated_many": "سيتم إنشاء {{count}} طلباً، طلب لكل متجر.",
     "ordersCreated_two": "تم إنشاء طلبين",
     "ordersCreated_few": "تم إنشاء {{count}} طلبات",
-    "ordersCreated_many": "تم إنشاء {{count}} طلباً"
+    "ordersCreated_many": "تم إنشاء {{count}} طلباً",
+    "freeShipping": "مجاني",
+    "storeSubtotal": "المجموع الفرعي للمتجر",
+    "estimatedDaysRange": "{{min}}–{{max}} أيام",
+    "shippingMultiStore": "الشحن ({{count}} متاجر)",
+    "paymentStep": "الدفع {{current}}/{{total}} — {{store}}",
+    "amountDue": "المبلغ المستحق",
+    "continueToNext": "المتجر التالي",
+    "confirmAndPay": "تأكيد ودفع",
+    "codInfo": "ستدفع المبلغ نقدًا لعامل التوصيل عند استلام طلبك. تحقق من منتجاتك قبل الدفع.",
+    "processingStorePayment": "جارٍ معالجة دفع {{store}}…",
+    "mobileMoneyHint": "الرقم الذي سيقوم بالدفع",
+    "cardPayment": "بطاقة بنكية"
   },
   "payment": {
     "mobileMoney": "المحفظة الجوّالة",
@@ -280,7 +293,8 @@
     "paymentMethods": "طرق الدفع المقبولة",
     "noProducts": "لا يحتوي هذا المتجر على منتجات بعد",
     "categories": "الفئات",
-    "about": "حول"
+    "about": "حول",
+    "reviews": "تقييمات"
   },
   "account": {
     "summerSaleEnds": "ينتهي: 8 يوليو 07:59 · خصم يصل إلى -60%",

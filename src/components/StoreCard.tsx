@@ -120,6 +120,15 @@ export function StoreCard({ store, hideLike }: Props) {
           ) : null}
         </View>
 
+        {/* Note issue des avis produits — la ligne n'apparaît qu'avec des avis */}
+        {store.rating != null ? (
+          <View style={styles.ratingRow}>
+            <Icon name="star" size={12} color={colors.star} fill />
+            <Text style={styles.ratingValue}>{store.rating.toFixed(1)}</Text>
+            <Text style={styles.metaText}>({formatCount(store.ratingCount)})</Text>
+          </View>
+        ) : null}
+
         <View style={styles.stats}>
           <Text style={styles.metaText} numberOfLines={1}>
             {formatCount(store.productCount)} {t('stores.products')}
@@ -187,5 +196,11 @@ const makeStyles = (colors: Colors) =>
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 16 },
     metaText: { fontSize: fontSize.xs, color: colors.textMuted, lineHeight: 16 },
     stats: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 16 },
+    ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    ratingValue: {
+      fontSize: fontSize.sm,
+      color: colors.textSecondary,
+      fontWeight: '700',
+    },
     dot: { fontSize: fontSize.xs, color: colors.textMuted },
   });

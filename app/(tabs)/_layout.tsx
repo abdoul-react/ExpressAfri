@@ -1,10 +1,11 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Tabs, router } from 'expo-router';
+import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { spacing, fontSize, shadows, useColors, useThemedStyles, type Colors } from '@/design-system';
 import { Icon, IconName } from '@/icons';
+import { TabBarCarouselButton } from '@/features/content/TabBarCarouselButton';
 import { useCartStore } from '@/store/cartStore';
 
 // La route physique 'store' garde son nom (deep links historiques) mais présente
@@ -41,17 +42,14 @@ function CustomTabBar({ state, navigation }: { state: any; navigation: any }) {
 
         if (cfg.center) {
           return (
-            <Pressable
-              key={route.key}
-              style={styles.centerWrap}
-              accessibilityRole="button"
-              accessibilityLabel={t('tabs.stores')}
-              onPress={() => router.push('/stores')}
-            >
-              <View style={styles.centerBtn}>
-                <Icon name="plus" size={26} color={colors.white} />
-              </View>
-            </Pressable>
+            <View key={route.key} style={styles.centerWrap}>
+              {/* Carrousel d'images admin (CMS → Bannières → « Bouton central ») ;
+                  repli cercle + « plus » sans visuel configuré. */}
+              <TabBarCarouselButton />
+              <Text style={[styles.label, { color: colors.tabInactive }]} numberOfLines={1}>
+                {t('tabs.stores')}
+              </Text>
+            </View>
           );
         }
 
@@ -106,17 +104,7 @@ const makeStyles = (colors: Colors) => StyleSheet.create({
   },
   tab: { flex: 1, alignItems: 'center', gap: 3 },
   label: { fontSize: fontSize.xs, fontWeight: '600' },
-  centerWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  centerBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -8,
-    ...shadows.md,
-  },
+  centerWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 },
   check: {
     position: 'absolute',
     top: -5,

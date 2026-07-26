@@ -25,7 +25,8 @@
     "endsIn": "Ends in",
     "comingSoon": "This section is coming soon to AfriExpress.",
     "shareFrom": "Shared from",
-    "back": "Back"
+    "back": "Back",
+    "continue": "Continue"
   },
   "tabs": {
     "home": "Home",
@@ -169,7 +170,19 @@
     "ordersWillBeCreated_one": "One order will be created.",
     "ordersWillBeCreated_other": "{{count}} orders will be created, one per store.",
     "ordersCreated_one": "1 order created",
-    "ordersCreated_other": "{{count}} orders created"
+    "ordersCreated_other": "{{count}} orders created",
+    "freeShipping": "Free",
+    "storeSubtotal": "Store subtotal",
+    "estimatedDaysRange": "{{min}}–{{max}} days",
+    "shippingMultiStore": "Shipping ({{count}} stores)",
+    "paymentStep": "Payment {{current}}/{{total}} — {{store}}",
+    "amountDue": "Amount due",
+    "continueToNext": "Next store",
+    "confirmAndPay": "Confirm and pay",
+    "codInfo": "You will pay the courier in cash upon delivery. Check your items before paying.",
+    "processingStorePayment": "Processing payment for {{store}}…",
+    "mobileMoneyHint": "The number that will make the payment",
+    "cardPayment": "Bank card"
   },
   "payment": {
     "mobileMoney": "Mobile Money",
@@ -278,7 +291,8 @@
     "paymentMethods": "Accepted payment methods",
     "noProducts": "This store has no product yet",
     "categories": "Categories",
-    "about": "About"
+    "about": "About",
+    "reviews": "reviews"
   },
   "account": {
     "myOrders": "My Orders",

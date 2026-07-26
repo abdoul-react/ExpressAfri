@@ -27,7 +27,8 @@ export const banners = pgTable('banners', {
   discountLabel: text('discount_label'),
   isActive: boolean('is_active').default(true),
   position: integer('position').notNull().default(0),
-  screen: text('screen', { enum: ['home', 'store', 'feed', 'account'] })
+  // `tabbar` : images du bouton central de la barre de navigation mobile
+  screen: text('screen', { enum: ['home', 'store', 'feed', 'account', 'tabbar'] })
     .notNull()
     .default('home'),
   backgroundColor: text('background_color'),

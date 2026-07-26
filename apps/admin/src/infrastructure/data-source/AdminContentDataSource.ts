@@ -11,7 +11,7 @@ export interface Banner {
   discountLabel?: string
   isActive: boolean
   position: number
-  screen: 'home' | 'store' | 'feed' | 'account'
+  screen: 'home' | 'store' | 'feed' | 'account' | 'tabbar'
   backgroundColor?: string
   startDate?: string
   endDate?: string
@@ -51,7 +51,7 @@ export interface CreateBannerInput {
   linkUrl?: string
   ctaText?: string
   discountLabel?: string
-  screen: 'home' | 'store' | 'feed' | 'account'
+  screen: 'home' | 'store' | 'feed' | 'account' | 'tabbar'
   position: number
   backgroundColor?: string
   isActive?: boolean

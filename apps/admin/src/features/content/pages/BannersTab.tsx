@@ -26,7 +26,7 @@ import { formatDate } from '@/lib/format'
 import { useAdminStores } from '@/features/stores'
 import { useAdminAuth } from '@/features/auth'
 
-const SCREEN_LABELS: Record<string, string> = { home: 'Accueil', store: 'Boutique', feed: 'Feed', account: 'Compte' }
+const SCREEN_LABELS: Record<string, string> = { home: 'Accueil', store: 'Boutique', feed: 'Feed', account: 'Compte', tabbar: 'Bouton central (tabbar)' }
 
 /** Filtre « bannières globales » : valeur sentinelle comprise par l'API. */
 const GLOBAL_BANNER_SCOPE = 'global'
@@ -36,6 +36,7 @@ const SCREEN_OPTIONS = [
   { value: 'store', label: 'Boutique' },
   { value: 'feed', label: 'Feed' },
   { value: 'account', label: 'Compte' },
+  { value: 'tabbar', label: 'Bouton central (tabbar)' },
 ]
 
 function isActiveBanner(b: Banner) {
@@ -92,7 +93,7 @@ function BannerFormModal({ initial, defaultStoreId, lockStore, storeOptions, onC
   const [linkUrl, setLinkUrl] = useState(initial?.linkUrl ?? '')
   const [ctaText, setCtaText] = useState(initial?.ctaText ?? '')
   const [discountLabel, setDiscountLabel] = useState(initial?.discountLabel ?? '')
-  const [screen, setScreen] = useState<'home' | 'store' | 'feed' | 'account'>(initial?.screen ?? 'home')
+  const [screen, setScreen] = useState<'home' | 'store' | 'feed' | 'account' | 'tabbar'>(initial?.screen ?? 'home')
   const [position, setPosition] = useState(String(initial?.position ?? ''))
   const [backgroundColor, setBackgroundColor] = useState(initial?.backgroundColor ?? '')
   const [startDate, setStartDate] = useState(toLocalDateInput(initial?.startDate))
@@ -294,7 +295,7 @@ function BannerFormModal({ initial, defaultStoreId, lockStore, storeOptions, onC
             <Select
               id="banner-screen"
               value={screen}
-              onChange={(value) => setScreen(value as 'home' | 'store' | 'feed' | 'account')}
+              onChange={(value) => setScreen(value as 'home' | 'store' | 'feed' | 'account' | 'tabbar')}
               options={SCREEN_OPTIONS}
             />
           </FormField>

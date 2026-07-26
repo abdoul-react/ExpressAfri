@@ -18,78 +18,32 @@ import {
   createOrder,
   type StorePaymentChoice,
 } from "@/features/checkout/checkoutApiService";
-import { useCartStoreGroups } from "@/features/cart";
+import { useCheckout } from "@/features/checkout";
+import { calculateSubtotal } from "@/features/checkout";
+import {
+  usePaymentFlow,
+  isChoiceValid,
+  COD_PROVIDER,
+  PaymentProgress,
+  StorePaymentHeader,
+  PaymentMethodList,
+  MobileMoneyForm,
+  CardPaymentForm,
+  CodConfirmation,
+} from "@/features/checkout/payment";
 import { useStartConversation } from "@/features/messages/useMessages";
 import { storeService } from "@/features/stores/storeService";
 import type { StorePaymentMethod } from "@/infrastructure/data-source/StoreDataSource";
-import { useAddressStore } from "@/store/addressStore";
+import { useAddressStore, getDefaultAddress } from "@/store/addressStore";
 import { useAuthStore } from "@/store/authStore";
-import { Icon, type IconName } from "@/icons";
+import { Icon } from "@/icons";
 import { useCartStore } from "@/store/cartStore";
-import { resolveMediaUrl, isSvgUrl } from "@/utils/resolveMediaUrl";
-import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Image } from "expo-image";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { BackHandler, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-
-const CARD_NUMBER_LENGTH = 19;
-const CARD_EXPIRY_LENGTH = 5;
-const CARD_CVV_LENGTH = 3;
-
-/** Provider du paiement à la livraison, tel que l'API le reconnaît. */
-const COD_PROVIDER = "cash_on_delivery";
-
-/** Groupe des articles dont la boutique est inconnue (paniers d'avant la migration). */
-const UNKNOWN_KEY = "__unknown__";
-
-type Choice = {
-  provider: string;
-  phone: string;
-  cardNumber: string;
-  cardExpiry: string;
-  cardCvv: string;
-  cardName: string;
-};
-
-const EMPTY_CHOICE: Omit<Choice, "provider"> = {
-  phone: "",
-  cardNumber: "",
-  cardExpiry: "",
-  cardCvv: "",
-  cardName: "",
-};
-
-function detectCardBrand(number: string): string | null {
-  const clean = number.replace(/\s/g, "");
-  if (/^4/.test(clean)) return "VISA";
-  if (/^5[1-5]/.test(clean)) return "Mastercard";
-  if (/^3[47]/.test(clean)) return "Amex";
-  if (/^6(?:011|5)/.test(clean)) return "Discover";
-  if (/^35(?:2[89]|[3-8])/.test(clean)) return "JCB";
-  if (/^3(?:0[0-5]|[68])/.test(clean)) return "Diners";
-  return null;
-}
-
-function formatCardNumber(text: string) {
-  const digits = text.replace(/\D/g, "").slice(0, 16);
-  return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
-}
-
-function formatExpiry(text: string) {
-  const digits = text.replace(/\D/g, "").slice(0, 4);
-  if (digits.length >= 2) return digits.slice(0, 2) + "/" + digits.slice(2);
-  return digits;
-}
-
-function iconForType(type: StorePaymentMethod["type"]): IconName {
-  if (type === "mobile_money") return "cellphone";
-  if (type === "card") return "creditCard";
-  if (type === "wallet") return "wallet";
-  return "cash";
-}
 
 export default function PaymentScreen() {
   const styles = useThemedStyles(makeStyles);
@@ -108,17 +62,23 @@ export default function PaymentScreen() {
     }
   }, [isAuthenticated, router]);
 
-  const allItems = useCartStore((s) => s.items);
-  const items = useMemo(() => allItems.filter((i) => i.selected), [allItems]);
-  const groups = useCartStoreGroups(items);
+  const { items, groups, quotesByStore } = useCheckout();
   const clearSelected = useCartStore((s) => s.clearSelected);
   const defaultAddressId = useAddressStore((s) => s.defaultId);
+  const defaultAddress = useAddressStore(getDefaultAddress);
   const queryClient = useQueryClient();
   const startConversation = useStartConversation();
 
-  const [choices, setChoices] = useState<Record<string, Choice>>({});
+  const flow = usePaymentFlow(groups);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStore, setProcessingStore] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
+
+  // Clé d'idempotence stable pour TOUTE la tentative : un double-tap ou un
+  // retry réseau rejoue la même clé et ne recrée pas les commandes.
+  const idempotencyKey = useRef(
+    `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+  ).current;
 
   // Un moyen de paiement par boutique : le nombre de requêtes suit le panier,
   // d'où `useQueries`. La clé est celle de `useStorePaymentMethods` pour
@@ -158,41 +118,41 @@ export default function PaymentScreen() {
     return [...fetched, cod];
   };
 
-  const keyOf = (storeId: string | null) => storeId ?? UNKNOWN_KEY;
-
   const providerFor = (storeId: string | null) => {
-    const key = keyOf(storeId);
-    return choices[key]?.provider ?? methodsFor(storeId)[0]?.provider ?? "";
+    const key = flow.keyOf(storeId);
+    return (
+      flow.choices[key]?.provider || methodsFor(storeId)[0]?.provider || ""
+    );
   };
 
-  const patch = (storeId: string | null, values: Partial<Choice>) => {
-    const key = keyOf(storeId);
-    const current: Choice = choices[key] ?? { ...EMPTY_CHOICE, provider: providerFor(storeId) };
-    setChoices((prev) => ({ ...prev, [key]: { ...current, ...values } }));
-  };
-
-  const isGroupValid = (storeId: string | null) => {
+  const methodOf = (storeId: string | null) => {
     const provider = providerFor(storeId);
-    if (!provider) return false;
-    const method = methodsFor(storeId).find((m) => m.provider === provider);
-    const choice = choices[keyOf(storeId)];
-    if (method?.type === "mobile_money") {
-      // L'opérateur EST la méthode sélectionnée : il ne reste que le numéro.
-      return (choice?.phone ?? "").replace(/\D/g, "").length >= 8;
-    }
-    if (method?.type === "card") {
-      return (
-        (choice?.cardNumber ?? "").replace(/\s/g, "").length === 16 &&
-        (choice?.cardExpiry ?? "").length === 5 &&
-        (choice?.cardCvv ?? "").length >= 3 &&
-        (choice?.cardName ?? "").trim().length >= 2
-      );
-    }
-    return true;
+    return methodsFor(storeId).find((m) => m.provider === provider);
   };
 
-  const canPay =
-    groups.length > 0 && !!defaultAddressId && groups.every((g) => isGroupValid(g.storeId));
+  // Retour matériel : détails → méthodes → boutique précédente → écran précédent
+  useFocusEffect(
+    React.useCallback(() => {
+      const sub = BackHandler.addEventListener("hardwareBackPress", () =>
+        flow.goBack(),
+      );
+      return () => sub.remove();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [flow.stepIndex, flow.subStep]),
+  );
+
+  const group = flow.currentGroup;
+  const currentMethod = group ? methodOf(group.storeId) : undefined;
+  const currentChoice = group
+    ? flow.choices[flow.keyOf(group.storeId)]
+    : undefined;
+  const currentValid = isChoiceValid(currentMethod, currentChoice);
+  const quote = group?.storeId ? quotesByStore.get(group.storeId) : undefined;
+  const groupSubtotal = group ? calculateSubtotal(group.items) : 0;
+  const onlyCod =
+    group != null &&
+    methodsFor(group.storeId).length === 1 &&
+    methodsFor(group.storeId)[0].provider === COD_PROVIDER;
 
   const total = items.reduce((sum, i) => sum + i.priceUsd * i.quantity, 0);
 
@@ -208,6 +168,7 @@ export default function PaymentScreen() {
     }
   };
 
+  /** Dernière boutique validée : créer les commandes puis initialiser chaque paiement. */
   const handlePay = async () => {
     setIsProcessing(true);
     setPayError(null);
@@ -216,13 +177,17 @@ export default function PaymentScreen() {
         .filter((g) => !!g.storeId)
         .map((g) => {
           const provider = providerFor(g.storeId);
-          const method = methodsFor(g.storeId).find((m) => m.provider === provider);
-          const choice = choices[keyOf(g.storeId)];
+          const method = methodsFor(g.storeId).find(
+            (m) => m.provider === provider,
+          );
+          const choice = flow.choices[flow.keyOf(g.storeId)];
           return {
             storeId: g.storeId!,
             paymentMethod: provider,
             phoneNumber:
-              method?.type === "mobile_money" ? choice?.phone.replace(/\D/g, "") : undefined,
+              method?.type === "mobile_money"
+                ? choice?.phone.replace(/\D/g, "")
+                : undefined,
           };
         });
 
@@ -236,6 +201,7 @@ export default function PaymentScreen() {
         // Repli pour les articles dont la boutique est inconnue : l'API les
         // rattache à la boutique système, dont le client n'a pas l'identifiant.
         paymentMethod: COD_PROVIDER,
+        idempotencyKey,
       });
 
       // Une commande par boutique : chaque paiement s'initialise séparément.
@@ -243,6 +209,7 @@ export default function PaymentScreen() {
       for (const order of result.orders) {
         const method = order.paymentMethod ?? COD_PROVIDER;
         if (method === COD_PROVIDER || method === "cod") continue;
+        setProcessingStore(order.storeName ?? t("cart.unknownStore"));
         const psp = await paymentService.initializePayment(order.id, method);
         if (!psp || psp.status === "failed") {
           throw new Error(
@@ -260,7 +227,8 @@ export default function PaymentScreen() {
         },
       });
     } catch (e) {
-      const message = e instanceof Error ? e.message : t("checkout.paymentError");
+      const message =
+        e instanceof Error ? e.message : t("checkout.paymentError");
       setPayError(
         message.includes("401")
           ? "Session expirée - reconnectez-vous pour passer la commande"
@@ -268,8 +236,41 @@ export default function PaymentScreen() {
       );
     } finally {
       setIsProcessing(false);
+      setProcessingStore(null);
     }
   };
+
+  const onContinue = () => {
+    if (flow.subStep === "method") {
+      // COD / wallet : rien à saisir, on passe directement à la suite
+      if (
+        currentMethod &&
+        currentMethod.type !== "mobile_money" &&
+        currentMethod.type !== "card"
+      ) {
+        // Sélection implicite si l'utilisateur n'a pas touché la liste
+        flow.patch(group?.storeId ?? null, { provider: currentMethod.provider });
+        flow.goToDetails();
+        return;
+      }
+      flow.patch(group?.storeId ?? null, {
+        provider: currentMethod?.provider ?? "",
+      });
+      flow.goToDetails();
+      return;
+    }
+    // Sous-étape détails validée
+    if (flow.isLastStep) {
+      void handlePay();
+    } else {
+      flow.goNext();
+    }
+  };
+
+  const continueDisabled =
+    !group ||
+    (flow.subStep === "method" ? !currentMethod : !currentValid) ||
+    (flow.isLastStep && flow.subStep === "details" && !defaultAddressId);
 
   if (!isAuthenticated) return null;
 
@@ -286,186 +287,117 @@ export default function PaymentScreen() {
     );
   }
 
+  if (!group) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title={t("checkout.paymentMethod")} />
+        <StatusState
+          status="empty"
+          title={t("checkout.noItems")}
+          hint={t("checkout.noItemsHint")}
+          actionLabel={t("checkout.backToCart")}
+          onAction={() => router.replace("/")}
+        />
+      </View>
+    );
+  }
+
+  // Écran d'attente pendant l'initialisation des paiements par boutique
+  if (isProcessing && processingStore) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader title={t("checkout.paymentMethod")} />
+        <StatusState
+          status="loading"
+          title={t("checkout.processingStorePayment", {
+            store: processingStore,
+          })}
+          hint={t("checkout.afterValidation")}
+        />
+      </View>
+    );
+  }
+
+  const storeName = group.storeName ?? t("cart.unknownStore");
+  const query = group.storeId ? byStore.get(group.storeId) : undefined;
+
   return (
     <KeyboardScreen style={styles.container}>
-      <ScreenHeader title={t("checkout.paymentMethod")} />
+      <ScreenHeader
+        title={t("checkout.paymentMethod")}
+        onBack={() => {
+          if (!flow.goBack()) router.back();
+        }}
+      />
       <ScrollView
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: 80 + insets.bottom }}
+        contentContainerStyle={{
+          padding: spacing.lg,
+          paddingBottom: 90 + insets.bottom,
+        }}
         keyboardShouldPersistTaps="handled"
       >
-        {groups.map((group) => {
-          const key = keyOf(group.storeId);
-          const query = group.storeId ? byStore.get(group.storeId) : undefined;
-          const methods = methodsFor(group.storeId);
-          const activeProvider = providerFor(group.storeId);
-          const choice = choices[key];
-          const groupSubtotal = group.items.reduce(
-            (sum, i) => sum + i.priceUsd * i.quantity,
-            0,
-          );
-          const onlyCod = methods.length === 1 && methods[0].provider === COD_PROVIDER;
+        <PaymentProgress
+          current={flow.stepIndex}
+          total={groups.length}
+          storeName={storeName}
+        />
 
-          return (
-            <View key={key} style={styles.storeBlock}>
-              <View style={styles.storeHead}>
-                <Icon name="store" size={16} color={colors.secondaryDark} />
-                <Text style={styles.storeName} numberOfLines={1}>
-                  {group.storeName ?? t("cart.unknownStore")}
-                </Text>
-                <Price priceUsd={groupSubtotal} size="sm" />
-              </View>
+        <StorePaymentHeader
+          storeName={storeName}
+          subtotal={groupSubtotal}
+          shippingCost={quote?.shippingCost ?? null}
+          isFreeShipping={quote?.isFree ?? false}
+        />
 
-              {query?.isError ? (
-                <Pressable style={styles.storeNotice} onPress={() => query.refetch()}>
-                  <Icon name="return" size={14} color={colors.danger} />
-                  <Text style={styles.storeNoticeError}>{t("checkout.paymentError")}</Text>
-                </Pressable>
-              ) : onlyCod && group.storeId ? (
-                <Text style={styles.storeNoticeText}>{t("checkout.storeNoPaymentMethod")}</Text>
-              ) : null}
+        {query?.isError ? (
+          <Text
+            style={styles.errorText}
+            onPress={() => query.refetch()}
+          >
+            {t("checkout.paymentError")}
+          </Text>
+        ) : null}
 
-              {methods.map((m) => {
-                const active = activeProvider === m.provider;
-                const logoUri = resolveMediaUrl(m.logoUrl);
-                const useLogo = !!logoUri && !isSvgUrl(m.logoUrl);
-                return (
-                  <View key={m.id}>
-                    <Pressable
-                      style={[styles.method, active && styles.methodActive]}
-                      onPress={() => patch(group.storeId, { provider: m.provider })}
-                    >
-                      <View style={styles.methodIcon}>
-                        {useLogo ? (
-                          <Image
-                            source={{ uri: logoUri }}
-                            style={styles.methodLogo}
-                            contentFit="contain"
-                            accessibilityLabel={m.displayName}
-                          />
-                        ) : (
-                          <Icon
-                            name={iconForType(m.type)}
-                            size={24}
-                            color={active ? colors.primary : colors.text}
-                          />
-                        )}
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.methodLabel}>{m.displayName}</Text>
-                        {m.description ? (
-                          <Text style={styles.methodHint} numberOfLines={2}>
-                            {m.description}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <View style={[styles.radio, active && styles.radioOn]}>
-                        {active && <View style={styles.radioDot} />}
-                      </View>
-                    </Pressable>
-
-                    {active && m.type === "mobile_money" && (
-                      <View style={styles.formSection}>
-                        <Text style={styles.formLabel}>{t("checkout.phoneNumber")}*</Text>
-                        <TextInput
-                          style={styles.cardInput}
-                          value={choice?.phone ?? ""}
-                          onChangeText={(v) => patch(group.storeId, { phone: v })}
-                          placeholder="90 00 00 00"
-                          placeholderTextColor={colors.textMuted}
-                          keyboardType="phone-pad"
-                          maxLength={15}
-                        />
-                        {m.instructions ? (
-                          <Text style={styles.methodHint}>{m.instructions}</Text>
-                        ) : null}
-                      </View>
-                    )}
-
-                    {active && m.type === "card" && (
-                      <View style={styles.formSection}>
-                        <View style={styles.cardHeaderRow}>
-                          <Text style={styles.formLabel}>{t("checkout.cardNumber")}*</Text>
-                          {detectCardBrand(choice?.cardNumber ?? "") && (
-                            <View style={styles.brandBadge}>
-                              <Text style={styles.brandBadgeText}>
-                                {detectCardBrand(choice?.cardNumber ?? "")}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                        <TextInput
-                          style={styles.cardInput}
-                          value={choice?.cardNumber ?? ""}
-                          onChangeText={(v) =>
-                            patch(group.storeId, { cardNumber: formatCardNumber(v) })
-                          }
-                          placeholder="1234 5678 9012 3456"
-                          placeholderTextColor={colors.textMuted}
-                          keyboardType="number-pad"
-                          maxLength={CARD_NUMBER_LENGTH}
-                        />
-                        <View style={styles.cardRow}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.formLabel}>{t("checkout.cardExpiry")}*</Text>
-                            <TextInput
-                              style={styles.cardInput}
-                              value={choice?.cardExpiry ?? ""}
-                              onChangeText={(v) =>
-                                patch(group.storeId, { cardExpiry: formatExpiry(v) })
-                              }
-                              placeholder="MM/AA"
-                              placeholderTextColor={colors.textMuted}
-                              keyboardType="number-pad"
-                              maxLength={CARD_EXPIRY_LENGTH}
-                            />
-                          </View>
-                          <View style={{ width: spacing.giant }}>
-                            <Text style={styles.formLabel}>CVV*</Text>
-                            <TextInput
-                              style={styles.cardInput}
-                              value={choice?.cardCvv ?? ""}
-                              onChangeText={(v) =>
-                                patch(group.storeId, {
-                                  cardCvv: v.replace(/\D/g, "").slice(0, 3),
-                                })
-                              }
-                              placeholder="123"
-                              placeholderTextColor={colors.textMuted}
-                              keyboardType="number-pad"
-                              maxLength={CARD_CVV_LENGTH}
-                            />
-                          </View>
-                        </View>
-                        <Text style={styles.formLabel}>{t("checkout.cardHolder")}*</Text>
-                        <TextInput
-                          style={styles.cardInput}
-                          value={choice?.cardName ?? ""}
-                          onChangeText={(v) => patch(group.storeId, { cardName: v })}
-                          placeholder="JEAN DUPONT"
-                          placeholderTextColor={colors.textMuted}
-                          autoCapitalize="characters"
-                        />
-                      </View>
-                    )}
-                  </View>
-                );
-              })}
-
-              {/* La boutique n'a rien configuré : payer à la livraison reste
-                  possible, et le client peut aussi poser sa question. */}
-              {onlyCod && group.storeId ? (
-                <Button
-                  label={t("checkout.contactStore")}
-                  variant="outline"
-                  size="md"
-                  fullWidth
-                  loading={startConversation.isPending}
-                  onPress={() => openStoreChat(group.storeId!, group.storeName)}
-                />
-              ) : null}
-            </View>
-          );
-        })}
+        {flow.subStep === "method" ? (
+          <>
+            {onlyCod && group.storeId ? (
+              <Text style={styles.storeNoticeText}>
+                {t("checkout.storeNoPaymentMethod")}
+              </Text>
+            ) : null}
+            <PaymentMethodList
+              methods={methodsFor(group.storeId)}
+              activeProvider={providerFor(group.storeId)}
+              onSelect={(provider) =>
+                flow.patch(group.storeId, { provider })
+              }
+            />
+            {onlyCod && group.storeId ? (
+              <Button
+                label={t("checkout.contactStore")}
+                variant="outline"
+                size="md"
+                fullWidth
+                loading={startConversation.isPending}
+                onPress={() => openStoreChat(group.storeId!, group.storeName)}
+              />
+            ) : null}
+          </>
+        ) : currentMethod?.type === "mobile_money" ? (
+          <MobileMoneyForm
+            method={currentMethod}
+            dialCode={defaultAddress?.dialCode ?? null}
+            phone={currentChoice?.phone ?? ""}
+            onChangePhone={(v) => flow.patch(group.storeId, { phone: v })}
+          />
+        ) : currentMethod?.type === "card" ? (
+          <CardPaymentForm
+            choice={currentChoice}
+            onPatch={(values) => flow.patch(group.storeId, values)}
+          />
+        ) : (
+          <CodConfirmation />
+        )}
 
         <View style={styles.secure}>
           <Icon name="lock" size={16} color={colors.secondary} />
@@ -476,13 +408,19 @@ export default function PaymentScreen() {
 
         {payError ? <Text style={styles.errorText}>{payError}</Text> : null}
 
-        <View style={styles.confirmCard}>
-          <Text style={styles.confirmTitle}>{t("checkout.confirmPayment")}</Text>
-          <Text style={styles.confirmText}>
-            {t("checkout.ordersWillBeCreated", { count: groups.length })}
-          </Text>
-          <Text style={styles.confirmText}>{t("checkout.afterValidation")}</Text>
-        </View>
+        {flow.isLastStep && flow.subStep === "details" ? (
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>
+              {t("checkout.confirmPayment")}
+            </Text>
+            <Text style={styles.confirmText}>
+              {t("checkout.ordersWillBeCreated", { count: groups.length })}
+            </Text>
+            <Text style={styles.confirmText}>
+              {t("checkout.afterValidation")}
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={[styles.bar, { paddingBottom: insets.bottom + spacing.sm }]}>
@@ -491,10 +429,18 @@ export default function PaymentScreen() {
           <Price priceUsd={total} size="md" />
         </View>
         <Button
-          label={isProcessing ? t("common.loading") : t("checkout.placeOrder")}
+          label={
+            isProcessing
+              ? t("common.loading")
+              : flow.subStep === "method"
+                ? t("common.continue")
+                : flow.isLastStep
+                  ? t("checkout.confirmAndPay")
+                  : t("checkout.continueToNext")
+          }
           size="lg"
-          onPress={handlePay}
-          disabled={!canPay || isProcessing}
+          onPress={onContinue}
+          disabled={continueDisabled || isProcessing}
           loading={isProcessing}
           style={{ flex: 1, marginLeft: spacing.lg }}
         />
@@ -506,55 +452,11 @@ export default function PaymentScreen() {
 const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    storeBlock: { marginBottom: spacing.lg },
-    storeHead: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: spacing.sm,
-      marginBottom: spacing.sm,
-    },
-    storeName: { flex: 1, fontSize: fontSize.md, fontWeight: "800", color: colors.text },
-    storeNotice: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginBottom: spacing.sm },
-    storeNoticeError: { fontSize: fontSize.xs, color: colors.danger },
     storeNoticeText: {
       fontSize: fontSize.xs,
       color: colors.textMuted,
       marginBottom: spacing.sm,
     },
-    method: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: spacing.md,
-      backgroundColor: colors.surface,
-      borderRadius: radius.lg,
-      padding: spacing.lg,
-      marginBottom: spacing.md,
-      borderWidth: 1.5,
-      borderColor: colors.surface,
-    },
-    methodActive: { borderColor: colors.primary },
-    methodIcon: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: colors.background,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    methodLogo: { width: 36, height: 36, borderRadius: 8 },
-    methodLabel: { fontSize: fontSize.md, fontWeight: "700", color: colors.text },
-    methodHint: { fontSize: fontSize.xs, color: colors.textMuted, marginTop: 2 },
-    radio: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      borderWidth: 2,
-      borderColor: colors.borderStrong,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    radioOn: { borderColor: colors.primary },
-    radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary },
     secure: {
       flexDirection: "row",
       alignItems: "center",
@@ -570,39 +472,12 @@ const makeStyles = (colors: Colors) =>
       padding: spacing.lg,
       gap: spacing.xs,
     },
-    confirmTitle: { fontSize: fontSize.md, fontWeight: "800", color: colors.text },
-    confirmText: { fontSize: fontSize.sm, color: colors.textSecondary },
-    formSection: {
-      backgroundColor: colors.background,
-      borderRadius: radius.md,
-      padding: spacing.md,
-      marginBottom: spacing.md,
-      gap: spacing.sm,
-    },
-    formLabel: { fontSize: fontSize.sm, fontWeight: "600", color: colors.text },
-    cardInput: {
-      height: 48,
-      borderWidth: 1.5,
-      borderColor: colors.border,
-      borderRadius: radius.md,
-      paddingHorizontal: spacing.md,
+    confirmTitle: {
       fontSize: fontSize.md,
+      fontWeight: "800",
       color: colors.text,
-      backgroundColor: colors.surface,
     },
-    cardRow: { flexDirection: "row", gap: spacing.md },
-    cardHeaderRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-    },
-    brandBadge: {
-      backgroundColor: colors.primarySoft,
-      borderRadius: radius.sm,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 2,
-    },
-    brandBadgeText: { fontSize: fontSize.xs, fontWeight: "800", color: colors.primary },
+    confirmText: { fontSize: fontSize.sm, color: colors.textSecondary },
     errorText: {
       marginTop: spacing.sm,
       color: colors.danger,

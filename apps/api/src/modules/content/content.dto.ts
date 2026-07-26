@@ -13,7 +13,8 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-const SCREENS = ['home', 'store', 'feed', 'account'] as const;
+// `tabbar` : images du bouton central de la barre de navigation mobile
+const SCREENS = ['home', 'store', 'feed', 'account', 'tabbar'] as const;
 const SECTION_TYPES = [
   'products',
   'stores',

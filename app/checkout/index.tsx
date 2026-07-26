@@ -9,7 +9,7 @@ import {
   type Colors,
 } from "@/design-system";
 import { useCheckout } from "@/features/checkout";
-import { useCartStoreGroups } from "@/features/cart";
+import { calculateSubtotal } from "@/features/checkout";
 import { useCardBrands } from "@/features/payment";
 import { usePrice } from "@/hooks/usePrice";
 import { useAuthStore } from "@/store/authStore";
@@ -48,8 +48,10 @@ export default function CheckoutScreen() {
 
   const {
     items,
+    groups,
     subtotal,
     shipping,
+    quotesByStore,
     discount,
     total,
     address,
@@ -59,8 +61,6 @@ export default function CheckoutScreen() {
     isError,
     refetch,
   } = useCheckout();
-
-  const groups = useCartStoreGroups(items);
 
   if (!isAuthenticated) return null;
 
@@ -152,56 +152,92 @@ export default function CheckoutScreen() {
           </Pressable>
         )}
 
-        {/* Un bloc par boutique : chaque boutique expédie et facture séparément. */}
-        {groups.map((group) => (
-          <View key={group.storeId ?? "__unknown__"} style={styles.card}>
-            <View style={styles.shipHead}>
-              <Icon name="store" size={16} color={colors.secondaryDark} />
-              <Text style={styles.shipHeadText} numberOfLines={1}>
-                {group.storeName ?? t("cart.unknownStore")}
-              </Text>
-            </View>
-            {group.items.map((item) => (
-              <View
-                key={item.productId + (item.variantLabel ?? "")}
-                style={styles.item}
-              >
-                <Image
-                  source={{ uri: item.image }}
-                  style={styles.itemImg}
-                  contentFit="cover"
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.itemTitle} numberOfLines={2}>
-                    {item.title}
-                  </Text>
-                  {item.variantLabel && (
-                    <Text style={styles.variant}>{item.variantLabel}</Text>
-                  )}
-                  <View style={styles.itemFooter}>
-                    <Price priceUsd={item.priceUsd} size="sm" />
-                    <Text style={styles.qty}>x{item.quantity}</Text>
+        {/* Un bloc par boutique : chaque boutique expédie et facture séparément,
+            avec SES frais de livraison (même calcul que le serveur). */}
+        {groups.map((group) => {
+          const quote = group.storeId
+            ? quotesByStore.get(group.storeId)
+            : undefined;
+          const groupSubtotal = calculateSubtotal(group.items);
+          const groupShipping = quote?.shippingCost ?? null;
+          return (
+            <View key={group.storeId ?? "__unknown__"} style={styles.card}>
+              <View style={styles.shipHead}>
+                <Icon name="store" size={16} color={colors.secondaryDark} />
+                <Text style={styles.shipHeadText} numberOfLines={1}>
+                  {group.storeName ?? t("cart.unknownStore")}
+                </Text>
+              </View>
+              {group.items.map((item) => (
+                <View
+                  key={item.productId + (item.variantLabel ?? "")}
+                  style={styles.item}
+                >
+                  <Image
+                    source={{ uri: item.image }}
+                    style={styles.itemImg}
+                    contentFit="cover"
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    {item.variantLabel && (
+                      <Text style={styles.variant}>{item.variantLabel}</Text>
+                    )}
+                    <View style={styles.itemFooter}>
+                      <Price priceUsd={item.priceUsd} size="sm" />
+                      <Text style={styles.qty}>x{item.quantity}</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))}
-          </View>
-        ))}
-
-        <View style={styles.card}>
-          <View style={styles.shipHead}>
-            <Icon name="truck" size={16} color={colors.secondaryDark} />
-            <Text style={styles.shipHeadText}>{t("checkout.shippingFee")}</Text>
-          </View>
-          <Row
-            label={t("checkout.shippingFee")}
-            value={<Price priceUsd={shipping} size="sm" color={colors.text} />}
-          />
-          <Row
-            label={t("checkout.estimatedShipping")}
-            value={<Text style={styles.deliveryText}>{t("checkout.deliveryDays")}</Text>}
-          />
-        </View>
+              ))}
+              <View style={styles.divider} />
+              <Row
+                label={t("checkout.shippingFee")}
+                value={
+                  quote?.isFree ? (
+                    <Text style={styles.freeShipping}>
+                      {t("checkout.freeShipping")}
+                    </Text>
+                  ) : groupShipping != null ? (
+                    <Price
+                      priceUsd={groupShipping}
+                      size="sm"
+                      color={colors.text}
+                    />
+                  ) : (
+                    <Text style={styles.deliveryText}>—</Text>
+                  )
+                }
+              />
+              {quote && (
+                <Row
+                  label={t("checkout.estimatedShipping")}
+                  value={
+                    <Text style={styles.deliveryText}>
+                      {t("checkout.estimatedDaysRange", {
+                        min: quote.estimatedDaysMin,
+                        max: quote.estimatedDaysMax,
+                      })}
+                    </Text>
+                  }
+                />
+              )}
+              <Row
+                label={t("checkout.storeSubtotal")}
+                value={
+                  <Price
+                    priceUsd={groupSubtotal + (groupShipping ?? 0)}
+                    size="sm"
+                    color={colors.text}
+                  />
+                }
+                bold
+              />
+            </View>
+          );
+        })}
 
         <View style={styles.card}>
           <Pressable style={styles.promoHead} onPress={promo.toggle}>
@@ -246,7 +282,11 @@ export default function CheckoutScreen() {
             value={<Price priceUsd={subtotal} size="sm" color={colors.text} />}
           />
           <Row
-            label={t("checkout.shippingFee")}
+            label={
+              groups.length > 1
+                ? t("checkout.shippingMultiStore", { count: groups.length })
+                : t("checkout.shippingFee")
+            }
             value={<Price priceUsd={shipping} size="sm" color={colors.text} />}
           />
           {promo.applied && (
@@ -492,6 +532,11 @@ const makeStyles = (colors: Colors) =>
       fontSize: fontSize.md,
       color: colors.sale,
       fontWeight: "700",
+    },
+    freeShipping: {
+      fontSize: fontSize.sm,
+      color: colors.secondaryDark,
+      fontWeight: "800",
     },
     deliveryText: {
       fontSize: fontSize.sm,

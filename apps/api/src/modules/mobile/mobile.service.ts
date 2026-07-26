@@ -66,6 +66,10 @@ import {
 } from '../../database/schema/orders';
 import { payments } from '../../database/schema/payments';
 import { shippingZones, shippingMethods } from '../../database/schema/shipping';
+import {
+  quoteStoreShipping,
+  type StoreShippingQuote,
+} from '../shipping/store-shipping.util';
 import { loyaltyPoints } from '../../database/schema/loyalty';
 
 import { ImageVisionService } from '../../common/vision/image-vision.service';
@@ -643,14 +647,19 @@ export class MobileService {
     // Résolution ET validation des moyens de paiement avant d'écrire quoi que
     // ce soit : un moyen refusé ne doit laisser aucune commande derrière lui.
     const chosenMethods = new Map<string, string>();
+    const payerPhones = new Map<string, string>();
     for (const storeId of storeIds) {
-      const method =
-        dto.payments?.find((p) => p.storeId === storeId)?.paymentMethod ??
-        dto.paymentMethod;
+      const choice = dto.payments?.find((p) => p.storeId === storeId);
+      const method = choice?.paymentMethod ?? dto.paymentMethod;
       if (!method) {
         throw new BadRequestException(
           `Moyen de paiement manquant pour ${storeNames.get(storeId) ?? 'la boutique'}`,
         );
+      }
+      // Numéro Mobile Money du payeur : conservé pour que le commerçant sache
+      // quel numéro a réglé sa commande (rapprochement des encaissements).
+      if (choice?.phoneNumber?.trim()) {
+        payerPhones.set(storeId, choice.phoneNumber.trim());
       }
 
       // Exception délibérée : le paiement à la livraison ne demande aucune
@@ -665,6 +674,26 @@ export class MobileService {
         }
       }
       chosenMethods.set(storeId, method);
+    }
+
+    // Frais de port par boutique, calculés AVANT la transaction (les SELECT
+    // zones/méthodes n'ont rien à faire sous le verrou du stock). Même
+    // fonction que l'endpoint de devis : total affiché = total facturé.
+    const shippingQuotes = new Map<string, StoreShippingQuote>();
+    for (const storeId of storeIds) {
+      const lines = groups.get(storeId)!;
+      const groupSubtotal = lines.reduce(
+        (sum, l) => sum + Number(l.totalPrice),
+        0,
+      );
+      shippingQuotes.set(
+        storeId,
+        await quoteStoreShipping(this.db, {
+          storeId,
+          country: address.countryCode ?? undefined,
+          subtotal: groupSubtotal,
+        }),
+      );
     }
 
     const created = await this.db.transaction(async (tx) => {
@@ -688,9 +717,9 @@ export class MobileService {
           (sum, l) => sum + Number(l.totalPrice),
           0,
         );
-        // Chaque boutique expédie séparément : le seuil de franchise
-        // s'apprécie par commande, pas sur le panier entier.
-        const shippingCost = groupSubtotal >= 10000 ? 0 : 1500;
+        // Chaque boutique expédie séparément : frais issus du devis calculé
+        // hors transaction (zones/méthodes de la boutique, repli global).
+        const shippingCost = shippingQuotes.get(storeId)?.shippingCost ?? 0;
         const taxAmount = 0;
 
         let discountAmount = 0;
@@ -782,6 +811,10 @@ export class MobileService {
           currency: 'XOF',
           idempotencyKey: dto.idempotencyKey
             ? `${dto.idempotencyKey}:${storeId}:payment`
+            : null,
+          // Numéro Mobile Money du payeur (jamais de données carte ici)
+          metadata: payerPhones.has(storeId)
+            ? { payerPhoneNumber: payerPhones.get(storeId) }
             : null,
         });
 
@@ -1344,7 +1377,7 @@ export class MobileService {
       sql`(${banners.endDate} IS NULL OR ${banners.endDate} >= ${now})`,
       storeId ? eq(banners.storeId, storeId) : isNull(banners.storeId),
     ];
-    const validScreens = ['home', 'store', 'feed', 'account'] as const;
+    const validScreens = ['home', 'store', 'feed', 'account', 'tabbar'] as const;
     if (screen) {
       // Valeur d'écran inconnue → aucune bannière (évite de tout renvoyer par erreur)
       if (!(validScreens as readonly string[]).includes(screen)) return [];
@@ -1719,6 +1752,34 @@ export class MobileService {
       estimatedDaysMax: 7,
       source: 'global' as const,
       zoneName: null,
+    };
+  }
+
+  /**
+   * Devis de livraison PAR BOUTIQUE pour le récapitulatif multi-vendeurs.
+   * Passe par quoteStoreShipping — exactement la même fonction que
+   * createOrder : ce que l'écran affiche est ce que le serveur facturera.
+   */
+  async getStoreShippingQuotes(input: {
+    country: string;
+    stores: { storeId: string; subtotal: number }[];
+  }) {
+    const country = (input.country ?? '').trim().toUpperCase();
+    const quotes = await Promise.all(
+      input.stores.map(async (s) => ({
+        storeId: s.storeId,
+        subtotal: s.subtotal,
+        ...(await quoteStoreShipping(this.db, {
+          storeId: s.storeId,
+          country,
+          subtotal: s.subtotal,
+        })),
+      })),
+    );
+    return {
+      quotes,
+      totalShipping: quotes.reduce((sum, q) => sum + q.shippingCost, 0),
+      currency: 'XOF',
     };
   }
 
@@ -2246,6 +2307,13 @@ export class MobileService {
       >`(select sm.url from store_media sm where sm.store_id = stores.id and sm.type = 'cover' and sm.is_active = true limit 1)`,
       followersCount: sql<number>`(select count(*)::int from store_follows sf where sf.store_id = stores.id)`,
       productCount: sql<number>`(select count(*)::int from products p where p.store_id = stores.id and p.status = 'active')`,
+      // Note boutique = agrégat des avis produits (product_reviews.store_id).
+      // La moyenne brute est lissée dans toStoreCard (bayésien) avant affichage.
+      ratingAvg: sql<
+        number | null
+      >`(select avg(pr.rating)::float from product_reviews pr where pr.store_id = stores.id and pr.is_active = true)`,
+      ratingCount: sql<number>`(select count(*)::int from product_reviews pr where pr.store_id = stores.id and pr.is_active = true)`,
+      salesCount: sql<number>`(select count(*)::int from orders o where o.store_id = stores.id and o.status not in ('cancelled','refunded'))`,
       likedByMe: customerId
         ? sql<boolean>`exists (select 1 from store_follows sf where sf.store_id = stores.id and sf.customer_id = ${customerId})`
         : sql<boolean>`false`,
@@ -2268,6 +2336,23 @@ export class MobileService {
   }
 
   private toStoreCard(row: any, photos: string[] = []) {
+    // Note bayésienne : la moyenne brute est tirée vers RATING_PRIOR tant que
+    // la boutique a peu d'avis (RATING_PRIOR_WEIGHT avis « virtuels »). Une
+    // boutique à 2 avis 5★ affiche ~4.2, pas 5.0 — et jamais de note quand il
+    // n'y a aucun avis (null, pas un faux 0).
+    const RATING_PRIOR = 4.0;
+    const RATING_PRIOR_WEIGHT = 10;
+    const ratingCount = Number(row.ratingCount ?? 0);
+    const ratingAvg = row.ratingAvg != null ? Number(row.ratingAvg) : null;
+    const rating =
+      ratingCount > 0 && ratingAvg != null
+        ? Math.round(
+            ((ratingAvg * ratingCount + RATING_PRIOR * RATING_PRIOR_WEIGHT) /
+              (ratingCount + RATING_PRIOR_WEIGHT)) *
+              10,
+          ) / 10
+        : null;
+
     return {
       id: row.id,
       name: row.name,
@@ -2279,6 +2364,9 @@ export class MobileService {
       photos,
       followersCount: Number(row.followersCount ?? 0),
       productCount: Number(row.productCount ?? 0),
+      rating,
+      ratingCount,
+      salesCount: Number(row.salesCount ?? 0),
       likedByMe: Boolean(row.likedByMe),
       // Compatibilité avec les écrans mobile historiques (useHomeStores/useFollows)
       followers: String(row.followersCount ?? 0),
