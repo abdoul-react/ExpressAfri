@@ -270,10 +270,14 @@ export default function CheckoutScreen() {
                 label={promo.applied ? t("checkout.promoRemove") : t("checkout.promoApply")}
                 variant={promo.applied ? "outline" : "primary"}
                 size="md"
+                loading={promo.loading}
                 onPress={promo.applied ? promo.remove : promo.apply}
               />
             </View>
           )}
+          {promo.error ? (
+            <Text style={{ fontSize: 12, color: '#e53e3e', marginTop: 6 }}>{promo.error}</Text>
+          ) : null}
         </View>
 
         <View style={styles.card}>

@@ -5,6 +5,7 @@ import { COUNTRIES } from "@/store/settingsStore";
 import { useEffect, useMemo, useState } from "react";
 import { useCartStoreGroups, type CartStoreGroup } from "@/features/cart";
 import checkoutService, { PromoResult } from "./checkoutService";
+import { validateCoupon } from "./checkoutApiService";
 import { useShippingQuote } from "./useShippingQuote";
 import {
   useStoreShippingQuotes,
@@ -18,6 +19,8 @@ export function useCheckout() {
 
   const [promoOpen, setPromoOpen] = useState(false);
   const [promoCode, setPromoCode] = useState("");
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
   const [promoResult, setPromoResult] = useState<PromoResult>(() => ({
     code: undefined,
     ratePercent: 0,
@@ -87,9 +90,24 @@ export function useCheckout() {
       ratePercent: promoResult.ratePercent,
       setCode: setPromoCode,
       toggle: () => setPromoOpen((v) => !v),
-      apply: () => {
-        const res = checkoutService.applyPromoCode(promoCode, subtotal);
-        setPromoResult(res);
+      error: promoError,
+      loading: promoLoading,
+      apply: async () => {
+        if (!promoCode.trim()) return;
+        setPromoError(null);
+        setPromoLoading(true);
+        try {
+          const res = await validateCoupon(promoCode, subtotal);
+          if (!res.valid) {
+            setPromoError(res.reason);
+          } else {
+            setPromoResult({ code: res.code, ratePercent: res.ratePercent, amount: res.amount, applied: true, freeShipping: res.freeShipping });
+          }
+        } catch {
+          setPromoError('Erreur réseau, réessayez.');
+        } finally {
+          setPromoLoading(false);
+        }
       },
       remove: () => {
         setPromoResult({

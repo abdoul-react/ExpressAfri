@@ -58,3 +58,33 @@ export async function createOrder(payload: CheckoutPayload): Promise<CheckoutRes
 export async function submitSuggestion(content: string): Promise<{ ok: boolean }> {
   return apiAdapter.post("/mobile/suggestions", { content });
 }
+
+export type CouponValidationResult =
+  | { valid: true; ratePercent: number; amount: number; freeShipping: boolean; code: string }
+  | { valid: false; reason: string };
+
+export async function validateCoupon(
+  code: string,
+  orderAmount: number,
+  customerEmail?: string,
+): Promise<CouponValidationResult> {
+  const res = await apiAdapter.post(`/coupons/${encodeURIComponent(code.toUpperCase())}/validate`, {
+    orderAmount,
+    customerEmail,
+  }) as { valid: boolean; reason?: string; coupon?: { type: string; value: string; maxDiscount?: string } };
+
+  if (!res.valid || !res.coupon) return { valid: false, reason: res.reason ?? 'Code invalide' };
+
+  const { type, value, maxDiscount } = res.coupon;
+  const numValue = Number(value);
+  if (type === 'percentage') {
+    const raw = (orderAmount * numValue) / 100;
+    const amount = maxDiscount ? Math.min(raw, Number(maxDiscount)) : raw;
+    return { valid: true, code: code.toUpperCase(), ratePercent: numValue, amount, freeShipping: false };
+  }
+  if (type === 'free_shipping') {
+    return { valid: true, code: code.toUpperCase(), ratePercent: 0, amount: 0, freeShipping: true };
+  }
+  // fixed
+  return { valid: true, code: code.toUpperCase(), ratePercent: 0, amount: Math.min(numValue, orderAmount), freeShipping: false };
+}
