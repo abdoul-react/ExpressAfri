@@ -74,6 +74,7 @@ import { loyaltyPoints } from '../../database/schema/loyalty';
 
 import { ImageVisionService } from '../../common/vision/image-vision.service';
 import { StorePaymentMethodsService } from '../stores/store-payment-methods.service';
+import { SmsService } from '../notifications/sms/sms.service';
 
 // Boutique système (seedée) : les customers.storeId NOT NULL doivent référencer une boutique existante
 const SYSTEM_STORE_ID = '00000000-0000-0000-0000-000000000001';
@@ -170,6 +171,7 @@ export class MobileService {
     private jwt: JwtService,
     private vision: ImageVisionService,
     private storePayments: StorePaymentMethodsService,
+    private sms: SmsService,
   ) {}
 
   private signToken(customer: { id: string; email: string | null }) {
@@ -297,7 +299,16 @@ export class MobileService {
         },
       });
 
-    // En production : envoyer SMS/email ici sans logger le code
+    // Envoi via le fournisseur SMS configuré par l'admin (CMS → SMS).
+    // Sans fournisseur actif : ignoré sans erreur (dev). Le code n'est
+    // JAMAIS loggé.
+    if (/^\+?\d{8,15}$/.test(contact.replace(/[\s-]/g, ''))) {
+      const to = contact.startsWith('+') ? contact : `+${contact}`;
+      await this.sms.send(
+        to,
+        `ExpressAfri : votre code de vérification est ${code}. Valable 10 minutes. Ne le partagez jamais.`,
+      );
+    }
     return { ok: true };
   }
 
@@ -468,9 +479,14 @@ export class MobileService {
     return { user: this.toProfile(customer), ...tokens };
   }
 
-  async passwordReset(email: string) {
-    // In production: send reset link/email
-    console.log(`[PASSWORD RESET] Email: ${email}`);
+  async passwordReset(contact: string) {
+    // Réinitialisation par OTP : même canal que la connexion — le client
+    // reçoit un code SMS (fournisseur configuré par l'admin) et enchaîne sur
+    // la vérification. La réponse est identique que le compte existe ou non
+    // (pas d'oracle d'énumération).
+    if (/^\+?\d{8,15}$/.test(contact.replace(/[\s-]/g, ''))) {
+      await this.requestOtp(contact);
+    }
     return { ok: true };
   }
 

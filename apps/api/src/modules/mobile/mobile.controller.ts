@@ -133,11 +133,15 @@ export class MobileController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('auth/password-reset')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Demande de réinitialisation mot de passe' })
-  async passwordReset(@Body() body: { email: string }) {
-    return this.service.passwordReset(body.email);
+  @ApiOperation({
+    summary:
+      'Demande de réinitialisation (téléphone → OTP SMS ; réponse identique que le compte existe ou non)',
+  })
+  async passwordReset(@Body() body: { email?: string; contact?: string }) {
+    return this.service.passwordReset(body.contact ?? body.email ?? '');
   }
 
   // ====== PROFILE ======

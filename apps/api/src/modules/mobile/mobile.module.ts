@@ -9,6 +9,7 @@ import { CustomerJwtStrategy } from './customer-jwt.strategy';
 import { CustomersModule } from '../customers/customers.module';
 import { PushModule } from '../push/push.module';
 import { StoresModule } from '../stores/stores.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { ImageVisionService } from '../../common/vision/image-vision.service';
 
 @Module({
@@ -25,6 +26,7 @@ import { ImageVisionService } from '../../common/vision/image-vision.service';
     CustomersModule,
     PushModule,
     StoresModule,
+    NotificationsModule,
   ],
   controllers: [MobileController],
   providers: [MobileService, CustomerJwtStrategy, ImageVisionService],

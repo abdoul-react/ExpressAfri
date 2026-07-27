@@ -7,6 +7,7 @@ import {
   Shapes,
   CreditCard,
   Plug,
+  MessageSquareText,
   LayoutGrid,
   Newspaper,
   Megaphone,
@@ -29,6 +30,7 @@ import { SocialLinksTab } from './SocialLinksTab'
 import { SEOTab } from './SEOTab'
 import { PaymentMethodsTab } from './PaymentMethodsTab'
 import { PaymentGatewaysTab } from './PaymentGatewaysTab'
+import { SmsGatewaysTab } from './SmsGatewaysTab'
 import { SuggestionsTab } from './SuggestionsTab'
 
 const TABS: { id: string; label: string; icon: LucideIcon }[] = [
@@ -38,6 +40,7 @@ const TABS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'logos', label: 'Logos', icon: Shapes },
   { id: 'payment-methods', label: 'Paiements', icon: CreditCard },
   { id: 'payment-gateways', label: 'Passerelles', icon: Plug },
+  { id: 'sms-gateways', label: 'SMS', icon: MessageSquareText },
   { id: 'shortcuts', label: 'Raccourcis', icon: LayoutGrid },
   { id: 'feed', label: 'Sections Feed', icon: Newspaper },
   { id: 'feed-posts', label: 'Publications', icon: Megaphone },
@@ -95,6 +98,9 @@ export function AdminContentPage() {
         </TabsContent>
         <TabsContent value="payment-gateways">
           <PaymentGatewaysTab />
+        </TabsContent>
+        <TabsContent value="sms-gateways">
+          <SmsGatewaysTab />
         </TabsContent>
         <TabsContent value="logos">
           <LogosTab />

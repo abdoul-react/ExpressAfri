@@ -11,6 +11,7 @@ export * from './customers';
 export * from './orders';
 export * from './payments';
 export * from './payment-gateways';
+export * from './sms-gateways';
 export * from './returns';
 export * from './payouts';
 export * from './notifications';
