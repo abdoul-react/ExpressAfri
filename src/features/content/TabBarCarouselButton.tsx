@@ -8,6 +8,7 @@ import { radius, shadows, useColors, useThemedStyles, type Colors } from '@/desi
 import { Icon } from '@/icons';
 import { resolveMediaUrl } from '@/utils/resolveMediaUrl';
 import { useStores } from '@/features/stores';
+import { useBrandColors } from '@/features/content/brand';
 
 /** Cadence de rotation des visuels du bouton central. */
 const ROTATE_MS = 3000;
@@ -19,12 +20,11 @@ const ROTATE_MS = 3000;
  * le catalogue. Tant qu'aucune boutique n'a de couverture, un dégradé de
  * marque avec l'icône boutique prend le relais — même forme, même place.
  */
-export function TabBarCarouselButton() {
+export function TabBarCarouselButton({ active = false }: { active?: boolean }) {
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
   const { t } = useTranslation();
-  // Même clé de cache que la grille de découverte (['stores', {limit: 8}]) :
-  // l'accueil la précharge déjà, le bouton ne coûte aucune requête de plus.
+  const { c1, c2 } = useBrandColors();
   const { data: stores } = useStores({ limit: 8 });
 
   const images = (stores ?? [])
@@ -59,9 +59,9 @@ export function TabBarCarouselButton() {
       style={styles.wrap}
       accessibilityRole="button"
       accessibilityLabel={t('tabs.stores')}
-      onPress={() => router.push('/stores')}
+      onPress={() => router.navigate('/(tabs)/stores')}
     >
-      <View style={styles.carousel}>
+      <View style={[styles.carousel, { borderColor: active ? c1 : c2 }]}>
         {images.length > 0 ? (
           // expo-image fond la transition d'URI : changer de source suffit
           // pour un cross-fade propre, sans superposer deux images.
@@ -73,7 +73,7 @@ export function TabBarCarouselButton() {
           />
         ) : (
           <LinearGradient
-            colors={[colors.primary, colors.secondary]}
+            colors={[c2, c1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.fallbackGradient}
@@ -93,13 +93,10 @@ const makeStyles = (colors: Colors) =>
       width: 66,
       height: 44,
       borderRadius: radius.lg,
-      // Légèrement remonté au-dessus de la ligne des onglets, comme un bouton
-      // d'action central — sans libellé, il flotterait trop bas sinon.
       marginTop: -12,
       overflow: 'hidden',
       backgroundColor: colors.primary,
-      borderWidth: 2,
-      borderColor: colors.surface,
+      borderWidth: 1.5,
       ...shadows.md,
     },
     image: { width: '100%', height: '100%' },

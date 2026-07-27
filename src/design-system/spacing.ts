@@ -16,10 +16,10 @@ export const spacing = {
 /** Rayons de bordure. */
 export const radius = {
   none: 0,
-  sm: 6,
-  md: 10,
-  lg: 14,
-  xl: 18,
+  sm: 4,
+  md: 6,
+  lg: 8,
+  xl: 10,
   pill: 999,
   circle: 9999,
 } as const;

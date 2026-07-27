@@ -268,7 +268,18 @@
     "otherItems": "autre article",
     "otherItems_plural": "autres articles",
     "track": "Suivre",
-    "details": "Détails"
+    "details": "Détails",
+    "cancelOrder": "Annuler la commande",
+    "cancelConfirmTitle": "Annuler cette commande ?",
+    "cancelConfirmBody": "Cette action est irréversible. La commande sera annulée et vous recevrez un message de confirmation.",
+    "cancelSuccess": "Commande annulée avec succès.",
+    "deleteOrder": "Supprimer",
+    "deleteConfirmTitle": "Supprimer cette commande ?",
+    "deleteConfirmBody": "L'historique de cette commande sera définitivement supprimé.",
+    "deleteSuccess": "Commande supprimée.",
+    "cancelledStatus": "Annulée",
+    "selectPaymentMethod": "Choisir le moyen de paiement",
+    "payOrderTitle": "Payer la commande #{{number}}"
   },
   "suggestions": {
     "send": "Envoyer une suggestion",

@@ -255,7 +255,6 @@ function AppShell() {
             <Stack.Screen name="wishlist/index" />
             <Stack.Screen name="profile/index" />
             <Stack.Screen name="coupons/index" />
-            <Stack.Screen name="stores/index" />
             <Stack.Screen name="stores/[id]" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="suggestions/index" />
             <Stack.Screen name="payment/index" />
@@ -287,7 +286,9 @@ export default function RootLayout() {
             maxAge: 24 * 60 * 60 * 1000, // le cache disque reste valable 24 h
             dehydrateOptions: {
               // Ne jamais écrire les données privées (messages, commandes…) sur disque
-              shouldDehydrateQuery: (q) => shouldPersistQuery(q.queryKey),
+              // et ignorer les queries sans données (évite l'erreur de désérialisation)
+              shouldDehydrateQuery: (q) =>
+                q.state.status === 'success' && shouldPersistQuery(q.queryKey),
             },
           }}
         >

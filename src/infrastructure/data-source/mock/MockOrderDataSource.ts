@@ -64,4 +64,24 @@ export class MockOrderDataSource implements OrderDataSource {
   async submitReturn(_payload: import("../OrderDataSource").ReturnPayload): Promise<{ ok: boolean }> {
     return { ok: true };
   }
+
+  async cancelOrder(id: string): Promise<{ ok: boolean }> {
+    this.orders = this.orders.map((o) =>
+      o.id === id ? { ...o, status: 'cancelled' as OrderStatus } : o,
+    );
+    return { ok: true };
+  }
+
+  async deleteOrder(id: string): Promise<{ ok: boolean }> {
+    this.orders = this.orders.filter((o) => o.id !== id);
+    return { ok: true };
+  }
+
+  async payExistingOrder(
+    _id: string,
+    _paymentMethod: string,
+    _phoneNumber?: string,
+  ): Promise<{ paymentUrl?: string; status: string; message?: string }> {
+    return { status: 'captured' };
+  }
 }

@@ -49,7 +49,13 @@ async function bootstrap() {
     .map((o) => o.trim())
     .filter(Boolean);
   app.enableCors({
-    origin: corsOrigins,
+    origin: (origin, cb) => {
+      // Pas d'origine (mobile natif, curl, Postman) ou origine autorisée
+      if (!origin || corsOrigins.some((o) => origin.startsWith(o))) return cb(null, true);
+      // Réseau local (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+      if (/^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(origin)) return cb(null, true);
+      cb(new Error(`CORS: ${origin} not allowed`));
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
@@ -74,7 +80,7 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   const port = process.env.PORT ?? 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 
   const logger = app.get(AppLoggerService);
   logger.log(`API running on http://localhost:${port}`);

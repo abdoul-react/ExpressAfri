@@ -1143,4 +1143,89 @@ export class OrdersService {
       return this.recalculateOrderStatusInTx(tx, orderId, order.storeId);
     });
   }
+
+  /** Annulation client : uniquement si pending ou confirmed (pas encore expédié). */
+  async mobileCancelOrder(customerId: string, orderId: string) {
+    const [order] = await this.db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.customerId, customerId)))
+      .limit(1);
+    if (!order) throw new NotFoundException('Commande introuvable');
+    if (!['pending', 'confirmed', 'processing'].includes(order.status)) {
+      throw new BadRequestException(
+        'Cette commande ne peut plus être annulée (déjà expédiée ou livrée)',
+      );
+    }
+    await this.db
+      .update(orders)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(eq(orders.id, orderId));
+    await this.db.insert(orderStatusLog).values({
+      orderId,
+      storeId: order.storeId,
+      fromStatus: order.status,
+      toStatus: 'cancelled',
+      reason: 'Annulée par le client',
+    });
+    // Message système dans la conversation de la commande
+    try {
+      await this.chat.postOrderSystemMessage(
+        orderId,
+        `Votre commande #${order.orderNumber} a été annulée avec succès.`,
+      );
+    } catch {}
+    return { ok: true };
+  }
+
+  /** Suppression historique : uniquement si livrée ou annulée. */
+  async mobileDeleteOrder(customerId: string, orderId: string) {
+    const [order] = await this.db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.customerId, customerId)))
+      .limit(1);
+    if (!order) throw new NotFoundException('Commande introuvable');
+    if (!['delivered', 'cancelled', 'refunded'].includes(order.status)) {
+      throw new BadRequestException(
+        'Seules les commandes livrées ou annulées peuvent être supprimées',
+      );
+    }
+    await this.db.delete(orders).where(eq(orders.id, orderId));
+    return { ok: true };
+  }
+
+  /** Paiement d'une commande existante (statut pending). */
+  async mobilePayOrder(
+    customerId: string,
+    orderId: string,
+    paymentMethod: string,
+    phoneNumber?: string,
+  ) {
+    const [order] = await this.db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.customerId, customerId)))
+      .limit(1);
+    if (!order) throw new NotFoundException('Commande introuvable');
+    if (order.status !== 'pending') {
+      throw new BadRequestException('Cette commande est déjà payée ou annulée');
+    }
+    // Mettre à jour la méthode de paiement sur le paiement existant
+    await this.db
+      .update(payments)
+      .set({ method: paymentMethod, updatedAt: new Date() })
+      .where(eq(payments.orderId, orderId));
+    // Pour COD : confirmer directement
+    if (paymentMethod === 'cod') {
+      await this.db
+        .update(orders)
+        .set({ status: 'confirmed', updatedAt: new Date() })
+        .where(eq(orders.id, orderId));
+      return { status: 'captured' };
+    }
+    // Pour les autres méthodes : retourner un statut pending (le PSP
+    // initialisera le paiement via l'endpoint payments existant)
+    return { status: 'pending', orderId, paymentMethod };
+  }
 }

@@ -59,4 +59,4 @@ export function shouldPersistQuery(queryKey: readonly unknown[]): boolean {
 }
 
 /** Clé AsyncStorage sous laquelle le cache de requêtes est persisté. */
-export const QUERY_CACHE_STORAGE_KEY = "afriexpress-query-cache";
+export const QUERY_CACHE_STORAGE_KEY = "afriexpress-query-cache-v2";

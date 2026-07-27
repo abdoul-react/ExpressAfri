@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +17,22 @@ export default function AddressListScreen() {
   const addresses = useAddressStore((s) => s.addresses);
   const defaultId = useAddressStore((s) => s.defaultId);
   const setDefault = useAddressStore((s) => s.setDefault);
+  const remove = useAddressStore((s) => s.remove);
+
+  const handleDelete = (id: string) => {
+    Alert.alert(
+      t('address.deleteTitle', 'Supprimer cette adresse ?'),
+      t('address.deleteBody', 'Cette adresse sera définitivement supprimée.'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.confirm'),
+          style: 'destructive',
+          onPress: () => remove(id),
+        },
+      ],
+    );
+  };
 
   const select = (id: string) => {
     setDefault(id);
@@ -57,6 +73,9 @@ export default function AddressListScreen() {
                   </View>
                   <Pressable hitSlop={8} onPress={() => router.push(`/address/form?id=${a.id}`)} style={styles.edit}>
                     <Icon name="edit" size={18} color={colors.textMuted} />
+                  </Pressable>
+                  <Pressable hitSlop={8} onPress={() => handleDelete(a.id)} style={styles.edit}>
+                    <Icon name="trash" size={18} color={colors.danger} />
                   </Pressable>
                 </Pressable>
               );

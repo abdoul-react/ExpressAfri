@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Param,
   Query,
   Body,
@@ -104,6 +105,43 @@ export class OrdersController {
   async mobileGetById(@Param('id') id: string, @CurrentUser() user: any) {
     if (!user?.id) throw new UnauthorizedException('Connexion requise');
     return this.service.mobileGetById(user.id, id);
+  }
+
+  @Post('mobile/:id/cancel')
+  @CustomerRoute()
+  @UseGuards(CustomerAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Annuler une commande (client mobile)' })
+  async mobileCancelOrder(@Param('id') id: string, @CurrentUser() user: any) {
+    if (!user?.id) throw new UnauthorizedException('Connexion requise');
+    return this.service.mobileCancelOrder(user.id, id);
+  }
+
+  @Delete('mobile/:id')
+  @CustomerRoute()
+  @UseGuards(CustomerAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Supprimer une commande de l\'historique (client mobile)' })
+  async mobileDeleteOrder(@Param('id') id: string, @CurrentUser() user: any) {
+    if (!user?.id) throw new UnauthorizedException('Connexion requise');
+    return this.service.mobileDeleteOrder(user.id, id);
+  }
+
+  @Post('mobile/:id/pay')
+  @CustomerRoute()
+  @UseGuards(CustomerAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Payer une commande existante (client mobile)' })
+  async mobilePayOrder(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() body: { paymentMethod: string; phoneNumber?: string },
+  ) {
+    if (!user?.id) throw new UnauthorizedException('Connexion requise');
+    return this.service.mobilePayOrder(user.id, id, body.paymentMethod, body.phoneNumber);
   }
 
   @Get(':id')

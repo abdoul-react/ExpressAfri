@@ -268,7 +268,18 @@
     "otherItems": "other item",
     "otherItems_plural": "other items",
     "track": "Track",
-    "details": "Details"
+    "details": "Details",
+    "cancelOrder": "Cancel order",
+    "cancelConfirmTitle": "Cancel this order?",
+    "cancelConfirmBody": "This action is irreversible. The order will be cancelled and you will receive a confirmation message.",
+    "cancelSuccess": "Order successfully cancelled.",
+    "deleteOrder": "Delete",
+    "deleteConfirmTitle": "Delete this order?",
+    "deleteConfirmBody": "The history of this order will be permanently deleted.",
+    "deleteSuccess": "Order deleted.",
+    "cancelledStatus": "Cancelled",
+    "selectPaymentMethod": "Select payment method",
+    "payOrderTitle": "Pay order #{{number}}"
   },
   "suggestions": {
     "send": "Send a suggestion",

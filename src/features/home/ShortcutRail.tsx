@@ -1,5 +1,6 @@
 import {
   fontSize,
+  radius,
   spacing,
   useColors,
   useThemedStyles,
@@ -9,7 +10,9 @@ import { Icon } from "@/icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
 import {
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,18 +20,12 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHomeShortcuts } from "./useHomeShortcuts";
+import { useBrandColors } from "@/features/content/brand";
 
-/** Nombre d'items pleinement visibles par défaut (au-delà : défilement). */
 const VISIBLE_COUNT = 6;
 
-/**
- * Rail de raccourcis sous le carrousel — piloté par le CMS admin.
- * - ≤ 6 items : pas de défilement, distribution équidistante sur toute la largeur.
- * - > 6 items : défilement horizontal ; les 6 premiers occupent exactement
- *   toute la largeur de l'écran (bord à bord), les suivants sont entièrement
- *   masqués jusqu'au coulissement — jamais d'item coupé en deux à l'ouverture.
- */
 export function ShortcutRail() {
   const { t, i18n } = useTranslation();
   const colors = useColors();
@@ -36,12 +33,14 @@ export function ShortcutRail() {
   const shortcuts = useHomeShortcuts();
   const { width } = useWindowDimensions();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { c1, c2 } = useBrandColors();
+  const [modalVisible, setModalVisible] = useState(false);
 
-  // Libellé : clé de traduction si elle existe, sinon texte brut saisi dans l'admin
   const label = (key: string) => (i18n.exists(key) ? t(key) : key);
 
-  // Navigation selon la destination configurée par l'admin sur chaque raccourci
   const openShortcut = (s: (typeof shortcuts)[number]) => {
+    setModalVisible(false);
     const target = s.target;
     if (!target?.value) return;
     switch (target.type) {
@@ -63,44 +62,82 @@ export function ShortcutRail() {
   if (shortcuts.length === 0) return null;
 
   const scrollable = shortcuts.length > VISIBLE_COUNT;
-  // Chaque cellule = 1/6 de la largeur totale : les 6 premières remplissent
-  // exactement l'écran, l'espacement vit à l'intérieur de la cellule (contenu
-  // centré) → marges identiques des deux côtés, aucun item tronqué.
   const itemWidth = width / VISIBLE_COUNT;
 
-  const renderItem = (s: (typeof shortcuts)[number]) => (
+  const renderItem = (s: (typeof shortcuts)[number], inModal = false) => (
     <Pressable
       key={s.id}
-      style={[styles.item, scrollable ? { width: itemWidth } : styles.itemFluid]}
+      style={[
+        inModal ? styles.modalItem : styles.item,
+        !inModal && (scrollable ? { width: itemWidth } : styles.itemFluid),
+      ]}
       onPress={() => openShortcut(s)}
     >
       <LinearGradient
-        colors={[colors.primarySun, colors.primary]}
-        style={styles.circle}
+        colors={[c1, c2]}
+        style={inModal ? styles.modalCircle : styles.circle}
       >
-        <Icon name={s.icon} size={22} color={colors.white} />
+        <Icon name={s.icon} size={inModal ? 24 : 22} color={colors.white} />
       </LinearGradient>
-      <Text style={styles.label} numberOfLines={1}>
+      <Text
+        style={inModal ? styles.modalLabel : styles.label}
+        numberOfLines={2}
+      >
         {label(s.labelKey)}
       </Text>
     </Pressable>
   );
 
-  // ≤ 6 items : rangée fixe, répartition équidistante — aucun défilement
-  if (!scrollable) {
-    return <View style={styles.fixedRow}>{shortcuts.map(renderItem)}</View>;
-  }
+  const chevronBtn = (
+    <Pressable style={styles.chevronBtn} onPress={() => setModalVisible(true)}>
+      <Icon name="chevronRight" size={18} color={colors.textMuted} />
+    </Pressable>
+  );
+
+  const rail = !scrollable ? (
+    <View style={styles.fixedRow}>
+      {shortcuts.map((s) => renderItem(s))}
+      {chevronBtn}
+    </View>
+  ) : (
+    <View style={styles.scrollRow}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        snapToInterval={itemWidth}
+        decelerationRate="fast"
+        style={{ flex: 1 }}
+      >
+        {shortcuts.map((s) => renderItem(s))}
+      </ScrollView>
+      {chevronBtn}
+    </View>
+  );
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
-      snapToInterval={itemWidth}
-      decelerationRate="fast"
-    >
-      {shortcuts.map(renderItem)}
-    </ScrollView>
+    <>
+      {rail}
+
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <Pressable
+          style={styles.overlay}
+          onPress={() => setModalVisible(false)}
+        />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>{t("home.tabForYou")}</Text>
+          <ScrollView contentContainerStyle={styles.modalGrid}>
+            {shortcuts.map((s) => renderItem(s, true))}
+          </ScrollView>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -108,13 +145,15 @@ const makeStyles = (colors: Colors) =>
   StyleSheet.create({
     fixedRow: {
       flexDirection: "row",
-      justifyContent: "space-evenly",
-      alignItems: "flex-start",
+      alignItems: "center",
       paddingVertical: spacing.sm,
     },
-    scrollContent: {
+    scrollRow: {
+      flexDirection: "row",
+      alignItems: "center",
       paddingVertical: spacing.sm,
     },
+    scrollContent: { paddingVertical: spacing.xs },
     item: { alignItems: "center", gap: 4 },
     itemFluid: { flex: 1, maxWidth: 96 },
     circle: {
@@ -130,5 +169,62 @@ const makeStyles = (colors: Colors) =>
       fontWeight: "600",
       textAlign: "center",
       paddingHorizontal: 2,
+    },
+    chevronBtn: {
+      width: 28,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingRight: spacing.xs,
+    },
+    // Modal
+    overlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.4)",
+    },
+    sheet: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: radius.xl,
+      borderTopRightRadius: radius.xl,
+      paddingTop: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      maxHeight: "70%",
+    },
+    sheetHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.border,
+      alignSelf: "center",
+      marginBottom: spacing.md,
+    },
+    sheetTitle: {
+      fontSize: fontSize.lg,
+      fontWeight: "800",
+      color: colors.text,
+      marginBottom: spacing.lg,
+    },
+    modalGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: spacing.lg,
+      paddingBottom: spacing.md,
+    },
+    modalItem: {
+      width: "22%",
+      alignItems: "center",
+      gap: spacing.xs,
+    },
+    modalCircle: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modalLabel: {
+      fontSize: fontSize.xs,
+      color: colors.text,
+      fontWeight: "600",
+      textAlign: "center",
     },
   });

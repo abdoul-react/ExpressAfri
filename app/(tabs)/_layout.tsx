@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { spacing, fontSize, shadows, useColors, useThemedStyles, type Colors } from '@/design-system';
 import { Icon, IconName } from '@/icons';
 import { TabBarCarouselButton } from '@/features/content/TabBarCarouselButton';
+import { useBrandColors } from '@/features/content/brand';
 import { useCartStore } from '@/store/cartStore';
 
 // La route physique 'store' garde son nom (deep links historiques) mais présente
@@ -14,7 +15,7 @@ import { useCartStore } from '@/store/cartStore';
 const TAB_CONFIG: { name: string; icon: IconName; labelKey: string; center?: boolean }[] = [
   { name: 'index', icon: 'home', labelKey: 'tabs.home' },
   { name: 'store', icon: 'grid', labelKey: 'tabs.categories' },
-  { name: 'feed', icon: 'plus', labelKey: 'tabs.stores', center: true },
+  { name: 'stores', icon: 'plus', labelKey: 'tabs.stores', center: true },
   { name: 'cart', icon: 'cart', labelKey: 'tabs.cart' },
   { name: 'account', icon: 'account', labelKey: 'tabs.account' },
 ];
@@ -25,6 +26,7 @@ function CustomTabBar({ state, navigation }: { state: any; navigation: any }) {
   const { t } = useTranslation();
   const colors = useColors();
   const styles = useThemedStyles(makeStyles);
+  const { c1, c2 } = useBrandColors();
   const cartCount = useCartStore((s) => s.items.reduce((n, i) => n + i.quantity, 0));
 
   return (
@@ -33,7 +35,7 @@ function CustomTabBar({ state, navigation }: { state: any; navigation: any }) {
         const cfg = TAB_CONFIG.find((c) => c.name === route.name);
         if (!cfg) return null;
         const focused = state.index === index;
-        const color = focused ? colors.tabActive : colors.tabInactive;
+        const color = focused ? c1 : c2;
 
         const onPress = () => {
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
@@ -42,9 +44,7 @@ function CustomTabBar({ state, navigation }: { state: any; navigation: any }) {
 
         if (cfg.center) {
           return (
-            // Carrousel des couvertures de boutiques — sans libellé, centré
-            // sur la hauteur de la barre comme les autres onglets.
-            <TabBarCarouselButton key={route.key} />
+            <TabBarCarouselButton key={route.key} active={focused} />
           );
         }
 
@@ -81,7 +81,8 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="store" />
-      <Tabs.Screen name="feed" />
+      <Tabs.Screen name="stores" />
+      <Tabs.Screen name="feed" options={{ href: null }} />
       <Tabs.Screen name="cart" />
       <Tabs.Screen name="account" />
     </Tabs>

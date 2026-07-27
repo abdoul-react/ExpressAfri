@@ -6,10 +6,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { useColors, useThemedStyles, type Colors, spacing, radius, fontSize, shadows } from '@/design-system';
-import { useCartStore } from '@/store/cartStore';
 import { Icon } from '@/icons';
 import { ScreenHeader, Price, Button, StatusState, SkeletonOrders } from '@/components';
-import { useOrderDetail } from '@/features/orders';
+import { useOrderDetail, useCancelOrder, useDeleteOrder } from '@/features/orders';
 import { useStartConversation } from '@/features/messages';
 import { usePrice } from '@/hooks/usePrice';
 
@@ -31,6 +30,59 @@ export default function OrderDetailScreen() {
   const { priceXof } = usePrice();
   const { order, isLoading } = useOrderDetail(id!);
   const startConversation = useStartConversation();
+  const cancelOrder = useCancelOrder();
+  const deleteOrder = useDeleteOrder();
+
+  const handleCancel = () => {
+    Alert.alert(
+      t('order.cancelConfirmTitle'),
+      t('order.cancelConfirmBody'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('order.cancelOrder'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cancelOrder.mutateAsync(id!);
+              try {
+                await startConversation.mutateAsync({
+                  orderId: id,
+                  subject: `Annulation commande #${(order as any)?.orderNumber ?? id}`,
+                });
+              } catch {}
+              Alert.alert('', t('order.cancelSuccess'));
+              router.back();
+            } catch (e) {
+              Alert.alert(t('common.error', 'Erreur'), e instanceof Error ? e.message : t('checkout.paymentError'));
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      t('order.deleteConfirmTitle'),
+      t('order.deleteConfirmBody'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('order.deleteOrder'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteOrder.mutateAsync(id!);
+              router.back();
+            } catch (e) {
+              Alert.alert(t('common.error', 'Erreur'), e instanceof Error ? e.message : t('checkout.paymentError'));
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const contactSeller = async () => {
     try {
@@ -197,27 +249,7 @@ export default function OrderDetailScreen() {
           {order.status === 'unpaid' && (
             <Button
               label={t('order.payNow')}
-              onPress={() => {
-                const store = useCartStore.getState();
-                store.setAllSelected(false);
-                order.items.forEach((item: any) => {
-                  const pid = item.productId ?? item.id;
-                  if (!pid) return;
-                  const { items } = useCartStore.getState();
-                  const existing = items.find((i) => i.productId === pid);
-                  if (existing) {
-                    if (!existing.selected) useCartStore.getState().toggleSelected(pid);
-                  } else {
-                    useCartStore.getState().add({
-                      id: pid,
-                      title: item.title ?? 'Article',
-                      images: item.images ?? (item.image ? [item.image] : []),
-                      priceUsd: item.priceUsd ?? 0,
-                    } as any, item.quantity ?? 1);
-                  }
-                });
-                router.push('/checkout');
-              }}
+              onPress={() => router.push(`/orders?payOrderId=${id}`)}
               fullWidth
             />
           )}
@@ -228,6 +260,24 @@ export default function OrderDetailScreen() {
             onPress={contactSeller}
             fullWidth
           />
+          {(order.status === 'unpaid' || order.status === 'toShip') && (
+            <Button
+              label={t('order.cancelOrder')}
+              variant="ghost"
+              loading={cancelOrder.isPending}
+              onPress={handleCancel}
+              fullWidth
+            />
+          )}
+          {order.status === 'toReview' || (order as any).status === 'cancelled' ? (
+            <Button
+              label={t('order.deleteOrder')}
+              variant="ghost"
+              loading={deleteOrder.isPending}
+              onPress={handleDelete}
+              fullWidth
+            />
+          ) : null}
           <Button
             label={t('order.returnRequest')}
             variant="ghost"
