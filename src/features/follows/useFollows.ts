@@ -1,6 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { storeService } from '@/features/stores/storeService';
-import { useToggleStoreLike } from '@/features/stores/useStores';
 import { useAuthStore } from '@/store/authStore';
 
 export type FollowedStore = {
@@ -29,8 +28,15 @@ export function useFollowedStores() {
 
 /**
  * Suivre / ne plus suivre une boutique.
- * Alias de useToggleStoreLike, conservé pour les écrans historiques.
+ * Appelle storeService directement — pas de dépendance sur le domaine stores.
  */
 export function useToggleFollow() {
-  return useToggleStoreLike();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ storeId, follow }: { storeId: string; follow: boolean }) =>
+      storeService.toggleFollow(storeId, follow),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['stores', 'followed'] });
+    },
+  });
 }

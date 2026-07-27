@@ -35,7 +35,7 @@ import { storeService } from "@/features/stores/storeService";
 import type { StorePaymentMethod } from "@/infrastructure/data-source/StoreDataSource";
 import { useAddressStore, getDefaultAddress } from "@/store/addressStore";
 import { useAuthStore } from "@/store/authStore";
-import { COUNTRIES } from "@/data/countries";
+import { COUNTRIES } from "@/store/settingsStore";
 import { Icon } from "@/icons";
 import { useCartStore } from "@/store/cartStore";
 import { useRouter } from "expo-router";

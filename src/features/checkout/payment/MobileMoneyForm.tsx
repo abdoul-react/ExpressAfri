@@ -21,7 +21,7 @@ import {
 import { Icon } from "@/icons";
 import type { StorePaymentMethod } from "@/infrastructure/data-source/StoreDataSource";
 import { resolveMediaUrl, isSvgUrl } from "@/utils/resolveMediaUrl";
-import { COUNTRIES, type Country } from "@/data/countries";
+import { COUNTRIES, type Country } from "@/store/settingsStore";
 import { useTranslation } from "react-i18next";
 
 /**

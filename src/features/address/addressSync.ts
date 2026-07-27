@@ -1,7 +1,7 @@
 import { addressDataSource } from '@/infrastructure/data-source';
 import { isMock } from '@/infrastructure/mock';
 import { logger } from '@/infrastructure/logging';
-import { COUNTRIES } from '@/data/countries';
+import { COUNTRIES } from '@/store/settingsStore';
 import type { Address } from '@/store/addressStore';
 
 /**
