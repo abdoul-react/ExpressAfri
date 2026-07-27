@@ -681,9 +681,10 @@ export class MobileService {
       // Exception délibérée : le paiement à la livraison ne demande aucune
       // configuration technique au commerçant, il reste donc toujours ouvert —
       // c'est le repli proposé au client quand la boutique n'a rien activé.
+      // Si la boutique n'a aucun moyen configuré, on accepte tout (pas de restriction).
       if (!this.isCashOnDelivery(method)) {
         const available = await this.storePayments.listPublic(storeId);
-        if (!available.some((m) => m.provider === method)) {
+        if (available.length > 0 && !available.some((m) => m.provider === method)) {
           throw new BadRequestException(
             `${storeNames.get(storeId) ?? 'Cette boutique'} n'accepte pas le moyen de paiement « ${method} »`,
           );

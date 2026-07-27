@@ -511,6 +511,7 @@ export class MobileController {
 
   // PAS @Public : le garde résout le client si un jeton est fourni (likedByMe)
   // et laisse passer sans jeton — liste publique avec likes corrects.
+  @Public()
   @Get('stores')
   @ApiOperation({ summary: 'Boutiques approuvées (format mobile)' })
   async stores(@CurrentUser() user: any, @Query() query: any) {
@@ -534,6 +535,7 @@ export class MobileController {
   // Idem : déclarée avant stores/:id. Vitrine composée par l'admin central —
   // regroupe les BOUTIQUES par thème, à ne pas confondre avec stores/:id/sections
   // qui regroupe les PRODUITS d'une boutique.
+  @Public()
   @Get('store-groups')
   @ApiOperation({ summary: 'Sections de la liste des boutiques' })
   async storeGroups(@CurrentUser() user: any) {
