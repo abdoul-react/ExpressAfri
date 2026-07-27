@@ -7,6 +7,9 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { MobileService } from './mobile.service';
 import { DRIZZLE } from '../../database/database.module';
+import { ImageVisionService } from '../../common/vision/image-vision.service';
+import { StorePaymentMethodsService } from '../stores/store-payment-methods.service';
+import { SmsService } from '../notifications/sms/sms.service';
 import * as bcrypt from 'bcryptjs';
 
 function makeChain(rows: any[] = []) {
@@ -43,10 +46,10 @@ describe('MobileService — OTP (scenario 12)', () => {
       providers: [
         MobileService,
         { provide: DRIZZLE, useValue: mockDb },
-        {
-          provide: JwtService,
-          useValue: { sign: jest.fn(() => 'mock-token') },
-        },
+        { provide: JwtService, useValue: { sign: jest.fn(() => 'mock-token') } },
+        { provide: ImageVisionService, useValue: { extractLabels: jest.fn(async () => []), extractFromFilename: jest.fn(() => []) } },
+        { provide: StorePaymentMethodsService, useValue: { listPublic: jest.fn(async () => []) } },
+        { provide: SmsService, useValue: { send: jest.fn(async () => {}) } },
       ],
     }).compile();
 

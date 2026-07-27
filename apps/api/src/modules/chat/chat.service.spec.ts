@@ -99,6 +99,11 @@ describe('ChatService', () => {
         name: 'Hi', // pas de boutique trouvée → subject en fallback
         avatar: '',
         online: false,
+        storeId: 's1',
+        storeName: null,
+        storeLogo: null,
+        subject: 'Hi',
+        orderId: null,
         lastMessage: 'Hello',
         lastTime: now.toISOString(),
         unread: 0,
